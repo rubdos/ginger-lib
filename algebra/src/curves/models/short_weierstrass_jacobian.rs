@@ -1,4 +1,5 @@
 use rand::{Rng, distributions::{Standard, Distribution}};
+use crate::curves::models::EndomorphismModelParameters as EndomorphismParameters;
 use crate::curves::models::SWModelParameters as Parameters;
 use crate::{UniformRand, SemanticallyValid, Error, FromBytesChecked, BitSerializationError, FromCompressedBits, ToCompressedBits};
 use std::{
@@ -9,7 +10,7 @@ use std::{
 
 use crate::{
     bytes::{FromBytes, ToBytes},
-    curves::{AffineCurve, ProjectiveCurve},
+    curves::{AffineCurve, ProjectiveCurve, Endomorphism},
     fields::{BitIterator, Field, PrimeField, SquareRootField},
 };
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
@@ -130,6 +131,75 @@ impl<P: Parameters> GroupAffine<P> {
     pub fn is_in_correct_subgroup_assuming_on_curve(&self) -> bool {
         self.mul_bits(BitIterator::new(P::ScalarField::characteristic()))
             .is_zero()
+    }
+}
+
+impl<P: Parameters + EndomorphismParameters> Endomorphism for GroupAffine<P> {
+    type ScalarField = P::ScalarField;
+    type BaseField = P::BaseField;
+    type Projective = GroupProjective<P>;
+
+    fn apply_endomorphism(&self) -> Self { 
+        let mut self_e = self.clone();
+        self_e.x.mul_assign(P::ENDO_COEFF);
+        self_e
+    }
+
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Self::ScalarField {
+        let two = P::ScalarField::one().double();
+        let one = P::ScalarField::one();
+        let one_neg = one.neg();
+
+        let mut a = two;
+        let mut b = two;
+
+        for i in (bits.len() / 2 - 1)..0 {
+            a.double_in_place();
+            b.double_in_place();
+            if bits[i * 2 + 1] {
+                if bits[i * 2] {
+                    a.add_assign(&one);
+                } else {
+                    a.add_assign(&one_neg);
+                }
+            } else {
+                if bits[i * 2] {
+                    b.add_assign(&one);
+                } else {
+                    b.add_assign(&one_neg);
+                }
+            }
+        }
+        a.mul(P::ENDO_SCALAR) + &b
+    }
+
+    /// Performs scalar multiplication of this element with mixed addition.
+    fn endo_mul(&self, bits: Vec<bool>) -> Self::Projective {
+        let self_neg = self.neg();
+        let self_e = self.apply_endomorphism();
+        let self_e_neg = self_e.neg();
+
+        let mut fe = self_e.into_projective();
+        fe.add_assign_mixed(self);
+        fe.double_in_place();
+
+        for i in (bits.len() / 2 - 1)..0 {
+            fe.double_in_place();
+            if bits[i * 2 + 1] {
+                if bits[i * 2] {
+                    fe.add_assign_mixed(&self_e);
+                } else {
+                    fe.add_assign_mixed(&self_e_neg);
+                }               
+            } else {
+                if bits[i * 2] {
+                    fe.add_assign_mixed(&self);
+                } else {
+                    fe.add_assign_mixed(&self_neg);
+                }               
+            }
+        }
+        fe
     }
 }
 

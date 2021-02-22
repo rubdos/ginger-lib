@@ -46,8 +46,21 @@ pub mod tweedle;
 pub mod tests;
 
 pub use self::models::*;
-use algebra::convert;
 
+pub trait Endomorphism
+{
+    type ScalarField: PrimeField + SquareRootField + Into<<Self::ScalarField as PrimeField>::BigInt>;
+    type BaseField: Field;
+    type Projective: ProjectiveCurve;
+
+    /// An efficiently computable endomorphism of the curve (if any).
+    fn apply_endomorphism(&self) -> Self;
+
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Self::ScalarField;
+
+    /// Performs scalar multiplication of this element with mixed addition.
+    fn endo_mul(&self, bits: Vec<bool>) -> Self::Projective;    
+}
 pub trait PairingEngine: Sized + 'static + Copy + Debug + Sync + Send + Eq + PartialEq {
     /// This is the scalar field of the G1/G2 groups.
     type Fr: PrimeField + SquareRootField + Into<<Self::Fr as PrimeField>::BigInt>;
@@ -293,19 +306,6 @@ pub trait AffineCurve:
     #[must_use]
     fn mul<S: Into<<Self::ScalarField as PrimeField>::BigInt>>(&self, other: S)
         -> Self::Projective;
-
-    /// An efficiently computable endomorphism of the curve (if any).
-    fn apply_endomorphism(&self) -> Self { self.clone() }
-
-    fn endo_rep_to_scalar(bits: Vec<bool>) -> Self::ScalarField {
-        convert::<Self::ScalarField>(bits).unwrap()
-    }
-
-    /// Performs scalar multiplication of this element with mixed addition.
-    fn endo_mul(&self, bits: Vec<bool>) -> Self::Projective {
-        let fe = Self::endo_rep_to_scalar(bits);
-        self.mul(fe.into())
-    }
 
     /// Converts this element into its projective representation.
     #[must_use]
