@@ -6,7 +6,10 @@ use crate::{
         models::{ModelParameters, SWModelParameters},
         short_weierstrass_jacobian::{GroupAffine, GroupProjective},
     },
-    fields::sw6::{Fq, Fq3, Fr},
+    fields::{
+        sw6::*,
+        FpParameters,
+    },
 };
 
 pub type G2Affine = GroupAffine<SW6G2Parameters>;
@@ -115,6 +118,15 @@ impl SWModelParameters for SW6G2Parameters {
     /// AFFINE_GENERATOR_COEFFS = (G2_GENERATOR_X, G2_GENERATOR_Y)
     const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField) =
         (G2_GENERATOR_X, G2_GENERATOR_Y);
+
+    const ENDO_COEFF: Self::BaseField = field_new!(
+        Fq3,
+        FQ_ONE,
+        FQ_ZERO,
+        FQ_ZERO,
+    );
+
+    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);    
 }
 
 const G2_GENERATOR_X: Fq3 = field_new!(Fq3, G2_GENERATOR_X_C0, G2_GENERATOR_X_C1, G2_GENERATOR_X_C2);

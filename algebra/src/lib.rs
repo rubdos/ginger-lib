@@ -68,6 +68,7 @@ pub fn log2(x: usize) -> u32 {
 /// Returns the floor of the base-2 logarithm of `x`.
 /// ```
 /// use algebra::log2_floor;
+///
 ///    assert_eq!(log2_floor(0), 0);
 ///    assert_eq!(log2_floor(1), 0);
 ///    assert_eq!(log2_floor(2), 1);

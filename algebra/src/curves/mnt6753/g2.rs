@@ -4,7 +4,10 @@ use crate::{
     curves::{
         models::{ModelParameters, SWModelParameters, mnt6::MNT6Parameters},
     },
-    fields::mnt6753::{Fq, Fq3, Fr},
+    fields::{
+        mnt6753::*,
+        FpParameters,
+    },
 };
 use crate::curves::mnt6753::MNT6_753Parameters;
 
@@ -153,6 +156,15 @@ impl SWModelParameters for MNT6G2Parameters {
             MUL_BY_A_C2 * &elt.c0,
         )
     }
+
+    const ENDO_COEFF: Self::BaseField = field_new!(
+        Fq3,
+        FQ_ONE,
+        FQ_ZERO,
+        FQ_ZERO,
+    );
+
+    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);    
 }
 
 const G2_GENERATOR_X: Fq3 = field_new!(Fq3, G2_GENERATOR_X_C0, G2_GENERATOR_X_C1, G2_GENERATOR_X_C2);

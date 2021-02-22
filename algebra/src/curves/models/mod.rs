@@ -20,6 +20,17 @@ pub trait SWModelParameters: ModelParameters {
     const COFACTOR_INV: Self::ScalarField;
     const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField);
 
+    /// Parameter for an efficiently computable endomorphism of the form
+    /// (x, y) |=> (ENDO_COEFF * x, y).
+    /// According to the SW formula, this is a cubic root of unity.
+    const ENDO_COEFF: Self::BaseField;
+
+    /// Scalar corresponding to the endomorphism with respect to the exponential
+    /// representation of the curve; e.g. given a scalar s and a generator G:
+    /// G ^ { s } |=> G^ { ENDO_SCALAR * s }
+    /// As ENDO_COEFF is a cubic root of unity this is too.
+    const ENDO_SCALAR: Self::ScalarField;
+
     #[inline(always)]
     fn mul_by_a(elem: &Self::BaseField) -> Self::BaseField {
         let mut copy = *elem;
@@ -62,20 +73,6 @@ pub trait SWModelParameters: ModelParameters {
         }
         result
     }
-}
-
-pub trait EndomorphismModelParameters: ModelParameters
-{
-    /// Parameter for an efficiently computable endomorphism of the form
-    /// (x, y) |=> (ENDO_COEFF * x, y).
-    /// According to the SW formula, this is a cubic root of unity.
-    const ENDO_COEFF: Self::BaseField;
-
-    /// Scalar corresponding to the endomorphism with respect to the exponential
-    /// representation of the curve; e.g. given a scalar s and a generator G:
-    /// G ^ { s } |=> G^ { ENDO_SCALAR * s }
-    /// As ENDO_COEFF is a cubic root of unity this is too.
-    const ENDO_SCALAR: Self::ScalarField;
 }
 
 pub trait TEModelParameters: ModelParameters {

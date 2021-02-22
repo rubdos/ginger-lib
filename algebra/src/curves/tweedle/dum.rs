@@ -2,7 +2,7 @@ use crate::{
     biginteger::BigInteger256,
     curves::{
         models::short_weierstrass_jacobian::{GroupAffine, GroupProjective},
-        ModelParameters, SWModelParameters, EndomorphismModelParameters
+        ModelParameters, SWModelParameters
     },
     Field, field_new,
     fields::tweedle::*
@@ -14,29 +14,6 @@ pub struct TweedledumParameters;
 impl ModelParameters for TweedledumParameters {
     type BaseField = Fr;
     type ScalarField = Fq;
-}
-
-impl EndomorphismModelParameters for TweedledumParameters {
-
-    const ENDO_COEFF: Self::BaseField = field_new!(
-        Fr, 
-        BigInteger256([
-            13597504620482004229,
-            16590497220115833568,
-            15137822970486674306,
-            1901757351910266741
-        ])
-    );
-
-    const ENDO_SCALAR: Self::ScalarField = field_new!(
-        Fq, 
-        BigInteger256([
-            1444470991491022206, 
-            3301226169728360777, 
-            72516509137424193, 
-            708688398506307241
-        ])
-    );
 }
 
 pub type Affine = GroupAffine<TweedledumParameters>;
@@ -79,6 +56,26 @@ impl SWModelParameters for TweedledumParameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
+
+    const ENDO_COEFF: Self::BaseField = field_new!(
+        Fr, 
+        BigInteger256([
+            13597504620482004229,
+            16590497220115833568,
+            15137822970486674306,
+            1901757351910266741
+        ])
+    );
+
+    const ENDO_SCALAR: Self::ScalarField = field_new!(
+        Fq, 
+        BigInteger256([
+            1444470991491022206, 
+            3301226169728360777, 
+            72516509137424193, 
+            708688398506307241
+        ])
+    );
 }
 
 /// G_GENERATOR_X =

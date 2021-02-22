@@ -1,12 +1,13 @@
 use crate::{
     curves::{
-        models::{SWModelParameters, EndomorphismModelParameters}, 
+        models::SWModelParameters, 
         tweedle::*,
         tests::curve_tests,
-        Endomorphism, AffineCurve, ProjectiveCurve,
+        AffineCurve, ProjectiveCurve,
     },
     groups::tests::group_test,
-    fields::{Field, SquareRootField, tweedle::*},
+    fields::{Field, SquareRootField, PrimeField, tweedle::*},
+    BigInteger
 };
 use std::ops::{AddAssign, MulAssign};
 use std::str::FromStr;
@@ -190,6 +191,26 @@ fn test_dee_apply_endomorphism() {
     let pe_mul = p.mul(dee::TweedledeeParameters::ENDO_SCALAR).into_affine();
 
     assert_eq!(pe, pe_mul);
+}
+
+#[test]
+fn test_dee_endo_mul() {
+
+    let p = dee::Projective::new(
+        Fq::from_str("17071515411234329267051251142008744532074161438140426170549136904789606209155").unwrap(),
+        Fq::from_str("9067370984564524093871625068725679070040168060994636121507153477916099620826").unwrap(),
+        Fq::one(),
+    ).into_affine();
+
+    let bits = Fr::from_str("21118483776076764996122757821606091900059043860162004907989579660882026321197").unwrap().into_repr().to_bits();
+
+    let p_mul = p.mul(dee::Affine::endo_rep_to_scalar(bits.clone()));
+    let pe_mul = p.endo_mul(bits.clone());
+
+    println!("{:?}", p_mul);
+    println!("{:?}", pe_mul);
+
+    // assert_eq!(pe, pe_mul);
 }
 
 #[test]
