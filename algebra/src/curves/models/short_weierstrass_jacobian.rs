@@ -306,12 +306,10 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
         let self_e_neg = self_neg.apply_endomorphism();
 
         let mut acc = self_e.into_projective();
-        acc.add_assign_mixed(self);
+        acc.add_assign_mixed(&self);
         acc.double_in_place();
 
         for i in (bits.len() / 2)..0 {
-
-            let mut t = acc;
 
             let s = 
                 if bits[i * 2 + 1] {
@@ -328,8 +326,8 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
                     }               
                 };
 
-            t.add_assign_mixed(s);
-            acc.add_assign(&t);
+            acc.double_in_place();
+            acc.add_assign_mixed(s);
         }
 
         acc

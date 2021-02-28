@@ -1,4 +1,5 @@
 use crate::prelude::*;
+// use crate::fields::FieldGadget;
 use algebra::{Field, Group};
 use r1cs_core::{ConstraintSystem, SynthesisError};
 
@@ -173,6 +174,28 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_add() -> usize;
 
     fn cost_of_double() -> usize;
+
+    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        _cs: CS,
+    ) -> Result<Self, SynthesisError>
+    {
+        Ok(self.clone())
+    }
+
+    // fn endo_rep_to_scalar<CS: ConstraintSystem<ConstraintF>>(
+    //     &self,
+    //     cs: CS,
+    //     bits: &[Boolean],
+    // ) -> Result<FieldGadget<G::ScalarField, ConstraintF>, SynthesisError> 
+    // {
+    //     Ok(
+    //         FieldGadget::<G::ScalarField, ConstraintF>::from_bits(
+    //             cs, 
+    //             bits
+    //         ).unwrap()
+    //     )
+    // }
 }
 
 #[cfg(test)]
