@@ -33,12 +33,14 @@ hex = "0.4.0"
 
 
 serde = { version = "1.0.117", features = ["derive"]}
+rocksdb = { version = "0.14.0", optional = true }
 
 [features]
 llvm_asm = ["algebra/llvm_asm"]
 
 commitment = ["digest", "blake2"]
 merkle_tree = ["algebra/derive"]
+smt = ["merkle_tree", "rocksdb"]
 prf = ["digest", "blake2"]
 signature = ["digest", "blake2", "algebra/derive"]
 vrf = ["algebra/derive"]

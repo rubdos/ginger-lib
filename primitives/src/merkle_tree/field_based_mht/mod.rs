@@ -10,6 +10,9 @@ pub use self::optimized::*;
 pub mod parameters;
 pub use self::parameters::*;
 
+pub mod smt;
+pub use self::smt::*;
+
 use algebra::{
     Field, ToBytes, FromBytes,
 };
