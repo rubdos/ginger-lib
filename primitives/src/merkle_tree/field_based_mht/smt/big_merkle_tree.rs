@@ -452,7 +452,7 @@ impl<T: FieldBasedMerkleTreeParameters> BigMerkleTree<T> {
         // take that leaf from the non-empty set
         self.state.present_node.remove(&coord);
         self.state.cache_path.clear();
-        self.state.cache_path.insert(coord, T::EMPTY_HASH_CST.unwrap().nodes[0]);
+        self.state.cache_path.insert(coord, T::ZERO_NODE_CST.unwrap().nodes[0]);
         // removes the leaf from the db
         let res = self.remove_from_db(coord.idx);
         // if it was in the db, update the tree
@@ -493,7 +493,7 @@ impl<T: FieldBasedMerkleTreeParameters> BigMerkleTree<T> {
                     self.node(sibling_coord)
                 }
             } else { // If it's empty then we can directly get the precomputed empty at this height
-                T::EMPTY_HASH_CST.unwrap().nodes[height]
+                T::ZERO_NODE_CST.unwrap().nodes[height]
             };
 
             // Push info to path
@@ -525,7 +525,7 @@ impl<T: FieldBasedMerkleTreeParameters> BigMerkleTree<T> {
         // check whether the hash corresponds to the left or right child
         let mut idx = coord.idx;
         let mut height = 0;
-        let empty_nodes = T::EMPTY_HASH_CST.unwrap().nodes;
+        let empty_nodes = T::ZERO_NODE_CST.unwrap().nodes;
         let empty_node = empty_nodes[height];
 
         assert_eq!(T::MERKLE_ARITY,2, "Arity of the Merkle tree is not 2.");
@@ -726,7 +726,7 @@ impl<T: FieldBasedMerkleTreeParameters> BigMerkleTree<T> {
 
         // if the node is an empty node return the hash constant
         if !self.state.present_node.contains(&coord) {
-            return T::EMPTY_HASH_CST.unwrap().nodes[coord.height];
+            return T::ZERO_NODE_CST.unwrap().nodes[coord.height];
         }
         let res = self.get_from_cache(coord);
 
@@ -742,7 +742,7 @@ impl<T: FieldBasedMerkleTreeParameters> BigMerkleTree<T> {
                 if let Some(i) = left_child {
                     left_hash = i;
                 } else {
-                    left_hash = T::EMPTY_HASH_CST.unwrap().nodes[0];
+                    left_hash = T::ZERO_NODE_CST.unwrap().nodes[0];
                 }
 
                 let right_child_idx = left_child_idx + 1;
@@ -751,7 +751,7 @@ impl<T: FieldBasedMerkleTreeParameters> BigMerkleTree<T> {
                 if let Some(i) = right_child {
                     right_hash = i;
                 } else {
-                    right_hash = T::EMPTY_HASH_CST.unwrap().nodes[0];
+                    right_hash = T::ZERO_NODE_CST.unwrap().nodes[0];
                 }
                 node_hash = Self::field_hash(&left_hash, &right_hash);
             } else {

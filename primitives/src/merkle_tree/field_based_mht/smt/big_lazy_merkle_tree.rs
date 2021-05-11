@@ -385,7 +385,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
         //let coord = Coord{height, idx};
         // if the node is an empty node return the hash constant
         if !self.state.present_node.contains(&coord) {
-            return T::EMPTY_HASH_CST.unwrap().nodes[coord.height];
+            return T::ZERO_NODE_CST.unwrap().nodes[coord.height];
         }
         let res = self.get_from_cache(coord);
 
@@ -401,7 +401,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
                 if let Some(i) = left_child {
                     left_hash = i;
                 } else {
-                    left_hash = T::EMPTY_HASH_CST.unwrap().nodes[0];
+                    left_hash = T::ZERO_NODE_CST.unwrap().nodes[0];
                 }
 
                 let right_child_idx = left_child_idx + 1;
@@ -410,7 +410,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
                 if let Some(i) = right_child {
                     right_hash = i;
                 } else {
-                    right_hash = T::EMPTY_HASH_CST.unwrap().nodes[0];
+                    right_hash = T::ZERO_NODE_CST.unwrap().nodes[0];
                 }
                 node_hash = Self::field_hash(&left_hash, &right_hash);
             } else {
@@ -549,13 +549,13 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
             let mut left_child_present = true;
             let left_hash = self.get_from_db(left_child_idx).unwrap_or_else(|| {
                 left_child_present = false;
-                T::EMPTY_HASH_CST.unwrap().nodes[0]
+                T::ZERO_NODE_CST.unwrap().nodes[0]
             });
 
             let mut right_child_present = true;
             let right_hash = self.get_from_db(right_child_idx).unwrap_or_else(|| {
                 right_child_present = false;
-                T::EMPTY_HASH_CST.unwrap().nodes[0]
+                T::ZERO_NODE_CST.unwrap().nodes[0]
             });
 
             input_vec.push(left_hash);
@@ -685,7 +685,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
                     self.node(sibling_coord)
                 }
             } else { // If it's empty then we can directly get the precomputed empty at this height
-                T::EMPTY_HASH_CST.unwrap().nodes[height]
+                T::ZERO_NODE_CST.unwrap().nodes[height]
             };
 
             // Push info to path
