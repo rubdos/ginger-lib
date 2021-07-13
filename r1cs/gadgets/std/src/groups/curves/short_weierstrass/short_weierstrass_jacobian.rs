@@ -517,6 +517,17 @@ for AffineGadget<P, ConstraintF, F>
     fn cost_of_double() -> usize {
         3 * F::cost_of_mul() + F::cost_of_mul_equals()
     }
+
+    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Self, SynthesisError> { 
+        Ok(Self::new(
+            self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
+            self.y.clone(),
+            self.infinity
+        ))
+    }
 }
 
 impl<P, ConstraintF, F> CondSelectGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>

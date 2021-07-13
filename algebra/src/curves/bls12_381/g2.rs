@@ -10,8 +10,8 @@ use crate::{
         models::{ModelParameters, SWModelParameters},
     },
     fields::{
-        bls12_381::{Fq, Fq2, Fr},
-        Field,
+        bls12_381::*,
+        Field, FpParameters,
     },
 };
 
@@ -70,6 +70,10 @@ impl SWModelParameters for Bls12_381G2Parameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
+
+    const ENDO_COEFF: Self::BaseField = FQ2_ONE;   
+
+    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);    
 }
 
 pub const G2_GENERATOR_X: Fq2 = field_new!(Fq2, G2_GENERATOR_X_C0, G2_GENERATOR_X_C1);

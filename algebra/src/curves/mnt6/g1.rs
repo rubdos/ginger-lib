@@ -8,7 +8,10 @@ use crate::{
         short_weierstrass_projective::{GroupAffine, GroupProjective},
         AffineCurve,
     },
-    fields::mnt6::{Fq, Fq3, Fr},
+    fields::{
+        mnt6::*,
+        FpParameters,
+    },
 };
 use std::io::{Result as IoResult, Write, Read};
 use std::io;
@@ -60,6 +63,11 @@ impl SWModelParameters for MNT6G1Parameters {
     /// AFFINE_GENERATOR_COEFFS = (G1_GENERATOR_X, G1_GENERATOR_Y)
     const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField) =
         (G1_GENERATOR_X, G1_GENERATOR_Y);
+
+
+    const ENDO_COEFF: Self::BaseField = FQ_ONE;   
+
+    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);    
 }
 
 /// G1_GENERATOR_X =

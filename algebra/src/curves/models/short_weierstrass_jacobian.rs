@@ -277,6 +277,77 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
     fn mul_by_cofactor_inv(&self) -> Self {
         self.mul(P::COFACTOR_INV).into()
     }
+
+    fn apply_endomorphism(&self) -> Self { 
+        let mut self_e = self.clone();
+        self_e.x.mul_assign(P::ENDO_COEFF);
+        self_e
+    }
+
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Self::ScalarField {
+
+        let mut a : P::ScalarField = 2u64.into();
+        let mut b : P::ScalarField = 2u64.into();
+
+        let one = P::ScalarField::one();
+        let one_neg = one.neg();
+
+        for i in (bits.len() / 2)..0 {
+            a.double_in_place();
+            b.double_in_place();            
+
+            let s =
+                if bits[i * 2] {
+                    &one
+                } else {
+                    &one_neg
+                };
+
+            if bits[i * 2 + 1] {
+                a.add_assign(s);
+            } else {
+                b.add_assign(s);
+            }
+        }
+
+        a.mul(P::ENDO_SCALAR) + &b
+    }
+
+    /// Performs scalar multiplication of this element with mixed addition.
+    fn endo_mul(&self, bits: Vec<bool>) -> Self::Projective {
+
+        let self_neg = self.neg();
+
+        let self_e = self.apply_endomorphism();
+        let self_e_neg = self_neg.apply_endomorphism();
+
+        let mut acc = self_e.into_projective();
+        acc.add_assign_mixed(&self);
+        acc.double_in_place();
+
+        for i in (bits.len() / 2)..0 {
+
+            let s = 
+                if bits[i * 2 + 1] {
+                    if bits[i * 2] {
+                        &self_e
+                    } else {
+                        &self_e_neg
+                    }               
+                } else {
+                    if bits[i * 2] {
+                        &self
+                    } else {
+                        &self_neg
+                    }               
+                };
+
+            acc.double_in_place();
+            acc.add_assign_mixed(s);
+        }
+
+        acc
+    }
 }
 
 impl<P: Parameters> SemanticallyValid for GroupAffine<P>
