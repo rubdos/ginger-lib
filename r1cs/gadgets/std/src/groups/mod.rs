@@ -187,11 +187,11 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     //     &self,
     //     cs: CS,
     //     bits: &[Boolean],
-    // ) -> Result<FieldGadget<G::ScalarField, ConstraintF>, SynthesisError> 
+    // ) -> Result<dyn FieldGadget<G::ScalarField, ConstraintF>, SynthesisError>
     // {
     //     Ok(
     //         FieldGadget::<G::ScalarField, ConstraintF>::from_bits(
-    //             cs, 
+    //             cs,
     //             bits
     //         ).unwrap()
     //     )
@@ -273,11 +273,11 @@ pub(crate) mod test {
     {
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
-        let a: G = UniformRand::rand(&mut thread_rng());
-        let b: G = UniformRand::rand(&mut thread_rng());
+        let a_native: G = UniformRand::rand(&mut thread_rng());
+        let b_native: G = UniformRand::rand(&mut thread_rng());
 
-        let a = GG::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-        let b = GG::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
+        let a = GG::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native)).unwrap();
+        let b = GG::alloc(&mut cs.ns(|| "generate_b"), || Ok(b_native)).unwrap();
 
         let zero = GG::zero(cs.ns(|| "Zero")).unwrap();
         assert_eq!(zero, zero);
@@ -320,5 +320,7 @@ pub(crate) mod test {
         let _ = b
             .to_bytes_strict(&mut cs.ns(|| "b ToBytes Strict"))
             .unwrap();
+
+        let _ = b.apply_endomorphism(cs.ns(|| "b endo")).unwrap();
     }
 }

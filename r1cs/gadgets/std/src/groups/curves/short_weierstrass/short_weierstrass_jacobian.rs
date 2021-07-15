@@ -521,7 +521,7 @@ for AffineGadget<P, ConstraintF, F>
     fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
-    ) -> Result<Self, SynthesisError> { 
+    ) -> Result<Self, SynthesisError> {
         Ok(Self::new(
             self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
             self.y.clone(),
