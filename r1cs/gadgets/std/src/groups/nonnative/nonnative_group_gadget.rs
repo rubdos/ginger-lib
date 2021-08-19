@@ -1,3 +1,8 @@
+//! The non-native group gadget (for short Weierstrass curves) and implementations of 
+//!     - the GroupGadget trait,
+//! as well as the following auxiliary traits:
+//!     - PartialEq, Eq, ToBitsGadget, ToBytesGagdet, EqGadget
+//!     - CondSelectGadget, ConstantGadget, AllocGadget.
 use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, SquareRootField, curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 
 use r1cs_core::{ConstraintSystem, SynthesisError};
@@ -300,6 +305,8 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     }
 }
 
+// TODO: check if this implementation is correct. 
+// (Does not seem to refer to the EqGadget)
 impl<P, ConstraintF, SimulationF> PartialEq
 for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     where
@@ -312,6 +319,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     }
 }
 
+//  TODO: a stub?
 impl<P, ConstraintF, SimulationF> Eq
 for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     where
