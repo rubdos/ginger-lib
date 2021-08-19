@@ -1,3 +1,4 @@
+//! A submodule of low-level function for modular reduction/normalization of non-native field gadgets.
 use algebra::{biginteger::BigInteger, fields::{PrimeField, FpParameters}, BitIterator};
 
 use crate::{
@@ -19,6 +20,8 @@ use num_traits::{Zero, One};
 
 use crate::fields::FieldGadget;
 
+/// Recombines the large integer from the limbs. 
+/// Caution: applies only to non_natives in normal form 
 pub fn limbs_to_bigint<ConstraintF: PrimeField>(
     bits_per_limb: usize,
     limbs: &[ConstraintF],
@@ -42,6 +45,8 @@ pub fn limbs_to_bigint<ConstraintF: PrimeField>(
     val
 }
 
+/// Converts an unsigned big integer `bigint` into an element from the constraint field F_p by
+/// computing (bigint mod p).
 pub fn bigint_to_constraint_field<ConstraintF: PrimeField>(bigint: &BigUint) -> ConstraintF {
     let mut val = ConstraintF::zero();
     let mut cur = ConstraintF::one();
@@ -66,15 +71,15 @@ pub struct Reducer<SimulationF: PrimeField, ConstraintF: PrimeField> {
 }
 
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, ConstraintF> {
-    /// convert limbs to bits (take at most `ConstraintF::size_in_bits() - 1` bits)
-    /// This implementation would be more efficient than the original `to_bits`
-    /// or `to_bits_strict` since we enforce that some bits are always zero.
+    /// Convert a limb of `num_bits` into a vector of Boolean gadgets, allowing at most 
+    /// `ConstraintF::size_in_bits() - 1` bits.
     pub fn limb_to_bits<CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
         limb: &FpGadget<ConstraintF>,
         num_bits: usize,
     ) -> Result<Vec<Boolean>, SynthesisError> {
 
+        //TODO: refer to the capacity of ConstraintF instead of recomputing it
         let num_bits = min(ConstraintF::size_in_bits() - 1, num_bits);
         let mut bits_considered = Vec::with_capacity(num_bits);
         let limb_value = limb.get_value().unwrap_or_default();
@@ -94,13 +99,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             )?);
         }
 
+        // Combine the num_bits many Booleans to an ConstraintF element.
         let bit_sum = FpGadget::<ConstraintF>::from_bits(
             cs.ns(|| "pack bits"),
             bits.as_slice()
         )?;
 
-        // TODO: Is the packing constraint coming from "from_bits()" already enough
-        //       without having this additional one ?
+        // enforce equality with the limb
         bit_sum.enforce_equal(cs.ns(|| "bit_sum == limb"), &limb)?;
 
         Ok(bits)
@@ -121,7 +126,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         Ok(())
     }
 
-    /// Reduction to be enforced after additions
+    /// Reduction to be enforced after additions. 
+    /// Checks if the resulting elem is still "small" enough for a multiplication, and 
+    /// reduces it otherwise.
     pub fn post_add_reduce<CS: ConstraintSystem<ConstraintF>>(
         cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>
@@ -191,7 +198,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         Self::reduce(cs, elem)
     }
 
-    /// Group and check equality
+    /// Group and check equality, the low-level function for equality checks?
     pub fn group_and_check_equality<CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
         surfeit: usize,

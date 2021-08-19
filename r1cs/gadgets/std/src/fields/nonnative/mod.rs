@@ -1,26 +1,17 @@
-/// This module contains the implementation of three structs:
-///
-/// - `NonNativeFieldParams` specifies the constraint prime field (called `ConstraintF`),
-///     the simulated prime field (called `SimulationF`), and internal parameters.
-/// - `NonNativeFieldGadget` implements the `FieldGadget` for simulating `SimulationF`
-///     arithmetic within `ConstraintF`.
-/// - `NonNativeFieldMulResultGadget` is an intermediate representations of the
-///     result of multiplication, which is hidden from the `FieldGadget` interface
-///     and is left for advanced users who want better performance.
-///
-/// DISCLAIMER: This is entirely a porting of [arkworks/nonnative](https://github.com/arkworks-rs/nonnative)
-///             to work with our GingerLib.
-
+//! A module for simulating non-native field arithmetics according to [Kosba et al.](https://ieeexplore.ieee.org/document/8418647),
+//! using some of the optimizations from [Ozdemir et al.](https://eprint.iacr.org/2019/1494).
+//! Ported from [arkworks/nonnative](https://github.com/arkworks-rs/nonnative).
+//! The following types are defined/supported:
+//!
+//! - `NonNativeFieldParams` specifies the constraint prime field (called `ConstraintF`),
+//!     the simulated prime field (called `SimulationF`), and internal parameters.
+//! - `NonNativeFieldGadget` implements the `FieldGadget` for simulating `SimulationF`
+//!     arithmetic within `ConstraintF`.
+//! - `NonNativeFieldMulResultGadget` is an intermediate representations of the
+//!     result of multiplication, which is hidden from the `FieldGadget` interface
+//!     and is left for advanced users who want better performance.
 use std::fmt::Debug;
 
-/// example parameters of non-native field gadget
-///
-/// Sample parameters for non-native field gadgets
-/// - `ConstraintF`:            the constraint field
-/// - `SimulationF`:            the field being simulated
-/// - `num_limbs`:              how many limbs are used
-/// - `bits_per_limb`:          the size of the limbs
-///
 pub mod params;
 
 /// a submodule for reducing the representations
@@ -33,7 +24,7 @@ pub mod nonnative_field_mul_result_gadget;
 #[cfg(test)]
 mod tests;
 
-/// a macro for computing ceil(log2(x)) for a field element x
+/// a macro for computing the bit length ceil(log2(x)) of a field element x
 #[doc(hidden)]
 #[macro_export]
 macro_rules! overhead {

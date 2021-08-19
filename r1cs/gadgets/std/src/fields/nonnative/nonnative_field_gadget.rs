@@ -1,3 +1,12 @@
+//! Definition of NonNativeFieldGadget and implementation of 
+//!     - certain low-level arithmetic operations (without reduction), 
+//!     - the FieldGadget trait, 
+//! as well as the following auxiliary traits:
+//!     - ToBitsGadget, ConstantGadget, ToBitsGadget, ToBytesGadget, 
+//!     - CondSelectGadget, TwoBitLookup, ThreeBitCondNegLookupGadget, 
+//!     - AllocGadget, ToConstraintFieldGadget, CloneGadget
+//! and the
+//!     - EqGadget, which heaviliy uses reduction of non-natives from reduce.rs
 use algebra::{BigInteger, FpParameters, PrimeField};
 
 use crate::{
@@ -34,10 +43,14 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
     pub simulation_phantom: PhantomData<SimulationF>,
 }
 
+
+/// Low-level functions that do not make use of reduction/normalization.
 impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    /// Obtain the value of limbs
+    /// Obtain the non-native value of a vector of limbs.
+    // TODO: Find out why the functions limbs_to_bigint and bigint_to_constraint_field 
+    // (applied to `SimulationF`) is not used here instead.
     pub fn limbs_to_value(limbs: Vec<ConstraintF>) -> SimulationF {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -288,6 +301,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     }
 }
 
+
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, ConstraintF>
 for NonNativeFieldGadget<SimulationF, ConstraintF> {
     type Variable = ();
@@ -413,6 +427,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF> {
         Ok(inverse)
     }
 
+    // The non-native field is a prime field, hence the Frobenious map is trivial
     fn frobenius_map<CS: ConstraintSystem<ConstraintF>>(&self, _: CS, _power: usize) -> Result<Self, SynthesisError> {
         Ok(self.clone())
     }
@@ -868,6 +883,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
             NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations_from_big_integer(
                 &<SimulationF as PrimeField>::Params::MODULUS,
             )?;
+        // TODO: check if the recomputation of MODULUS is the best way we can do. 
         let p_bigint = limbs_to_bigint(params.bits_per_limb, &p_representations);
 
         let mut p_gadget_limbs = Vec::new();
@@ -880,7 +896,9 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
         let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: p_gadget_limbs,
             num_of_additions_over_normal_form: ConstraintF::one(),
-            is_in_the_normal_form: false,
+            // TODO: p_gadget as defined by the limbs has normal form. 
+            // Find out if there is a particular reason why `is_normal_form` is set `false`.
+            is_in_the_normal_form: false,   
             simulation_phantom: PhantomData,
         };
 
