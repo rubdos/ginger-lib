@@ -17,8 +17,10 @@ pub mod params;
 /// a submodule for reducing the representations
 pub mod reduce;
 
+/// the main module, non-native field gadgets and its arithmetic operations
 pub mod nonnative_field_gadget;
 
+/// The intermediate non-normalized representation resulting from products.
 pub mod nonnative_field_mul_result_gadget;
 
 #[cfg(test)]
@@ -62,6 +64,6 @@ pub struct NonNativeFieldParams {
     /// The number of limbs (`ConstraintF` elements) used to represent a `SimulationF` element. Highest limb first.
     pub num_limbs: usize,
 
-    /// The number of bits of the limb
+    /// The `native' number of bits of a limb.
     pub bits_per_limb: usize,
 }

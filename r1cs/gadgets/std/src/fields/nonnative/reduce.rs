@@ -20,8 +20,7 @@ use num_traits::{Zero, One};
 
 use crate::fields::FieldGadget;
 
-/// Recombines the large integer from the limbs. 
-/// Caution: applies only to non_natives in normal form 
+/// Recombines the large integer value from a vector of (not necessarily normalized) limbs. 
 pub fn limbs_to_bigint<ConstraintF: PrimeField>(
     bits_per_limb: usize,
     limbs: &[ConstraintF],
@@ -157,11 +156,15 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             panic!("The current limb parameters do not support multiplication.");
         }
 
+        // TODO: Try to understand if one can write the optional reduction of one
+        // (or both) of the factors more elegantly.  
         let mut i = 0;
         loop {
             let prod_of_num_of_additions = (elem.num_of_additions_over_normal_form
                 + ConstraintF::one())
                 * (elem_other.num_of_additions_over_normal_form + ConstraintF::one());
+            // overhead_limb = (num_add(a) + 1)(num_add(b)+1) * num_limbs
+            // Why the product of the num_of_additions and not the sum?
             let overhead_limb = overhead!(prod_of_num_of_additions.mul(
                 &ConstraintF::from_repr(<ConstraintF as PrimeField>::BigInt::from(
                     (params.num_limbs) as u64
@@ -169,10 +172,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             ));
             let bits_per_mulresult_limb = 2 * (params.bits_per_limb + 1) + overhead_limb;
 
+            // if the product of limbs has bit length < than length(modulus),
+            // there is nothing to do.
             if bits_per_mulresult_limb < ConstraintF::size_in_bits() {
                 break;
             }
 
+            // otherwise we reduce the factor which is expected to have larger excess
+            // over normal form.
             if elem.num_of_additions_over_normal_form
                 >= elem_other.num_of_additions_over_normal_form
             {

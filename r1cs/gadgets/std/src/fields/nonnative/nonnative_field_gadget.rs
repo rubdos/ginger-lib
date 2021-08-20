@@ -30,25 +30,27 @@ use std::{borrow::Borrow, vec, vec::Vec};
 #[derive(Debug, Eq, PartialEq)]
 #[must_use]
 pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField> {
-    /// The limbs, each of which is a ConstraintF gadget.
+    /// The limbs as elements of ConstraintF. 
+    /// Recall that in the course of arithmetic operations bits the bit length of 
+    /// a limb exceeds `NonNativeFieldParams::bits_per_limb`. Reduction transforms 
+    /// back to normal form, which again has at most `bits_per_limb` many bits.
     pub limbs: Vec<FpGadget<ConstraintF>>,
-    /// Number of additions done over this gadget, using
-    /// which the gadget decides when to reduce.
+    /// Number of additions done over this gadget without transforming back to 
+    /// normal form. Used by gadgets to decide when to reduce.
     pub num_of_additions_over_normal_form: ConstraintF,
     /// Whether the limb representation is the normal form
-    /// (using only the bits specified in the parameters,
-    /// and the representation is strictly within the range of SimulationF).
     pub is_in_the_normal_form: bool,
     #[doc(hidden)]
     pub simulation_phantom: PhantomData<SimulationF>,
 }
 
 
-/// Low-level functions that do not make use of reduction/normalization.
+/// Low-level functions that do not make use of normalization.
 impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    /// Obtain the non-native value of a vector of limbs.
+    /// Obtain the non-native value from a vector of not necessarily normalized 
+    /// limb elements.
     // TODO: Find out why the functions limbs_to_bigint and bigint_to_constraint_field 
     // (applied to `SimulationF`) is not used here instead.
     pub fn limbs_to_value(limbs: Vec<ConstraintF>) -> SimulationF {
@@ -56,8 +58,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         let mut base_repr: <SimulationF as PrimeField>::BigInt = SimulationF::one().into_repr();
 
-        // Convert 2^{(params.bits_per_limb - 1)} into the SimulationF then double the base
-        // This is because 2^{(params.bits_per_limb)} might indeed be larger than the target field's prime.
+        // Compute base = 2^{params.bits_per_limb} in SimulationF.
+        // Note that in cases where non-natives are just single limb sized, 2^{(params.bits_per_limb)} 
+        // exceeds the modulus of SimulationF. Thus we compute as follows.
         base_repr.muln((params.bits_per_limb - 1) as u32);
         let mut base = SimulationF::from_repr(base_repr);
         base = base + &base;
@@ -69,6 +72,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             let mut val = SimulationF::zero();
             let mut cur = SimulationF::one();
 
+            // Take all bits of the field element limb into account, even the ones
+            // that exceed the bits_per_limb.
             for bit in limb.into_repr().to_bits().iter().rev() {
                 if *bit {
                     val += &cur;
