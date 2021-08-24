@@ -158,19 +158,26 @@ impl<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>> MultiEq<Constra
         self.ops += 1;
     }
 
+    /// Enforces simulatenously the MultiEq `self` and `lhs == rhs` of the at most `num_bits` large 
+    /// linear combinations `lhs` and `rhs`.
     pub fn enforce_equal(
+        // the MultiEq
         &mut self,
+        // the number of bits used for lhs and rhs, must be < capacity of `ConstraintF`
         num_bits: usize,
+        // the linear combinations to be aggregated in `self`
         lhs: &LinearCombination<ConstraintF>,
         rhs: &LinearCombination<ConstraintF>,
     ) {
-        // Check if we will exceed the capacity
+        // Check if we will exceed the capacity. If yes, then use accumulate on `self` first.
+        // TODO: Seems to be correct only if `bits_used` does not exceed the capacity at 
+        // run time. Please check.
         if (ConstraintF::Params::CAPACITY as usize) <= (self.bits_used + num_bits) {
             self.accumulate();
         }
 
         assert!((ConstraintF::Params::CAPACITY as usize) > (self.bits_used + num_bits));
-
+        // Since we do not exceed the capacity, cumulate (lhs,rhs) in `self` by appending
         let frmstr = ConstraintF::from_str("2").unwrap_or_default();
 
         let coeff = frmstr.pow(&[self.bits_used as u64]);

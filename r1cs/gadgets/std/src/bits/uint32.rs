@@ -1,3 +1,11 @@
+//! A module for representing 32 bit unsigned integers over a prime constraint field.
+//! Besides elementary gadgets (such as toBits, toBytes, etc.) implements the bitwise 
+//! operations
+//!     - rotl, rotr, shr, xor,
+//! as well as 
+//!     - add_many, which performs the addition modulo 2^32 of a slice of operands,
+//!     the result of which does exceed in length the capacity bound of the constraint 
+//!     field.
 use algebra::{Field, FpParameters, PrimeField};
 
 use r1cs_core::{ConstraintSystem, LinearCombination, SynthesisError};
@@ -227,7 +235,8 @@ impl UInt32 {
         })
     }
 
-    /// Perform modular addition of several `UInt32` objects.
+    /// Perform addition modulo 2^32 of several `UInt32` objects.
+    // TODO_ Limited to at most 10 operands, let us change to `ConstraintF::CAPACITY` / 32 many operands.
     pub fn addmany<ConstraintF, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
         where
             ConstraintF: PrimeField,
@@ -239,6 +248,8 @@ impl UInt32 {
 
         assert!(ConstraintF::Params::MODULUS_BITS >= 64);
         assert!(operands.len() >= 2); // Weird trivial cases that should never happen
+        // TODO: change this assertion to the proper one 
+        // operands.len() <= ConstraintF::CAPACITY / 32
         assert!(operands.len() <= 10);
 
         // Compute the maximum value of the sum so we allocate enough bits for
@@ -268,12 +279,14 @@ impl UInt32 {
                 }
             }
 
-            // Iterate over each bit of the operand and add the operand to
-            // the linear combination
+            // Cumulate the terms that correspond to the bits in op to the
+            // overall LC
             let mut coeff = ConstraintF::one();
             for bit in &op.bits {
+                // adds 2^i * bit[i] to the lc
                 lc = lc + &bit.lc(CS::one(), coeff);
 
+                // all_constants = all_constants & bit.is_constant()
                 all_constants &= bit.is_constant();
 
                 coeff = coeff.double();
@@ -283,6 +296,7 @@ impl UInt32 {
         // The value of the actual result is modulo 2^32
         let modular_value = result_value.map(|v| v as u32);
 
+        // In case that all operants are constant UInt32 it is enough to return a constant.
         if all_constants && modular_value.is_some() {
             // We can just return a constant, rather than
             // unpacking the result into allocated bits.
@@ -297,11 +311,11 @@ impl UInt32 {
         // for comparison with the sum of the operands
         let mut result_lc = LinearCombination::zero();
 
-        // Allocate each bit of the result
+        // Allocate each bit of the result from result_val
         let mut coeff = ConstraintF::one();
         let mut i = 0;
         while max_value != 0 {
-            // Allocate the bit
+            // Allocate the bit using result_value
             let b = AllocatedBit::alloc(
                 cs.ns(|| format!("result bit {}", i)),
                 || result_value.map(|v| (v >> i) & 1 == 1).get()
@@ -317,7 +331,8 @@ impl UInt32 {
             coeff = coeff.double();
         }
 
-        // Enforce equality between the sum and result
+        // Enforce equality between the sum and result by aggregating it
+        // in the MultiEq
         cs.get_root().enforce_equal(i, &lc, &result_lc);
 
         // Discard carry bits that we don't care about
@@ -489,6 +504,8 @@ mod test {
         }
     }
 
+    // TODO: This test does typically only test the case where addmany does not exceed the capacity
+    // of the constraint field. (128 bit far smaller than the fields we use). Let us extend it.
     #[test]
     fn test_uint32_addmany_constants() {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
@@ -530,6 +547,8 @@ mod test {
         }
     }
 
+    // TODO: This test does typically only test the case where addmany does not exceed the capacity
+    // of the constraint field. (128 bit far smaller than the fields we use). Let us extend it.
     #[test]
     fn test_uint32_addmany() {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
