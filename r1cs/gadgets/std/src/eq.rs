@@ -123,11 +123,21 @@ impl<T: EqGadget<ConstraintF>, ConstraintF: Field> EqGadget<ConstraintF> for [T]
     }
 }
 
+
+/// A struct for collecting identities of linear combinations of Booleans to serve 
+/// a more efficient equality enforcement (by packing them in parallel into constraint
+/// field elements).
+/// Used for simulating arithmetic operations modulo a power of 2.
 pub struct MultiEq<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>> {
     cs: CS,
+    // a counter for the number of used equality constraints
     ops: usize,
+    // the "size" of the identity, i.e. the bit length of the maximum value 
+    // that can be obtained by the linear combination.
     bits_used: usize,
+    // the left hand side of the identity
     lhs: LinearCombination<ConstraintF>,
+    // the right hand side of the identity
     rhs: LinearCombination<ConstraintF>,
 }
 
