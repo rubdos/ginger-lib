@@ -681,7 +681,7 @@ mod test {
          }
      }
 
-    // TODO: all of the  test vectors do not exceed the block size, and are not binary. 
+    // TODO: all of the test vectors do not exceed the block size, and are not binary. 
     // Let us do better.
     #[test]
     fn compare_against_test_vectors() {
