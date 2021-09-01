@@ -1,4 +1,5 @@
 # The following Sage script check the consistency of the following curves parameters:
+#
 #   1) P=(GENERATOR_X,GENERATOR_Y)  must belongs to the curve of equation E: y^2 = x^3 + Ax + B   
 #   2) P                                must have order equal to the MODULUS of the scalar field
 #   3) COFACTOR                         must be equal to Order(E)/Order(P)

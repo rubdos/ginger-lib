@@ -1,4 +1,5 @@
 # The following Sage script check the consistency of the following field parameters:
+#
 #   1) MODULUS                      must be a prime number   
 #   2) MODULUS_BITS                 must be the binary length of MODULUS
 #   3) REPR_SHAVE_BITS              must be = length(BigInteger) * 64 - MODULUS_BITS
