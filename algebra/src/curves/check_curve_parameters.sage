@@ -127,6 +127,7 @@ for s in big_int_names:
 
 ################################Checking the constistency of the values#############################
 Fq = FiniteField(BASE_FIELD_MODULUS)
+Fr = FiniteField(SCALAR_FIELD_MODULUS)
 #Moving from Montgomery to standard form the value of COEFF_A and COEFF_B
 A = Fq(COEFF_A) * Fq(BASE_FIELD_R)**(-1)
 B = Fq(COEFF_B) * Fq(BASE_FIELD_R)**(-1)
@@ -159,7 +160,7 @@ else:
     else:
         print("WARNING! THE VALUE OF COFACTOR IS NOT CORRECT!")    
 ###### Checking the correctness of COFACTOR_INV
-if Fq(COFACTOR) * Fq(COFACTOR_INV) == Fq(SCALAR_FIELD_R):
+if Fr(COFACTOR) * Fr(COFACTOR_INV) == Fr(SCALAR_FIELD_R):
     print("Correct. COFACTOR_INV is the inverse of COFACTOR in the the scalar field.")
 else:
     print("WARNING! COFACTOR_INV IS NOT THE INVERSE OF COFACTOR IN THE SCALAR FIELD!")
