@@ -423,7 +423,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt32 {
 mod test {
     use super::UInt32;
     use crate::{bits::boolean::Boolean, test_constraint_system::TestConstraintSystem, eq::MultiEq};
-    use algebra::fields::{bls12_381::Fr, Field, PrimeField};
+    use algebra::fields::{bls12_381::Fr, Field};
     use r1cs_core::ConstraintSystem;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;

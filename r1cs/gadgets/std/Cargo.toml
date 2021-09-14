@@ -52,4 +52,5 @@ density-optimized = []
 paste = "1.0"
 rand = { version = "0.8.4" }
 rand_xorshift = { version = "0.3.0" }
+algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "rc/audit_chain", features = ["full"] }
 r1cs-std = { path = "../std", features = ["full", "nonnative"] }
