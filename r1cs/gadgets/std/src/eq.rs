@@ -180,8 +180,6 @@ impl<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>> MultiEq<Constra
         rhs: &LinearCombination<ConstraintF>,
     ) {
         // Check if we will exceed the capacity. If yes, then use accumulate on `self` first.
-        // TODO: Seems to be correct only if `bits_used` does not exceed the capacity at 
-        // run time. Please check.
         if (ConstraintF::Params::CAPACITY as usize) <= (self.bits_used + num_bits) {
             self.accumulate();
         }

@@ -163,7 +163,6 @@ pub fn ripemd160<ConstraintF, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<B
     let mut padded = input.to_vec();
     let plen = padded.len() as u64;
     // append bit "1", and alread seven 0 bits (recall that our input length is a mult. of 8)
-    // TODO: let's keep this piece of padding also in binary notation.
     padded.append(&mut UInt8::constant(1).into_bits_be());
 
     // append remaining K '0' bits such that L + 7 + K  is 64 bit shy of being a multiple of 512
@@ -189,8 +188,6 @@ fn get_ripemd160_iv() -> Vec<UInt32> {
 }
 
 /// The RIPEMD160 block compression function
-// TODO: Let's investigate if we can improve the circuit by using the auxiliary
-// `Maybe` struct to defer additions modulo 2^32.
 fn ripemd160_compression_function<ConstraintF, CS>(
     cs: CS,
     input: &[Boolean],
@@ -321,8 +318,6 @@ mod test {
     #[test]
     /// Tests satisfiability of the circuit for the compression function, choosing a random
     /// input block.
-    // TODO: What is the use of this test? We do not even match the output against the
-    // expected one.
     fn test_full_block() {
         let mut rng = XorShiftRng::from_seed([
             0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
@@ -347,6 +342,7 @@ mod test {
         ripemd160_compression_function(cs.ns(|| "ripemd160"), &input_bits, &iv).unwrap();
 
         assert!(cs.is_satisfied());
+        // TODO: Maybe we can do slightly better
         assert_eq!(cs.num_constraints() - 512, 18797);
     }
 
@@ -407,8 +403,6 @@ mod test {
          }
      }
 
-    // TODO: all of the test vectors do not exceed the block size, and are not binary. 
-    // Let us do better.
     #[test]
     fn compare_against_test_vectors() {
         // the test vectors from [RIPEMD160](https://homes.esat.kuleuven.be/~bosselae/ripemd160/pdf/AB-9601/AB-9601.pdf)

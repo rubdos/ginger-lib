@@ -236,7 +236,6 @@ impl UInt32 {
     }
 
     /// Perform addition modulo 2^32 of several `UInt32` objects.
-    // TODO_ Limited to at most 10 operands, let us change to `ConstraintF::CAPACITY` / 32 many operands.
     pub fn addmany<ConstraintF, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
         where
             ConstraintF: PrimeField,
@@ -248,8 +247,7 @@ impl UInt32 {
 
         assert!(ConstraintF::Params::MODULUS_BITS >= 64);
         assert!(operands.len() >= 2); // Weird trivial cases that should never happen
-        // TODO: change this assertion to the proper one 
-        // operands.len() <= ConstraintF::CAPACITY / 32
+        // TODO: Check this bound. Is it really needed ?
         assert!(operands.len() <= 10);
 
         // Compute the maximum value of the sum so we allocate enough bits for
@@ -425,7 +423,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt32 {
 mod test {
     use super::UInt32;
     use crate::{bits::boolean::Boolean, test_constraint_system::TestConstraintSystem, eq::MultiEq};
-    use algebra::fields::{bls12_381::Fr, Field};
+    use algebra::fields::{bls12_381::Fr, Field, PrimeField};
     use r1cs_core::ConstraintSystem;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -504,8 +502,6 @@ mod test {
         }
     }
 
-    // TODO: This test does typically only test the case where addmany does not exceed the capacity
-    // of the constraint field. (128 bit far smaller than the fields we use). Let us extend it.
     #[test]
     fn test_uint32_addmany_constants() {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
@@ -513,20 +509,17 @@ mod test {
         for _ in 0..1000 {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
-            let a: u32 = rng.gen();
-            let b: u32 = rng.gen();
-            let c: u32 = rng.gen();
+            let num_operands = 10;
 
-            let a_bit = UInt32::constant(a);
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::constant(c);
+            let operands_val = (0..num_operands).map(|_| rng.gen()).collect::<Vec<u32>>();
+            let mut expected = operands_val.iter().fold(0u32, |acc, x| x.wrapping_add(acc));
 
-            let mut expected = a.wrapping_add(b).wrapping_add(c);
+            let operands_gadget = operands_val.into_iter().map(|val| UInt32::constant(val)).collect::<Vec<UInt32>>();
 
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
                 let r =
-                    UInt32::addmany(cs.ns(|| "addition"), &[a_bit, b_bit, c_bit]).unwrap();
+                    UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
                 r
             };
             assert!(r.value == Some(expected));
@@ -547,8 +540,6 @@ mod test {
         }
     }
 
-    // TODO: This test does typically only test the case where addmany does not exceed the capacity
-    // of the constraint field. (128 bit far smaller than the fields we use). Let us extend it.
     #[test]
     fn test_uint32_addmany() {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
@@ -556,22 +547,20 @@ mod test {
         for _ in 0..1000 {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
-            let a: u32 = rng.gen();
-            let b: u32 = rng.gen();
-            let c: u32 = rng.gen();
-            let d: u32 = rng.gen();
+            let num_operands = 10;
 
-            let mut expected = (a ^ b).wrapping_add(c).wrapping_add(d);
+            let operands_val = (0..num_operands).map(|_| rng.gen()).collect::<Vec<u32>>();
+            let mut expected = operands_val.iter().fold(0u32, |acc, x| x.wrapping_add(acc));
 
-            let a_bit = UInt32::alloc(cs.ns(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::constant(c);
-            let d_bit = UInt32::alloc(cs.ns(|| "d_bit"), Some(d)).unwrap();
+            let operands_gadget = operands_val.into_iter().enumerate().map(
+                |(i, val)| UInt32::alloc(cs.ns(|| format!("alloc u32 {}", i)), Some(val)).unwrap()
+            ).collect::<Vec<UInt32>>();
 
-            let r = a_bit.xor(cs.ns(|| "xor"), &b_bit).unwrap();
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
-                UInt32::addmany(cs.ns(|| "addition"), &[r, c_bit, d_bit]).unwrap()
+                let r =
+                    UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
+                r
             };
 
             assert!(cs.is_satisfied());

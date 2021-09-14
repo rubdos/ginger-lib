@@ -390,18 +390,15 @@ impl Boolean {
         }
     }
 
-    // TODO: Find out the purpose of this function. 
-    // For constant Booleans, it conditionally selects coeff times the variable,
-    // depending on the value of the Boolean.
-    // For variable Booleans its functioning is not clear.
+    /// Return a LinearCombination built starting from `self` and `coeff`,
+    /// taking explicitly into account that `self` is a constant/variable
+    /// Boolean.
     pub fn lc<ConstraintF: Field>(
         &self,
         one: Variable,
         coeff: ConstraintF,
     ) -> LinearCombination<ConstraintF> {
         match *self {
-            // For constant Booleans select coeff*one depending on the
-            // value of it.
             Boolean::Constant(c) => {
                 if c {
                     (coeff, one).into()
@@ -409,11 +406,7 @@ impl Boolean {
                     LinearCombination::<ConstraintF>::zero()
                 }
             },
-            // For variable Booleans, non-negated representation: 
-            // return coeff * Boolean (WHY?)
             Boolean::Is(ref v) => (coeff, v.get_variable()).into(),
-            // For variable Booleans, negated representation:
-            // add to coeff*one - coeff * (1-AllocatedBit) (WHY?)
             Boolean::Not(ref v) => {
                 LinearCombination::<ConstraintF>::zero() + (coeff, one) - (coeff, v.get_variable())
             },

@@ -484,8 +484,7 @@ impl<F: PrimeField> ToBitsGadget<F> for FpGadget<F> {
 impl<F: PrimeField> FromBitsGadget<F> for FpGadget<F> {
     fn from_bits<CS: ConstraintSystem<F>>(mut cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError> {
 
-        // TODO: this truncation to at most CAPACITY many bits is not needed, as the circuit is always 
-        // public. Let as do an assertion instead.
+        // We can safely pack up to CAPACITY bits
         let bits = bits.chunks(F::Params::CAPACITY as usize).next().unwrap();
 
         let mut num = Self::zero(cs.ns(|| "alloc_lc_{}"))?;

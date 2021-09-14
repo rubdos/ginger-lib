@@ -34,7 +34,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     type Value = SWProjective<P>;
     type Variable = ();
 
-    // TODO: add docu and how the circuit behaves in exceptional cases
     fn add<CS: ConstraintSystem<ConstraintF>>(
         &self,
         cs: CS,
@@ -58,8 +57,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(self.infinity)
     }
 
-    // TODO: Let's add docu how the function behaves in exceptional cases
-    // due to incomplete arithemtics.
     #[inline]
     fn double_in_place<CS: ConstraintSystem<ConstraintF>>(
         &mut self,
@@ -88,7 +85,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
         // Allocate fresh x and y as a temporary workaround to reduce the R1CS density.
         // TODO: Let us check if the constraints from non-native arithmetics
-        // already stop the propagation of LCs
+        //       already stop the propagation of LCs
         let x = NonNativeFieldGadget::alloc(
             cs.ns(|| "new x"),
             || {
@@ -141,8 +138,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
     /// Incomplete addition: neither `self` nor `other` can be the neutral
     /// element.
-    // TODO: Let's add docu how the function behaves in exceptional cases
-    // due to incomplete arithemtics.
     fn add_constant<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -222,10 +217,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     /// Inputs must be specified in *little-endian* form.
     /// If the addition law is incomplete for the identity element,
     /// `result` must not be the identity element.
-    // TODO: Let's add docu how the function behaves in other exceptional cases
-    // due to incomplete arithemtics.
-    // TODO: Let us handle exceptions during the execution path of mul_bits by
-    // the shift method.
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -247,12 +238,8 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(result)
     }
 
-    // TODO: Let's add docu how the function behaves in other exceptional cases
-    // due to incomplete arithemtics.
-    // TODO: Let us handle exceptions during the execution path of mul_bits by
-    // the shift method.
     // TODO: We can optimize performance (at the cost of extra memory) when doing
-    // the batch_inversion on the entire look-up table. 
+    //       the batch_inversion on the entire look-up table.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
@@ -305,7 +292,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(result)
     }
 
-    fn get_value(&self) -> Option<<Self as GroupGadget<SWProjective<P>, ConstraintF>>::Value> { 
+    fn get_value(&self) -> Option<<Self as GroupGadget<SWProjective<P>, ConstraintF>>::Value> {
         unimplemented!()
     }
 
@@ -322,8 +309,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     }
 }
 
-// TODO: check if this implementation is correct. 
-// (Does not seem to refer to the EqGadget)
 impl<P, ConstraintF, SimulationF> PartialEq
 for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     where
@@ -336,7 +321,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     }
 }
 
-//  TODO: a stub?
 impl<P, ConstraintF, SimulationF> Eq
 for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     where
@@ -647,9 +631,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         ConstraintF: PrimeField,
         SimulationF: PrimeField + SquareRootField
 {
-    // TODO: It might be useful to implement an optimized variant for curves 
-    // with Weierstrass A=0 and small B. Most of our curves (in particular 
-    // the secp256k1) are of this form.
     #[inline]
     fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
@@ -681,13 +662,11 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
         // Check that y^2 = x^3 + ax +b
         // We do this by checking that y^2 - b = x * (x^2 +a)
-        // let x2 = x.square(&mut cs.ns(|| "x^2"))?;
-        // let y2 = y.square(&mut cs.ns(|| "y^2"))?;
         let x2 = x.mul(cs.ns(|| "x^2"), &x)?;
         // TODO: There might be some room for optimization:
-        // Let us check the number of constraints when not reducing y2 
-        // right after the product. We only do an addition by -b afterwards, 
-        // before doing the conditional_enforce_equal.
+        //       Let us check the number of constraints when not reducing y2
+        //       right after the product. We only do an addition by -b afterwards,
+        //       before doing the conditional_enforce_equal.
         let y2 = y.mul(cs.ns(|| "y^2"), &y)?;
 
         let x2_plus_a = x2.add_constant(cs.ns(|| "x^2 + a"), &a)?;
@@ -732,10 +711,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(Self::new(x, y, infinity))
     }
 
-    // TODO: Add docu
-    // TODO: Many curves have a cofactor which is either or large small compared 
-    // to the prime order `r`. Let's take a more accurate measure instead of the 
-    // Hammingweight to pick out the most efficient test.
     #[inline]
     fn alloc_checked<FN, T, CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
@@ -846,12 +821,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         let y = NonNativeFieldGadget::alloc_input(&mut cs.ns(|| "y"), || y)?;
         let infinity = Boolean::alloc_input(&mut cs.ns(|| "infinity"), || infinity)?;
 
-        // TODO: There is no reason to enforce curve membership
-        // on public inputs. 
-        // Check that y^2 = x^3 + ax +b
-        // We do this by checking that y^2 - b = x * (x^2 +a)
-        // let x2 = x.square(&mut cs.ns(|| "x^2"))?;
-        // let y2 = y.square(&mut cs.ns(|| "y^2"))?;
         let x2 = x.mul(cs.ns(|| "x^2"), &x)?;
         let y2 = y.mul(cs.ns(|| "y^2"), &y)?;
 

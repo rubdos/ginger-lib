@@ -1,8 +1,6 @@
 //! Circuits for the [SHA-256](https://tools.ietf.org/html/rfc6234) hash function and its internal compression
 //! function.
-//!
-// TODO: Is this a port from the [Bellman labs implementation](https://docs.rs/bellman/0.8.0/src/bellman/gadgets/sha256.rs.html#47-74)?
-// If so we need to add a reference! 
+//! This is a port from the implementation in [Bellman](https://docs.rs/bellman/0.8.0/src/bellman/gadgets/sha256.rs.html#47-74)
 
 use r1cs_std::boolean::AllocatedBit;
 use r1cs_std::{Assignment, boolean::Boolean};
@@ -101,8 +99,6 @@ where
         .map(|e| UInt32::from_bits_be(e))
         .collect::<Vec<_>>();
 
-    // TODO: We can save some constraints by combining some of
-    // the constraints in different u32 additions
     let mut cs = MultiEq::new(cs);
 
     // expand to 64 words by recursion.
@@ -238,8 +234,6 @@ where
         h7 := h7 + h
     */
 
-    // TODO: let's investigate if deferring the evaluation improves
-    // the number of constraints
     let h0 = a.compute(
         cs.ns(|| "deferred h0 computation"),
         &[current_hash_value[0].clone()],
@@ -351,9 +345,6 @@ where
         value: new_value,
     })
 }
-
-
-
 
 /// Computes (a and b) xor ((not a) and c)
 pub fn sha256_ch_boolean<'a, ConstraintF, CS>(
@@ -592,8 +583,6 @@ mod test {
     #[test]
     /// Tests satisfiability of the circuit for the compression function, choosing a random
     /// input block.
-    // TODO: What is the use of this test? We do not even match the output against the
-    // expected one.
     fn test_full_block() {
         let mut rng = XorShiftRng::from_seed([
             0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
@@ -618,7 +607,6 @@ mod test {
         sha256_compression_function(cs.ns(|| "sha256"), &input_bits, &iv).unwrap();
 
         assert!(cs.is_satisfied());
-        // TODO: why doing assertions on the number of constraints in a test?
         assert_eq!(cs.num_constraints() - 512, 25840);
     }
 
@@ -634,7 +622,6 @@ mod test {
          ]);
 
          // Do the test for all inputs of bit length a multiple of 8
-         // TODO: this only test
          for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
              let mut h = Sha256::new();
              let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
@@ -681,8 +668,6 @@ mod test {
          }
      }
 
-    // TODO: all of the test vectors do not exceed the block size, and are not binary. 
-    // Let us do better.
     #[test]
     fn compare_against_test_vectors() {
         let test_inputs = [
