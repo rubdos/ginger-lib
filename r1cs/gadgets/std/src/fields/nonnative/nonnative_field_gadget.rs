@@ -304,6 +304,15 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             simulation_phantom: PhantomData,
         })
     }
+
+    #[inline]
+    pub fn is_odd<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Boolean, SynthesisError> {
+        let bits = self.to_bits_strict(cs.ns(|| "to bits strict"))?;
+        Ok(bits[bits.len() - 1])
+    }
 }
 
 
