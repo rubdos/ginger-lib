@@ -1,3 +1,8 @@
+//! The non-native group gadget (for short Weierstrass curves) and implementations of 
+//!     - the GroupGadget trait,
+//! as well as the following auxiliary traits:
+//!     - PartialEq, Eq, ToBitsGadget, ToBytesGagdet, EqGadget
+//!     - CondSelectGadget, ConstantGadget, AllocGadget.
 use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, SquareRootField, curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 
 use r1cs_core::{ConstraintSystem, SynthesisError};
@@ -79,6 +84,8 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         lambda.mul_equals(cs.ns(|| "check lambda"), &two_y, &three_x_squared_plus_a)?;
 
         // Allocate fresh x and y as a temporary workaround to reduce the R1CS density.
+        // TODO: Let us check if the constraints from non-native arithmetics
+        //       already stop the propagation of LCs
         let x = NonNativeFieldGadget::alloc(
             cs.ns(|| "new x"),
             || {
@@ -283,8 +290,12 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(result)
     }
 
-    fn get_value(&self) -> Option<<Self as GroupGadget<SWProjective<P>, ConstraintF>>::Value> { 
-        unimplemented!()
+    fn get_value(&self) -> Option<<Self as GroupGadget<SWProjective<P>, ConstraintF>>::Value> {
+        match (self.x.get_value(), self.y.get_value(), self.infinity.get_value()) {
+            (Some(x), Some(y), Some(infinity)) => Some(SWAffine::<P>::new(x, y, infinity).into_projective()),
+            (None, None, None) => None,
+            _ => unreachable!(),
+        }
     }
 
     fn get_variable(&self) -> Self::Variable {
@@ -297,88 +308,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
     fn cost_of_double() -> usize {
         unimplemented!()
-    }
-
-    fn sub<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        mut cs: CS,
-        other: &Self,
-    ) -> Result<Self, SynthesisError> {
-        let neg_other = other.negate(cs.ns(|| "Negate other"))?;
-        self.add(cs.ns(|| "Self - other"), &neg_other)
-    }
-
-    fn sub_constant<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        mut cs: CS,
-        other: &SWProjective<P>,
-    ) -> Result<Self, SynthesisError> {
-        let neg_other = -(*other);
-        self.add_constant(cs.ns(|| "Self - other"), &neg_other)
-    }
-
-    fn precomputed_base_scalar_mul<'a, CS, I, B>(
-        &mut self,
-        mut cs: CS,
-        scalar_bits_with_base_powers: I,
-    ) -> Result<(), SynthesisError>
-    where
-        CS: ConstraintSystem<ConstraintF>,
-        I: Iterator<Item = (B, &'a SWProjective<P>)>,
-        B: Borrow<Boolean>,
-        ConstraintF: 'a,
-    {
-        for (i, (bit, base_power)) in scalar_bits_with_base_powers.enumerate() {
-            let new_encoded = self.add_constant(
-                &mut cs.ns(|| format!("Add {}-th base power", i)),
-                &base_power,
-            )?;
-            *self = Self::conditionally_select(
-                &mut cs.ns(|| format!("Conditional Select {}", i)),
-                bit.borrow(),
-                &new_encoded,
-                &self,
-            )?;
-        }
-        Ok(())
-    }
-
-    fn precomputed_base_3_bit_signed_digit_scalar_mul<'a, CS, I, J, B>(
-        _: CS,
-        _: &[B],
-        _: &[J],
-    ) -> Result<Self, SynthesisError>
-    where
-        CS: ConstraintSystem<ConstraintF>,
-        I: Borrow<[Boolean]>,
-        J: Borrow<[I]>,
-        B: Borrow<[SWProjective<P>]>,
-    {
-        Err(SynthesisError::AssignmentMissing)
-    }
-
-    fn precomputed_base_multiscalar_mul<'a, CS, T, I, B>(
-        mut cs: CS,
-        bases: &[B],
-        scalars: I,
-    ) -> Result<Self, SynthesisError>
-    where
-        CS: ConstraintSystem<ConstraintF>,
-        T: 'a + ToBitsGadget<ConstraintF> + ?Sized,
-        I: Iterator<Item = &'a T>,
-        B: Borrow<[SWProjective<P>]>,
-    {
-        let mut result = Self::zero(&mut cs.ns(|| "Declare Result"))?;
-        // Compute ∏(h_i^{m_i}) for all i.
-        for (i, (bits, base_powers)) in scalars.zip(bases).enumerate() {
-            let base_powers = base_powers.borrow();
-            let bits = bits.to_bits(&mut cs.ns(|| format!("Convert Scalar {} to bits", i)))?;
-            result.precomputed_base_scalar_mul(
-                cs.ns(|| format!("Chunk {}", i)),
-                bits.iter().zip(base_powers),
-            )?;
-        }
-        Ok(result)
     }
 }
 
@@ -530,9 +459,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             .enforce_equal(cs.ns(|| "is_equal AND should_enforce == false"), &Boolean::Constant(false))
     }
 }
-
-
-
 
 impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     where
@@ -735,13 +661,15 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
         // Check that y^2 = x^3 + ax +b
         // We do this by checking that y^2 - b = x * (x^2 +a)
-        // let x2 = x.square(&mut cs.ns(|| "x^2"))?;
-        // let y2 = y.square(&mut cs.ns(|| "y^2"))?;
-        let x2 = x.mul(cs.ns(|| "x^2"), &x)?;
-        let y2 = y.mul(cs.ns(|| "y^2"), &y)?;
+        let x2 = x.mul_without_reduce(cs.ns(|| "x^2"), &x)?;
+        let y2 = y.mul_without_reduce(cs.ns(|| "y^2"), &y)?;
 
-        let x2_plus_a = x2.add_constant(cs.ns(|| "x^2 + a"), &a)?;
-        let y2_minus_b = y2.add_constant(cs.ns(|| "y^2 - b"), &b.neg())?;
+        let x2_plus_a = x2
+            .add_constant(cs.ns(|| "x^2 + a"), &a)?
+            .reduce(cs.ns(|| "reduce(x^2 + a)"))?;
+        let y2_minus_b = y2
+            .add_constant(cs.ns(|| "y^2 - b"), &b.neg())?
+            .reduce(cs.ns(|| "reduce(y^2 - b)"))?;
 
         let x2_plus_a_times_x = x2_plus_a.mul(cs.ns(|| "(x^2 + a)*x"), &x)?;
 
@@ -797,13 +725,11 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
                 // If we multiply by r, we actually multiply by r - 2.
                 let r_minus_1 = (-P::ScalarField::one()).into_repr();
                 let r_weight = BitIterator::new(&r_minus_1).filter(|b| *b).count();
-                // We pick the most efficient method of performing the prime order check:
-                // If the cofactor has lower hamming weight than the scalar field's modulus,
-                // we first multiply by the inverse of the cofactor, and then, after allocating,
-                // multiply by the cofactor. This ensures the resulting point has no cofactors
-                //
-                // Else, we multiply by the scalar field's modulus and ensure that the result
-                // is zero.
+
+                // If the Hamming weight of th cofactor is less than the Hamming weight of 
+                // the scalar field modulus, then we enforce subgroup membership of `result` by 
+                // result = COFACTOR * ge of a suitable computed groupelement ge. 
+                // Otherwise we simply enforce that -result == (r-1) * result.
                 if cofactor_weight < r_weight {
                     let ge = Self::alloc(cs.ns(|| "Alloc checked"), || {
                         value_gen().map(|ge| {
@@ -887,31 +813,9 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             ),
         };
 
-        let b = P::COEFF_B;
-        let a = P::COEFF_A;
-
         let x = NonNativeFieldGadget::alloc_input(&mut cs.ns(|| "x"), || x)?;
         let y = NonNativeFieldGadget::alloc_input(&mut cs.ns(|| "y"), || y)?;
         let infinity = Boolean::alloc_input(&mut cs.ns(|| "infinity"), || infinity)?;
-
-        // Check that y^2 = x^3 + ax +b
-        // We do this by checking that y^2 - b = x * (x^2 +a)
-        // let x2 = x.square(&mut cs.ns(|| "x^2"))?;
-        // let y2 = y.square(&mut cs.ns(|| "y^2"))?;
-        let x2 = x.mul(cs.ns(|| "x^2"), &x)?;
-        let y2 = y.mul(cs.ns(|| "y^2"), &y)?;
-
-
-        let x2_plus_a = x2.add_constant(cs.ns(|| "x^2 + a"), &a)?;
-        let y2_minus_b = y2.add_constant(cs.ns(|| "y^2 - b"), &b.neg())?;
-
-        let x2_plus_a_times_x = x2_plus_a.mul(cs.ns(|| "(x^2 + a)*x"), &x)?;
-
-        x2_plus_a_times_x.conditional_enforce_equal(
-            cs.ns(|| "on curve check"),
-            &y2_minus_b,
-            &infinity.not()
-        )?;
 
         Ok(Self::new(x, y, infinity))
     }

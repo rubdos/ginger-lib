@@ -1,3 +1,12 @@
+//! Definition of NonNativeFieldGadget and implementation of 
+//!     - certain low-level arithmetic operations (without reduction), 
+//!     - the FieldGadget trait, 
+//! as well as the following auxiliary traits:
+//!     - ToBitsGadget, ConstantGadget, ToBitsGadget, ToBytesGadget, 
+//!     - CondSelectGadget, TwoBitLookup, ThreeBitCondNegLookupGadget, 
+//!     - AllocGadget, ToConstraintFieldGadget, CloneGadget
+//! and the
+//!     - EqGadget, which heaviliy uses reduction of non-natives from reduce.rs
 use algebra::{BigInteger, FpParameters, PrimeField};
 
 use crate::{
@@ -21,30 +30,37 @@ use std::{borrow::Borrow, vec, vec::Vec};
 #[derive(Debug, Eq, PartialEq)]
 #[must_use]
 pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField> {
-    /// The limbs, each of which is a ConstraintF gadget.
+    /// The limbs as elements of ConstraintF. 
+    /// Recall that in the course of arithmetic operations bits the bit length of 
+    /// a limb exceeds `NonNativeFieldParams::bits_per_limb`. Reduction transforms 
+    /// back to normal form, which again has at most `bits_per_limb` many bits.
     pub limbs: Vec<FpGadget<ConstraintF>>,
-    /// Number of additions done over this gadget, using
-    /// which the gadget decides when to reduce.
+    /// Number of additions done over this gadget without transforming back to 
+    /// normal form. Used by gadgets to decide when to reduce.
     pub num_of_additions_over_normal_form: ConstraintF,
     /// Whether the limb representation is the normal form
-    /// (using only the bits specified in the parameters,
-    /// and the representation is strictly within the range of SimulationF).
     pub is_in_the_normal_form: bool,
     #[doc(hidden)]
     pub simulation_phantom: PhantomData<SimulationF>,
 }
 
+
+/// Low-level functions that do not make use of normalization.
 impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    /// Obtain the value of limbs
+    /// Obtain the non-native value from a vector of not necessarily normalized 
+    /// limb elements.
+    // TODO: Find out why the functions limbs_to_bigint and bigint_to_constraint_field 
+    // (applied to `SimulationF`) is not used here instead.
     pub fn limbs_to_value(limbs: Vec<ConstraintF>) -> SimulationF {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         let mut base_repr: <SimulationF as PrimeField>::BigInt = SimulationF::one().into_repr();
 
-        // Convert 2^{(params.bits_per_limb - 1)} into the SimulationF then double the base
-        // This is because 2^{(params.bits_per_limb)} might indeed be larger than the target field's prime.
+        // Compute base = 2^{params.bits_per_limb} in SimulationF.
+        // Note that in cases where non-natives are just single limb sized, 2^{(params.bits_per_limb)} 
+        // exceeds the modulus of SimulationF. Thus we compute as follows.
         base_repr.muln((params.bits_per_limb - 1) as u32);
         let mut base = SimulationF::from_repr(base_repr);
         base = base + &base;
@@ -56,6 +72,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             let mut val = SimulationF::zero();
             let mut cur = SimulationF::one();
 
+            // Take all bits of the field element limb into account, even the ones
+            // that exceed the bits_per_limb.
             for bit in limb.into_repr().to_bits().iter().rev() {
                 if *bit {
                     val += &cur;
@@ -286,7 +304,17 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             simulation_phantom: PhantomData,
         })
     }
+
+    #[inline]
+    pub fn is_odd<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Boolean, SynthesisError> {
+        let bits = self.to_bits_strict(cs.ns(|| "to bits strict"))?;
+        Ok(bits[bits.len() - 1])
+    }
 }
+
 
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, ConstraintF>
 for NonNativeFieldGadget<SimulationF, ConstraintF> {
@@ -413,6 +441,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF> {
         Ok(inverse)
     }
 
+    // The non-native field is a prime field, hence the Frobenious map is trivial
     fn frobenius_map<CS: ConstraintSystem<ConstraintF>>(&self, _: CS, _power: usize) -> Result<Self, SynthesisError> {
         Ok(self.clone())
     }
@@ -868,6 +897,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
             NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations_from_big_integer(
                 &<SimulationF as PrimeField>::Params::MODULUS,
             )?;
+        // TODO: check if the recomputation of MODULUS is the best way we can do. 
         let p_bigint = limbs_to_bigint(params.bits_per_limb, &p_representations);
 
         let mut p_gadget_limbs = Vec::new();
@@ -880,7 +910,9 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
         let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: p_gadget_limbs,
             num_of_additions_over_normal_form: ConstraintF::one(),
-            is_in_the_normal_form: false,
+            // TODO: p_gadget as defined by the limbs has normal form. 
+            // Find out if there is a particular reason why `is_normal_form` is set `false`.
+            is_in_the_normal_form: false,   
             simulation_phantom: PhantomData,
         };
 

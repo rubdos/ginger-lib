@@ -390,6 +390,9 @@ impl Boolean {
         }
     }
 
+    /// Return a LinearCombination built starting from `self` and `coeff`,
+    /// taking explicitly into account that `self` is a constant/variable
+    /// Boolean.
     pub fn lc<ConstraintF: Field>(
         &self,
         one: Variable,

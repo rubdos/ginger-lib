@@ -1,7 +1,6 @@
-//! Circuits for the [SHA-256] hash function and its internal compression
+//! Circuits for the [SHA-256](https://tools.ietf.org/html/rfc6234) hash function and its internal compression
 //! function.
-//!
-//! [SHA-256]: https://tools.ietf.org/html/rfc6234
+//! This is a port from the implementation in [Bellman](https://docs.rs/bellman/0.8.0/src/bellman/gadgets/sha256.rs.html#47-74)
 
 use r1cs_std::boolean::AllocatedBit;
 use r1cs_std::{Assignment, boolean::Boolean};
@@ -90,28 +89,36 @@ where
     assert_eq!(input.len(), 512);
     assert_eq!(current_hash_value.len(), 8);
 
+    //
+    // Message scheduler
+    //
+
+    // Initialize the first 16 words in the array w
     let mut w = input
         .chunks(32)
         .map(|e| UInt32::from_bits_be(e))
         .collect::<Vec<_>>();
 
-    // We can save some constraints by combining some of
-    // the constraints in different u32 additions
     let mut cs = MultiEq::new(cs);
 
+    // expand to 64 words by recursion.
     for i in 16..64 {
         let cs = &mut cs.ns(|| format!("w extension {}", i));
 
+        // Compute SHA256_sigma0(w[i-15])
         // s0 := (w[i-15] rightrotate 7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift 3)
         let mut s0 = UInt32::rotr(&w[i - 15], 7);
         s0 = s0.xor(cs.ns(|| "first xor for s0"), &UInt32::rotr(&w[i - 15], 18))?;
         s0 = s0.xor(cs.ns(|| "second xor for s0"), &UInt32::shr(&w[i - 15], 3))?;
 
+        // Compute SHA256_sigma1(w[i-2])
         // s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
         let mut s1 = UInt32::rotr(&w[i - 2], 17);
         s1 = s1.xor(cs.ns(|| "first xor for s1"), &UInt32::rotr(&w[i - 2], 19))?;
         s1 = s1.xor(cs.ns(|| "second xor for s1"), &UInt32::shr(&w[i - 2], 10))?;
 
+        // Compute W[i] = SHA256_sigma1(W[i-2]) + W[i-7] +
+        // SHA256_sigma0(W[i-15]) + W[i-16] mod 2^32
         let tmp = UInt32::addmany(
             cs.ns(|| "computation of w[i]"),
             &[w[i - 16].clone(), s0, w[i - 7].clone(), s1],
@@ -123,6 +130,7 @@ where
 
     assert_eq!(w.len(), 64);
 
+    // an auxilary structure to collect UInt32 to be added mod 2^32.
     enum Maybe {
         Deferred(Vec<UInt32>),
         Concrete(UInt32),
@@ -166,7 +174,7 @@ where
         // ch := (e and f) xor ((not e) and g)
         let ch = sha256_ch_uint32(cs.ns(|| "ch"), &new_e, &f, &g)?;
 
-        // temp1 := h + S1 + ch + k[i] + w[i]
+        // temp1 := h + S1 + ch + k[i] + w[i] mod 2^32
         let temp1 = vec![
             h.clone(),
             s1,
@@ -215,7 +223,7 @@ where
     }
 
     /*
-        Add the compressed chunk to the current hash value:
+        Add mod 2^32 the compressed chunk to the current hash value:
         h0 := h0 + a
         h1 := h1 + b
         h2 := h2 + c
@@ -337,9 +345,6 @@ where
         value: new_value,
     })
 }
-
-
-
 
 /// Computes (a and b) xor ((not a) and c)
 pub fn sha256_ch_boolean<'a, ConstraintF, CS>(
@@ -574,7 +579,10 @@ mod test {
     use rand::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+
     #[test]
+    /// Tests satisfiability of the circuit for the compression function, choosing a random
+    /// input block.
     fn test_full_block() {
         let mut rng = XorShiftRng::from_seed([
             0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
@@ -602,6 +610,8 @@ mod test {
         assert_eq!(cs.num_constraints() - 512, 25840);
     }
 
+    /// Tests circuit satisfiability of the compression function on a single block 
+    /// including padding
      #[test]
      fn native_test() {
          use sha2::{Digest, Sha256};
@@ -611,6 +621,7 @@ mod test {
              0xbc, 0xe5,
          ]);
 
+         // Do the test for all inputs of bit length a multiple of 8
          for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
              let mut h = Sha256::new();
              let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();

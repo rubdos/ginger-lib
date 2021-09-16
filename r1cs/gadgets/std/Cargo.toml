@@ -20,8 +20,13 @@ license = "MIT/Apache-2.0"
 ################################# Dependencies ################################
 
 [dependencies]
+<<<<<<< HEAD
 algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "import_secp256k1" }
 r1cs-core = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "import_secp256k1" }
+=======
+algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "rc/audit_chain" }
+r1cs-core = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "rc/audit_chain" }
+>>>>>>> rc/audit_chain
 derivative = "2.2.0"
 
 num-traits = { version = "0.2", default-features = false, optional = true }
@@ -32,11 +37,11 @@ radix_trie = "0.2.1"
 rand = { version = "0.8.4" }
 
 [features]
-default = ["nonnative", "full"]
 llvm_asm = ["algebra/llvm_asm"]
 
 full = [ "bls12_377", "bn_382", "edwards_bls12", "edwards_sw6", "jubjub", "mnt4_753", "mnt6_753", "tweedle" ]
 
+bls12_381 = ["algebra/bls12_381"]
 bls12_377 = [ "algebra/bls12_377" ]
 bn_382 = [ "algebra/bn_382" ]
 edwards_bls12 = [ "algebra/edwards_bls12"]
@@ -53,4 +58,4 @@ density-optimized = []
 paste = "1.0"
 rand = { version = "0.8.4" }
 rand_xorshift = { version = "0.3.0" }
-algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "import_secp256k1", features = ["bls12_381", "jubjub"] }
+r1cs-std = { path = "../std", features = ["bls12_381", "jubjub", "tweedle", "bn_382", "nonnative"] }

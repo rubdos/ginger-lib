@@ -1,6 +1,5 @@
-//! Circuits for the [RIPEMD160] hash function
+//! Circuits for the [RIPEMD160](https://homes.esat.kuleuven.be/~bosselae/ripemd160/pdf/AB-9601/AB-9601.pdf) hash function
 //!
-//! [RIPEMD160]: https://tools.ietf.org/html/rfc6234
 
 use r1cs_std::boolean::Boolean;
 use r1cs_std::eq::MultiEq;
@@ -151,6 +150,7 @@ pub fn ripemd160_block_no_padding<ConstraintF, CS>(
     )
 }
 
+/// The full domain RIPEMD160 hash function.
 pub fn ripemd160<ConstraintF, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
     where
         ConstraintF: PrimeField,
@@ -158,12 +158,14 @@ pub fn ripemd160<ConstraintF, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<B
 {
     assert!(input.len() % 8 == 0);
 
+    // Padding as for the [MD4](https://datatracker.ietf.org/doc/html/rfc1320).
+    // The length L of the unpadded message
     let mut padded = input.to_vec();
     let plen = padded.len() as u64;
-    // append 0x80
+    // append bit "1", and alread seven 0 bits (recall that our input length is a mult. of 8)
     padded.append(&mut UInt8::constant(1).into_bits_be());
 
-    // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
+    // append remaining K '0' bits such that L + 7 + K  is 64 bit shy of being a multiple of 512
     while (padded.len() + 64) % 512 != 0 {
         padded.push(Boolean::constant(false));
     }
@@ -185,6 +187,7 @@ fn get_ripemd160_iv() -> Vec<UInt32> {
     IV.iter().map(|&v| UInt32::constant(v)).collect()
 }
 
+/// The RIPEMD160 block compression function
 fn ripemd160_compression_function<ConstraintF, CS>(
     cs: CS,
     input: &[Boolean],
@@ -219,10 +222,12 @@ fn ripemd160_compression_function<ConstraintF, CS>(
 
         let cs = &mut cs.ns(|| format!("compression round {}", i));
         let mut t = {
+            // The left thread operating on A, B, C, D, E
+            // T = rotl_S[i](A + f(i,B,C,D) + X[r[i]] + K[i]) + E 
             let f = apply_round_function(cs.ns(|| format!("first round function {}", i)), &b, &c, &d, i)?;
             let selected_input_word = x[R[i]].clone();
             let result = UInt32::addmany(
-                cs.ns(|| format!("fist rotl(a + f + x + k) {}", i)),
+                cs.ns(|| format!("first rotl(a + f + x + k) {}", i)),
                 &[a, f, selected_input_word, get_round_constants(i).0]
             )?.rotl(S[i]);
             UInt32::addmany(
@@ -238,6 +243,8 @@ fn ripemd160_compression_function<ConstraintF, CS>(
         b = t;
 
         t = {
+            // The right thread operating on A', B', C', D', E'
+            // T = rotl_S'[i](A' + f(79-j,B',C',D') + X[r'[i]] + K'[i]) + E' 
             let f = apply_round_function(
                 cs.ns(|| format!("second round function {}", i)),
                 &b_prime,
@@ -263,28 +270,33 @@ fn ripemd160_compression_function<ConstraintF, CS>(
         b_prime = t;
     }
 
-    // Final addition round
+    // Final addition round, mixing (A,B,C,D,E) and (A',B',C',D',E') of the two threads
 
+    // h0 = h[1] + C + D' 
     let h0 = UInt32::addmany(
         cs.ns(|| "compute final t"),
         &[current_hash_value[1].clone(), c, d_prime]
     )?;
 
+    // h1 = h[2] + D + E'
     let h1 = UInt32::addmany(
         cs.ns(|| "new h1"),
         &[current_hash_value[2].clone(), d, e_prime],
     )?;
 
+    // h2 = h[3] + E + A'
     let h2 = UInt32::addmany(
         cs.ns(|| "new h2"),
         &[current_hash_value[3].clone(), e, a_prime],
     )?;
 
+    // h3  = h[4] + A + B'
     let h3 = UInt32::addmany(
         cs.ns(|| "new h3"),
         &[current_hash_value[4].clone(), a, b_prime],
     )?;
 
+    // h4 = h[0] + B + C'
     let h4 = UInt32::addmany(
         cs.ns(|| "new h4"),
         &[current_hash_value[0].clone(), b, c_prime],
@@ -304,6 +316,8 @@ mod test {
     use rand_xorshift::XorShiftRng;
 
     #[test]
+    /// Tests satisfiability of the circuit for the compression function, choosing a random
+    /// input block.
     fn test_full_block() {
         let mut rng = XorShiftRng::from_seed([
             0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
@@ -328,10 +342,13 @@ mod test {
         ripemd160_compression_function(cs.ns(|| "ripemd160"), &input_bits, &iv).unwrap();
 
         assert!(cs.is_satisfied());
+        // TODO: Maybe we can do slightly better
         assert_eq!(cs.num_constraints() - 512, 18797);
     }
 
      #[test]
+    /// Tests circuit satisfiability of the compression function on a single block 
+    /// including padding
      fn native_test() {
          use ripemd160::{Digest, Ripemd160};
 
@@ -388,6 +405,7 @@ mod test {
 
     #[test]
     fn compare_against_test_vectors() {
+        // the test vectors from [RIPEMD160](https://homes.esat.kuleuven.be/~bosselae/ripemd160/pdf/AB-9601/AB-9601.pdf)
         let test_inputs = [
             "",
             "a",

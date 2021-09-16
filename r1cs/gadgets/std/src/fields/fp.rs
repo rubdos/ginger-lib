@@ -484,8 +484,7 @@ impl<F: PrimeField> ToBitsGadget<F> for FpGadget<F> {
 impl<F: PrimeField> FromBitsGadget<F> for FpGadget<F> {
     fn from_bits<CS: ConstraintSystem<F>>(mut cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError> {
 
-        //A malicious prover may pass a bigger input so we enforce considering exactly
-        //CAPACITY bits in the linear combination calculation.
+        // We can safely pack up to CAPACITY bits
         let bits = bits.chunks(F::Params::CAPACITY as usize).next().unwrap();
 
         let mut num = Self::zero(cs.ns(|| "alloc_lc_{}"))?;

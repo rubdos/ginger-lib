@@ -1,3 +1,11 @@
+//! A module for representing 32 bit unsigned integers over a prime constraint field.
+//! Besides elementary gadgets (such as toBits, toBytes, etc.) implements the bitwise 
+//! operations
+//!     - rotl, rotr, shr, xor,
+//! as well as 
+//!     - add_many, which performs the addition modulo 2^32 of a slice of operands,
+//!     the result of which does exceed in length the capacity bound of the constraint 
+//!     field.
 use algebra::{Field, FpParameters, PrimeField};
 
 use r1cs_core::{ConstraintSystem, LinearCombination, SynthesisError};
@@ -227,7 +235,7 @@ impl UInt32 {
         })
     }
 
-    /// Perform modular addition of several `UInt32` objects.
+    /// Perform addition modulo 2^32 of several `UInt32` objects.
     pub fn addmany<ConstraintF, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
         where
             ConstraintF: PrimeField,
@@ -239,6 +247,7 @@ impl UInt32 {
 
         assert!(ConstraintF::Params::MODULUS_BITS >= 64);
         assert!(operands.len() >= 2); // Weird trivial cases that should never happen
+        // TODO: Check this bound. Is it really needed ?
         assert!(operands.len() <= 10);
 
         // Compute the maximum value of the sum so we allocate enough bits for
@@ -268,12 +277,14 @@ impl UInt32 {
                 }
             }
 
-            // Iterate over each bit of the operand and add the operand to
-            // the linear combination
+            // Cumulate the terms that correspond to the bits in op to the
+            // overall LC
             let mut coeff = ConstraintF::one();
             for bit in &op.bits {
+                // adds 2^i * bit[i] to the lc
                 lc = lc + &bit.lc(CS::one(), coeff);
 
+                // all_constants = all_constants & bit.is_constant()
                 all_constants &= bit.is_constant();
 
                 coeff = coeff.double();
@@ -283,6 +294,7 @@ impl UInt32 {
         // The value of the actual result is modulo 2^32
         let modular_value = result_value.map(|v| v as u32);
 
+        // In case that all operants are constant UInt32 it is enough to return a constant.
         if all_constants && modular_value.is_some() {
             // We can just return a constant, rather than
             // unpacking the result into allocated bits.
@@ -297,11 +309,11 @@ impl UInt32 {
         // for comparison with the sum of the operands
         let mut result_lc = LinearCombination::zero();
 
-        // Allocate each bit of the result
+        // Allocate each bit of the result from result_val
         let mut coeff = ConstraintF::one();
         let mut i = 0;
         while max_value != 0 {
-            // Allocate the bit
+            // Allocate the bit using result_value
             let b = AllocatedBit::alloc(
                 cs.ns(|| format!("result bit {}", i)),
                 || result_value.map(|v| (v >> i) & 1 == 1).get()
@@ -317,7 +329,8 @@ impl UInt32 {
             coeff = coeff.double();
         }
 
-        // Enforce equality between the sum and result
+        // Enforce equality between the sum and result by aggregating it
+        // in the MultiEq
         cs.get_root().enforce_equal(i, &lc, &result_lc);
 
         // Discard carry bits that we don't care about
@@ -496,20 +509,17 @@ mod test {
         for _ in 0..1000 {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
-            let a: u32 = rng.gen();
-            let b: u32 = rng.gen();
-            let c: u32 = rng.gen();
+            let num_operands = 10;
 
-            let a_bit = UInt32::constant(a);
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::constant(c);
+            let operands_val = (0..num_operands).map(|_| rng.gen()).collect::<Vec<u32>>();
+            let mut expected = operands_val.iter().fold(0u32, |acc, x| x.wrapping_add(acc));
 
-            let mut expected = a.wrapping_add(b).wrapping_add(c);
+            let operands_gadget = operands_val.into_iter().map(|val| UInt32::constant(val)).collect::<Vec<UInt32>>();
 
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
                 let r =
-                    UInt32::addmany(cs.ns(|| "addition"), &[a_bit, b_bit, c_bit]).unwrap();
+                    UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
                 r
             };
             assert!(r.value == Some(expected));
@@ -537,22 +547,20 @@ mod test {
         for _ in 0..1000 {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
-            let a: u32 = rng.gen();
-            let b: u32 = rng.gen();
-            let c: u32 = rng.gen();
-            let d: u32 = rng.gen();
+            let num_operands = 10;
 
-            let mut expected = (a ^ b).wrapping_add(c).wrapping_add(d);
+            let operands_val = (0..num_operands).map(|_| rng.gen()).collect::<Vec<u32>>();
+            let mut expected = operands_val.iter().fold(0u32, |acc, x| x.wrapping_add(acc));
 
-            let a_bit = UInt32::alloc(cs.ns(|| "a_bit"), Some(a)).unwrap();
-            let b_bit = UInt32::constant(b);
-            let c_bit = UInt32::constant(c);
-            let d_bit = UInt32::alloc(cs.ns(|| "d_bit"), Some(d)).unwrap();
+            let operands_gadget = operands_val.into_iter().enumerate().map(
+                |(i, val)| UInt32::alloc(cs.ns(|| format!("alloc u32 {}", i)), Some(val)).unwrap()
+            ).collect::<Vec<UInt32>>();
 
-            let r = a_bit.xor(cs.ns(|| "xor"), &b_bit).unwrap();
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
-                UInt32::addmany(cs.ns(|| "addition"), &[r, c_bit, d_bit]).unwrap()
+                let r =
+                    UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
+                r
             };
 
             assert!(cs.is_satisfied());

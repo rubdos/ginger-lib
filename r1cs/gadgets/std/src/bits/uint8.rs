@@ -338,10 +338,44 @@ impl<ConstraintF: Field> AllocGadget<u8, ConstraintF> for UInt8 {
     }
 }
 
+impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for UInt8 {
+    fn conditionally_select<CS: ConstraintSystem<ConstraintF>>(
+        mut cs: CS,
+        cond: &Boolean,
+        true_value: &Self,
+        false_value: &Self,
+    ) -> Result<Self, SynthesisError> {
+        let selected_bits = true_value
+            .bits
+            .iter()
+            .zip(&false_value.bits)
+            .enumerate()
+            .map(|(i, (t, f)) | Boolean::conditionally_select(&mut cs.ns(|| format!("bit {}", i)), cond, t, f));
+        let mut bits = [Boolean::Constant(false); 8];
+        for (result, new) in bits.iter_mut().zip(selected_bits) {
+            *result = new?;
+        }
+
+        let value = cond.get_value().and_then(|cond| {
+            if cond {
+                true_value.get_value()
+            } else {
+                false_value.get_value()
+            }
+        });
+        Ok(Self { bits: bits.to_vec(), value })
+    }
+
+    fn cost() -> usize {
+        unimplemented!()
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use super::UInt8;
-    use crate::{prelude::*, test_constraint_system::TestConstraintSystem};
+    use crate::{boolean::AllocatedBit, prelude::*, test_constraint_system::TestConstraintSystem};
     use algebra::fields::bls12_381::Fr;
     use r1cs_core::ConstraintSystem;
     use rand::{Rng, SeedableRng, RngCore};
@@ -483,6 +517,80 @@ mod test {
                 }
 
                 expected >>= 1;
+            }
+        }
+    }
+
+    #[derive(Copy, Clone, Debug)]
+    enum OperandType {
+        True,
+        False,
+        AllocatedTrue,
+        AllocatedFalse,
+        NegatedAllocatedTrue,
+        NegatedAllocatedFalse,
+    }
+
+
+    #[test]
+    fn test_uint8_cond_select() {
+        let variants = [
+            OperandType::True,
+            OperandType::False,
+            OperandType::AllocatedTrue,
+            OperandType::AllocatedFalse,
+            OperandType::NegatedAllocatedTrue,
+            OperandType::NegatedAllocatedFalse,
+        ];
+
+        use rand::thread_rng;
+        let rng = &mut thread_rng();
+        
+        //random generates a and b numbers and check all the conditions for each couple
+        for _ in 0..1000 {
+            for condition in variants.iter().cloned() {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let cond;
+                let a;
+                let b;
+
+                {
+                    let mut dyn_construct = |operand, name| {
+                        let cs = cs.ns(|| name);
+
+                        match operand {
+                            OperandType::True => Boolean::constant(true),
+                            OperandType::False => Boolean::constant(false),
+                            OperandType::AllocatedTrue => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap())
+                            },
+                            OperandType::AllocatedFalse => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap())
+                            },
+                            OperandType::NegatedAllocatedTrue => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap()).not()
+                            },
+                            OperandType::NegatedAllocatedFalse => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap()).not()
+                            },
+                        }
+                    };
+
+                    cond = dyn_construct(condition, "cond");
+                    a = UInt8::constant(rng.gen());
+                    b = UInt8::constant(rng.gen());
+                }
+
+                let c = UInt8::conditionally_select(&mut cs, &cond, &a, &b).unwrap();
+                
+                assert!(
+                    cs.is_satisfied(),
+                    "failed with operands: cond: {:?}, a: {:?}, b: {:?}",
+                    condition,
+                    a,
+                    b,
+                );
+                assert_eq!(c.get_value(), if cond.get_value().unwrap() { a.get_value() } else { b.get_value() });
             }
         }
     }

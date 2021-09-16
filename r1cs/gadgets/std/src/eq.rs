@@ -123,11 +123,21 @@ impl<T: EqGadget<ConstraintF>, ConstraintF: Field> EqGadget<ConstraintF> for [T]
     }
 }
 
+
+/// A struct for collecting identities of linear combinations of Booleans to serve 
+/// a more efficient equality enforcement (by packing them in parallel into constraint
+/// field elements).
+/// Used for simulating arithmetic operations modulo a power of 2.
 pub struct MultiEq<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>> {
     cs: CS,
+    // a counter for the number of used equality constraints
     ops: usize,
+    // the "size" of the identity, i.e. the bit length of the maximum value 
+    // that can be obtained by the linear combination.
     bits_used: usize,
+    // the left hand side of the identity
     lhs: LinearCombination<ConstraintF>,
+    // the right hand side of the identity
     rhs: LinearCombination<ConstraintF>,
 }
 
@@ -158,19 +168,24 @@ impl<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>> MultiEq<Constra
         self.ops += 1;
     }
 
+    /// Enforces simulatenously the MultiEq `self` and `lhs == rhs` of the at most `num_bits` large 
+    /// linear combinations `lhs` and `rhs`.
     pub fn enforce_equal(
+        // the MultiEq
         &mut self,
+        // the number of bits used for lhs and rhs, must be < capacity of `ConstraintF`
         num_bits: usize,
+        // the linear combinations to be aggregated in `self`
         lhs: &LinearCombination<ConstraintF>,
         rhs: &LinearCombination<ConstraintF>,
     ) {
-        // Check if we will exceed the capacity
+        // Check if we will exceed the capacity. If yes, then use accumulate on `self` first.
         if (ConstraintF::Params::CAPACITY as usize) <= (self.bits_used + num_bits) {
             self.accumulate();
         }
 
         assert!((ConstraintF::Params::CAPACITY as usize) > (self.bits_used + num_bits));
-
+        // Since we do not exceed the capacity, cumulate (lhs,rhs) in `self` by appending
         let frmstr = ConstraintF::from_str("2").unwrap_or_default();
 
         let coeff = frmstr.pow(&[self.bits_used as u64]);
