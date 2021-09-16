@@ -22,7 +22,7 @@ use crate::{
     overhead,
     Assignment,
 };
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystem, LinearCombination, SynthesisError};
 use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::{borrow::Borrow, vec, vec::Vec};
@@ -523,6 +523,84 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
         )?;
 
         Ok(bits)
+    }
+}
+
+impl<SimulationF: PrimeField, ConstraintF: PrimeField> FromBitsGadget<ConstraintF>
+for NonNativeFieldGadget<SimulationF, ConstraintF>
+{
+    //N.B: from bits converts only if SimulationF::size_in_bits() < ConstraintF::size_in_bits()
+    fn from_bits<CS: ConstraintSystem<ConstraintF>>(mut cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError> 
+    {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        assert!(SimulationF::size_in_bits() < ConstraintF::size_in_bits());
+
+        let num_bits_per_nonnative = SimulationF::size_in_bits() - 1; // also omit the highest bit
+
+        let mut lookup_table = Vec::<Vec<ConstraintF>>::new();
+        let mut cur = SimulationF::one();
+        for _ in 0..num_bits_per_nonnative {
+            let repr = NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations(&cur)?;
+            lookup_table.push(repr);
+            cur.double_in_place();
+        }        
+
+        let mut dest_gadgets = Vec::<NonNativeFieldGadget<SimulationF, ConstraintF>>::new();
+        let mut dest_bits = Vec::<Vec<Boolean>>::new();
+    
+        // Pack the Booleans into FpGadget limbs and the limbs into NonNativeFieldGadgets
+        bits.chunks_exact(num_bits_per_nonnative).enumerate()
+            .for_each(|(i, per_nonnative_bits)| {
+                let mut val = vec![ConstraintF::zero(); params.num_limbs];
+                let mut lc = vec![LinearCombination::<ConstraintF>::zero(); params.num_limbs];
+
+                let mut per_nonnative_bits_le = per_nonnative_bits.to_vec();
+                per_nonnative_bits_le.reverse();
+
+
+                dest_bits.push(per_nonnative_bits_le.clone());
+
+                for (j, bit) in per_nonnative_bits_le.iter().enumerate() {
+                    if bit.get_value().unwrap_or_default() {
+                        for (k, val) in val.iter_mut().enumerate().take(params.num_limbs) {
+                            *val += &lookup_table[j][k];
+                        }
+                    }
+
+                    for k in 0..params.num_limbs {
+                        lc[k] = &lc[k] + bit.lc(CS::one(), lookup_table[j][k]);
+                    }
+                }
+
+                let mut limbs = Vec::new();
+                for k in 0..params.num_limbs {
+                    let gadget =
+                        FpGadget::alloc(
+                            cs.ns(|| format!("alloc {} limb {}", i, k)),
+                            || Ok(val[k])
+                        ).unwrap();
+                    lc[k] = gadget.get_variable() - lc[k].clone();
+                    cs.enforce(
+                        || format!("unpacking constraint {} for limb {}", i, k),
+                        |lc| lc,
+                        |lc| lc,
+                        |_| lc[k].clone()
+                    );
+                    limbs.push(gadget);
+                }
+                dest_gadgets.push(
+                    NonNativeFieldGadget::<SimulationF, ConstraintF> {
+                        limbs,
+                        num_of_additions_over_normal_form: ConstraintF::zero(),
+                        is_in_the_normal_form: true,
+                        simulation_phantom: PhantomData,
+                    }
+                );
+            });
+
+        assert!(dest_gadgets.len()==1);
+        //returing only the first FieldElement
+        Ok(dest_gadgets[0].clone())
     }
 }
 
