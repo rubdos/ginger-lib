@@ -242,8 +242,7 @@ pub(crate) mod test {
         let _ = b
             .to_bytes_strict(&mut cs.ns(|| "b ToBytes Strict"))
             .unwrap();
-
-        mul_bits_test(GG::zero(cs.ns(|| "alloc_zero")).unwrap())
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]
@@ -302,9 +301,7 @@ pub(crate) mod test {
         let _ = b
             .to_bytes_strict(&mut cs.ns(|| "b ToBytes Strict"))
             .unwrap();
-
-        let shift: G = UniformRand::rand(&mut thread_rng());
-        mul_bits_test(GG::alloc(cs.ns(|| "alloc random shift"), || Ok(shift)).unwrap());
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]
@@ -312,13 +309,15 @@ pub(crate) mod test {
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
-    >(result: GG)
+    >()
     {
         use crate::algebra::ToBits;
 
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<ConstraintF>::new();
             let rng = &mut thread_rng();
+            let shift: G = UniformRand::rand(rng);
+            let result = GG::alloc(cs.ns(|| "alloc random shift"), || Ok(shift)).unwrap();
 
             let g: G = UniformRand::rand(rng);
             let gg = GG::alloc(cs.ns(|| "generate_g"), || Ok(g)).unwrap();
@@ -339,15 +338,20 @@ pub(crate) mod test {
             a_plus_b_bits.reverse();
 
             // Additivity test: a * G + b * G = (a + b) * G
+            let x = cs.num_constraints();
             let a_times_gg_vb = {
                 gg
                     .mul_bits(cs.ns(|| "a * G"), &result, a_bits.iter()).unwrap()
                     .sub(cs.ns(|| "a * G - result"), &result).unwrap()
             };
+            println!("Variable base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
+
+            let x = cs.num_constraints();
             let a_times_gg_fb = {
                 GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), &result, a_bits.as_slice()).unwrap()
                     .sub(cs.ns(|| "fb a * G - result"), &result).unwrap()
             };
+            println!("Fixed base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
             assert_eq!(a_times_gg_vb.get_value().unwrap(), g.mul(&a)); // Check native result
             assert_eq!(a_times_gg_fb.get_value().unwrap(), g.mul(&a)); // Check native result
 
@@ -382,6 +386,8 @@ pub(crate) mod test {
             a_times_gg_fb
                 .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb).unwrap()
                 .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
+
+            assert!(cs.is_satisfied());
         }
     }
 }

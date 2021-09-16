@@ -15,4 +15,7 @@ fn test() {
     crate::groups::test::group_test_with_unsafe_add::<
         _, _, Bn382GGadget
     >();
+    crate::groups::test::mul_bits_test::<
+        _, _, Bn382GGadget
+    >();
 }

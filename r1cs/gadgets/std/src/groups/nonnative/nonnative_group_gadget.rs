@@ -238,8 +238,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(result)
     }
 
-    // TODO: We can optimize performance (at the cost of extra memory) when doing
-    //       the batch_inversion on the entire look-up table.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
@@ -293,7 +291,11 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     }
 
     fn get_value(&self) -> Option<<Self as GroupGadget<SWProjective<P>, ConstraintF>>::Value> {
-        unimplemented!()
+        match (self.x.get_value(), self.y.get_value(), self.infinity.get_value()) {
+            (Some(x), Some(y), Some(infinity)) => Some(SWAffine::<P>::new(x, y, infinity).into_projective()),
+            (None, None, None) => None,
+            _ => unreachable!(),
+        }
     }
 
     fn get_variable(&self) -> Self::Variable {
@@ -457,9 +459,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             .enforce_equal(cs.ns(|| "is_equal AND should_enforce == false"), &Boolean::Constant(false))
     }
 }
-
-
-
 
 impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     where
@@ -662,15 +661,15 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
         // Check that y^2 = x^3 + ax +b
         // We do this by checking that y^2 - b = x * (x^2 +a)
-        let x2 = x.mul(cs.ns(|| "x^2"), &x)?;
-        // TODO: There might be some room for optimization:
-        //       Let us check the number of constraints when not reducing y2
-        //       right after the product. We only do an addition by -b afterwards,
-        //       before doing the conditional_enforce_equal.
-        let y2 = y.mul(cs.ns(|| "y^2"), &y)?;
+        let x2 = x.mul_without_reduce(cs.ns(|| "x^2"), &x)?;
+        let y2 = y.mul_without_reduce(cs.ns(|| "y^2"), &y)?;
 
-        let x2_plus_a = x2.add_constant(cs.ns(|| "x^2 + a"), &a)?;
-        let y2_minus_b = y2.add_constant(cs.ns(|| "y^2 - b"), &b.neg())?;
+        let x2_plus_a = x2
+            .add_constant(cs.ns(|| "x^2 + a"), &a)?
+            .reduce(cs.ns(|| "reduce(x^2 + a)"))?;
+        let y2_minus_b = y2
+            .add_constant(cs.ns(|| "y^2 - b"), &b.neg())?
+            .reduce(cs.ns(|| "reduce(y^2 - b)"))?;
 
         let x2_plus_a_times_x = x2_plus_a.mul(cs.ns(|| "(x^2 + a)*x"), &x)?;
 
@@ -814,27 +813,9 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             ),
         };
 
-        let b = P::COEFF_B;
-        let a = P::COEFF_A;
-
         let x = NonNativeFieldGadget::alloc_input(&mut cs.ns(|| "x"), || x)?;
         let y = NonNativeFieldGadget::alloc_input(&mut cs.ns(|| "y"), || y)?;
         let infinity = Boolean::alloc_input(&mut cs.ns(|| "infinity"), || infinity)?;
-
-        let x2 = x.mul(cs.ns(|| "x^2"), &x)?;
-        let y2 = y.mul(cs.ns(|| "y^2"), &y)?;
-
-
-        let x2_plus_a = x2.add_constant(cs.ns(|| "x^2 + a"), &a)?;
-        let y2_minus_b = y2.add_constant(cs.ns(|| "y^2 - b"), &b.neg())?;
-
-        let x2_plus_a_times_x = x2_plus_a.mul(cs.ns(|| "(x^2 + a)*x"), &x)?;
-
-        x2_plus_a_times_x.conditional_enforce_equal(
-            cs.ns(|| "on curve check"),
-            &y2_minus_b,
-            &infinity.not()
-        )?;
 
         Ok(Self::new(x, y, infinity))
     }
