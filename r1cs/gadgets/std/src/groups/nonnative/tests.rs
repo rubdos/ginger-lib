@@ -1,13 +1,9 @@
 use algebra::{
     fields::{
-        tweedle::{Fq as TweedleFq, Fr as TweedleFr},
+        secp256k1::Fq as secp256k1Fq,
         bn_382::{Fq as BN382Fq, Fr as BN382Fr},
     },
-    curves::{
-        tweedle::{
-            dee::TweedledeeParameters, dum::TweedledumParameters
-        },
-    }
+    curves::secp256k1::Secp256k1Parameters,
 };
 
 use crate::groups::test::*;
@@ -70,17 +66,17 @@ macro_rules! nonnative_group_test_unsafe_add {
 }
 
 nonnative_group_test_unsafe_add!(
-    Bn382FrTweedleFq,
+    Bn382Frsecp256k1Fq,
     1,
-    TweedledeeParameters,
+    Secp256k1Parameters,
     BN382Fr,
-    TweedleFq
+    secp256k1Fq
 );
 
 nonnative_group_test_unsafe_add!(
-    Bn382FqTweedleFr,
+    Bn382Fqsecp256k1Fq,
     1,
-    TweedledumParameters,
+    Secp256k1Parameters,
     BN382Fq,
-    TweedleFr
+    secp256k1Fq
 );

@@ -1,6 +1,7 @@
 use algebra::fields::{
     tweedle::{Fq as TweedleFq, Fr as TweedleFr},
     bn_382::{Fq as Bn382Fq, Fr as Bn382Fr},
+    secp256k1::Fq as secp256k1Fq,
     Field, PrimeField
 };
 use crate::{
@@ -731,6 +732,16 @@ nonnative_test!(
     Bn382FrFq,
     Bn382Fr,
     Bn382Fq
+);
+nonnative_test!(
+    Bn382Frsecp256k1Fq,
+    Bn382Fr,
+    secp256k1Fq
+);
+nonnative_test!(
+    Bn382Fqsecp256k1Fq,
+    Bn382Fq,
+    secp256k1Fq
 );
 
 #[test]
