@@ -367,7 +367,7 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for UInt8 {
     }
 
     fn cost() -> usize {
-        unimplemented!()
+       8 * <Boolean as CondSelectGadget<ConstraintF>>::cost()
     }
 }
 
@@ -581,7 +581,9 @@ mod test {
                     b = UInt8::constant(rng.gen());
                 }
 
+                let before = cs.num_constraints();
                 let c = UInt8::conditionally_select(&mut cs, &cond, &a, &b).unwrap();
+                let after = cs.num_constraints();
                 
                 assert!(
                     cs.is_satisfied(),
@@ -591,6 +593,7 @@ mod test {
                     b,
                 );
                 assert_eq!(c.get_value(), if cond.get_value().unwrap() { a.get_value() } else { b.get_value() });
+                assert!(<UInt8 as CondSelectGadget<Fr>>::cost() >= after - before);
             }
         }
     }
