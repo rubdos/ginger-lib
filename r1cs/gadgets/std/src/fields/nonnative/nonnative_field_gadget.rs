@@ -534,73 +534,59 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> FromBitsGadget<ConstraintF>
 for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    // converts a bit sequence (which does not exceed the length of a normal form) to a NonNativeFieldGadget 
+    // Packs a bit sequence (which does not exceed the length of a normal form) into a NonNativeFieldGadget 
     fn from_bits<CS: ConstraintSystem<ConstraintF>>(mut cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError> 
     {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         let len_normal_form = params.num_limbs * params.bits_per_limb;
         assert!(bits.len() <= len_normal_form);
 
-        let num_bits_per_nonnative = min(bits.len(), len_normal_form);
+        // Create a look up table for the `num_limbs` many powers 
+        // of two as ConstraintF elements (in reverse order).
+        // Used as coefficients for the packing constraints.
+        let mut powers_of_two = Vec::<ConstraintF>::new();
+        for i in (0..params.bits_per_limb).rev() {
+            let repr = ConstraintF::read_bits({
+                // 2^i as limb, big endian
+                let mut bits = vec![false; ConstraintF::size_in_bits()];
+                bits[ConstraintF::size_in_bits() - 1 - i] = true;
+                bits
+            })?;
+            powers_of_two.push(repr);
+        }
 
-        // create a look up table for the powers 
-        // 1, 2, 2^2, ..., 2^(num_bits_nonnative-1)
-        // as a list of `num_bits_per_nonnative` many NonNativeFieldGadgets.
-        // TODO: we only need `num_bits_per_limb` many powers of 2 in order
-        // to build the "packing" linear combinations
-        let mut lookup_table = Vec::<Vec<ConstraintF>>::new();
-        let mut cur = SimulationF::one();
-        for _ in 0..num_bits_per_nonnative {
-            let repr = NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations(&cur)?;
-            lookup_table.push(repr);
-            cur.double_in_place();
-        }        
-    
-        // the limbs of the non-native field gadget
-        let mut val = vec![ConstraintF::zero(); params.num_limbs];
-        // the linear combinations, one for each limb
-        let mut lc = vec![LinearCombination::<ConstraintF>::zero(); params.num_limbs];
+        // Pad big endian representation to length of normal form
+        let mut per_nonnative_bits = vec![Boolean::Constant(false); len_normal_form - bits.len()];
+        per_nonnative_bits.extend_from_slice(bits);
 
-        // conversion from little endian to big endian?
-        let mut per_nonnative_bits_le = bits.to_vec();
-        per_nonnative_bits_le.reverse();
+        // Pack each chunk of `num_bits` into a separate limb
+        let limbs = per_nonnative_bits.chunks_exact(params.bits_per_limb).enumerate().map(|(chunk_i, bits)| {
+            let mut lc = LinearCombination::<ConstraintF>::zero();
 
-        for (j, bit) in per_nonnative_bits_le.iter().enumerate() {
-            // if the j-th bit is 1, we add to val the power 2^j represented by a 
-            // vector of limbs
-            if bit.get_value().unwrap_or_default() {
-                // we set the corresponding bit in the limb
-                for (k, val) in val.iter_mut().enumerate().take(params.num_limbs) {
-                    *val += &lookup_table[j][k];
+            for k in 0..params.bits_per_limb {
+                lc = &lc + bits[k].lc(CS::one(), powers_of_two[k]);
+            }
+
+            let limb = FpGadget::<ConstraintF>::alloc(
+                cs.ns(|| format!("alloc limb {}", chunk_i)),
+                || {
+                    let bits_val = bits.iter().map(|b| b.get_value().unwrap()).collect::<Vec<bool>>();
+                    Ok(ConstraintF::read_bits(bits_val).unwrap())
                 }
-            }
-            // and we add 2^j * bit to the linear combinations for val 
-            // (note that only a single limb in the representation of
-            // 2^j is non-zero.)
-            for k in 0..params.num_limbs {
-                lc[k] = &lc[k] + bit.lc(CS::one(), lookup_table[j][k]);
-            }
-        }
+            )?;
 
-        let mut limbs = Vec::new();
-        for k in 0..params.num_limbs {
-            // we alloc the limb
-            let gadget =
-                FpGadget::alloc(
-                    cs.ns(|| format!("alloc limb {}", k)),
-                    || Ok(val[k])
-                ).unwrap();
-            //  we enforce that 
-            //      limb lc - gadget == 0
-            lc[k] = gadget.get_variable() - lc[k].clone();
+            // Packing constraint: we enforce that 
+            // limb lc - limb gadget == 0
+            lc = limb.get_variable() - lc.clone();
             cs.enforce(
-                || format!("unpacking constraint for limb {}", k),
+                || format!("unpacking constraint for limb {}", chunk_i),
                 |lc| lc,
                 |lc| lc,
-                |_| lc[k].clone()
+                |_| lc.clone()
             );
-            limbs.push(gadget);
-        }
+
+            Ok(limb)
+        }).collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
 
         Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
