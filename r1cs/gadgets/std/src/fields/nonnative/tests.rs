@@ -682,14 +682,12 @@ fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng:
 
         // Case 1: bits.len() == SimulationF::MODULUS_BITS
         {
-            println!("Test case 1");
             let val = SimulationF::rand(rng);
             test_case(val, val.write_bits(), rng);
         }
 
         // Case 2: bits.len() < SimulationF::MODULUS_BITS
         {
-            println!("Test case 2");
             let truncate_at = rng.gen_range(1..num_bits_modulus);
             let val_temp = SimulationF::rand(rng);
             let val_bits = (&val_temp.write_bits()[truncate_at..]).to_vec();
@@ -697,24 +695,8 @@ fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng:
             test_case(val, val_bits, rng);
         }
 
-        /*// Case 3: bits.len() > SimulationF::MODULUS_BITS
-        // only executed when modulus bit length < normal form bit length
-        if num_bits_modulus < len_normal_form {
-            println!("Test case 3");
-            let bits_len = rng.gen_range((num_bits_modulus + 1)..=len_normal_form);
-            let val_bits = (0..bits_len).map(|_| rng.gen()).collect::<Vec<bool>>();
-            let val = {
-                let mut bi = <SimulationF::BigInt as BigInteger>::from_bits(val_bits.as_slice());
-                bi.sub_noborrow(&SimulationF::Params::MODULUS);
-                SimulationF::from_repr(bi)
-            };
-            test_case(val, val_bits, rng);
-        }*/
-
-
-        // Case 4: bits_val >= SimulationF::MODULUS
+        // Case 3: bits_val >= SimulationF::MODULUS
         {
-            println!("Test case 4");
             // for simplicity, we take the maximum possible value
             let val_bits = vec![true; num_bits_modulus];
             let val = {
