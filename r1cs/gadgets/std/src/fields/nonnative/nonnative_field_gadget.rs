@@ -33,12 +33,14 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
     /// The limbs as elements of ConstraintF. 
     /// Recall that in the course of arithmetic operations bits the bit length of 
     /// a limb exceeds `NonNativeFieldParams::bits_per_limb`. Reduction transforms 
-    /// back to normal form, which again has at most `bits_per_limb` many bits.
+    /// back to normal form, which again has at most `bits_per_limb` many bits (but
+    /// is not necessarily below the non-native modulus).
     pub limbs: Vec<FpGadget<ConstraintF>>,
     /// Number of additions done over this gadget without transforming back to 
     /// normal form. Used by gadgets to decide when to reduce.
     pub num_of_additions_over_normal_form: ConstraintF,
-    /// Whether the limb representation is the normal form
+    /// Whether the limb representation is the normal form, i.e. has the same 
+    /// number of bits as the non-native modulus (?)
     pub is_in_the_normal_form: bool,
     #[doc(hidden)]
     pub simulation_phantom: PhantomData<SimulationF>,
@@ -354,6 +356,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF> {
         unimplemented!();
     }
 
+    /// Addition of non-natives without reduction
     fn add<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
     {
         let mut limbs = Vec::new();
@@ -364,6 +367,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF> {
 
         let mut res = Self {
             limbs,
+            // the excess of the sum of two non-natives is the sum of their excesses, plus one.
             num_of_additions_over_normal_form: self
                 .num_of_additions_over_normal_form
                 .add(&other.num_of_additions_over_normal_form)
@@ -380,6 +384,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF> {
         Ok(res)
     }
 
+    /// Substraction of non-natives without reduction
     fn sub<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError> {
         let mut result = self.sub_without_reduce(cs.ns(|| "sub without reduce"), other)?;
         Reducer::<SimulationF, ConstraintF>::post_add_reduce(
@@ -529,14 +534,20 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> FromBitsGadget<ConstraintF>
 for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    //N.B: from bits converts only if SimulationF::size_in_bits() < ConstraintF::size_in_bits()
+    // converts a bit sequence (which does not exceed the length of a normal form) to a NonNativeFieldGadget 
     fn from_bits<CS: ConstraintSystem<ConstraintF>>(mut cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError> 
     {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        assert!(SimulationF::size_in_bits() < ConstraintF::size_in_bits());
+        let len_normal_form = params.num_limbs * params.bits_per_limb;
+        assert!(bits.len() <= len_normal_form);
 
-        let num_bits_per_nonnative = SimulationF::size_in_bits() - 1; // also omit the highest bit
+        let num_bits_per_nonnative = min(bits.len(), len_normal_form);
 
+        // create a look up table for the powers 
+        // 1, 2, 2^2, ..., 2^(num_bits_nonnative-1)
+        // as a list of `num_bits_per_nonnative` many NonNativeFieldGadgets.
+        // TODO: we only need `num_bits_per_limb` many powers of 2 in order
+        // to build the "packing" linear combinations
         let mut lookup_table = Vec::<Vec<ConstraintF>>::new();
         let mut cur = SimulationF::one();
         for _ in 0..num_bits_per_nonnative {
@@ -544,63 +555,59 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
             lookup_table.push(repr);
             cur.double_in_place();
         }        
-
-        let mut dest_gadgets = Vec::<NonNativeFieldGadget<SimulationF, ConstraintF>>::new();
-        let mut dest_bits = Vec::<Vec<Boolean>>::new();
     
-        // Pack the Booleans into FpGadget limbs and the limbs into NonNativeFieldGadgets
-        bits.chunks_exact(num_bits_per_nonnative).enumerate()
-            .for_each(|(i, per_nonnative_bits)| {
-                let mut val = vec![ConstraintF::zero(); params.num_limbs];
-                let mut lc = vec![LinearCombination::<ConstraintF>::zero(); params.num_limbs];
+        // the limbs of the non-native field gadget
+        let mut val = vec![ConstraintF::zero(); params.num_limbs];
+        // the linear combinations, one for each limb
+        let mut lc = vec![LinearCombination::<ConstraintF>::zero(); params.num_limbs];
 
-                let mut per_nonnative_bits_le = per_nonnative_bits.to_vec();
-                per_nonnative_bits_le.reverse();
+        // conversion from little endian to big endian?
+        let mut per_nonnative_bits_le = bits.to_vec();
+        per_nonnative_bits_le.reverse();
 
-
-                dest_bits.push(per_nonnative_bits_le.clone());
-
-                for (j, bit) in per_nonnative_bits_le.iter().enumerate() {
-                    if bit.get_value().unwrap_or_default() {
-                        for (k, val) in val.iter_mut().enumerate().take(params.num_limbs) {
-                            *val += &lookup_table[j][k];
-                        }
-                    }
-
-                    for k in 0..params.num_limbs {
-                        lc[k] = &lc[k] + bit.lc(CS::one(), lookup_table[j][k]);
-                    }
+        for (j, bit) in per_nonnative_bits_le.iter().enumerate() {
+            // if the j-th bit is 1, we add to val the power 2^j represented by a 
+            // vector of limbs
+            if bit.get_value().unwrap_or_default() {
+                // we set the corresponding bit in the limb
+                for (k, val) in val.iter_mut().enumerate().take(params.num_limbs) {
+                    *val += &lookup_table[j][k];
                 }
+            }
+            // and we add 2^j * bit to the linear combinations for val 
+            // (note that only a single limb in the representation of
+            // 2^j is non-zero.)
+            for k in 0..params.num_limbs {
+                lc[k] = &lc[k] + bit.lc(CS::one(), lookup_table[j][k]);
+            }
+        }
 
-                let mut limbs = Vec::new();
-                for k in 0..params.num_limbs {
-                    let gadget =
-                        FpGadget::alloc(
-                            cs.ns(|| format!("alloc {} limb {}", i, k)),
-                            || Ok(val[k])
-                        ).unwrap();
-                    lc[k] = gadget.get_variable() - lc[k].clone();
-                    cs.enforce(
-                        || format!("unpacking constraint {} for limb {}", i, k),
-                        |lc| lc,
-                        |lc| lc,
-                        |_| lc[k].clone()
-                    );
-                    limbs.push(gadget);
-                }
-                dest_gadgets.push(
-                    NonNativeFieldGadget::<SimulationF, ConstraintF> {
-                        limbs,
-                        num_of_additions_over_normal_form: ConstraintF::zero(),
-                        is_in_the_normal_form: true,
-                        simulation_phantom: PhantomData,
-                    }
-                );
-            });
+        let mut limbs = Vec::new();
+        for k in 0..params.num_limbs {
+            // we alloc the limb
+            let gadget =
+                FpGadget::alloc(
+                    cs.ns(|| format!("alloc limb {}", k)),
+                    || Ok(val[k])
+                ).unwrap();
+            //  we enforce that 
+            //      limb lc - gadget == 0
+            lc[k] = gadget.get_variable() - lc[k].clone();
+            cs.enforce(
+                || format!("unpacking constraint for limb {}", k),
+                |lc| lc,
+                |lc| lc,
+                |_| lc[k].clone()
+            );
+            limbs.push(gadget);
+        }
 
-        assert!(dest_gadgets.len()==1);
-        //returing only the first FieldElement
-        Ok(dest_gadgets[0].clone())
+        Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
+            limbs,
+            num_of_additions_over_normal_form: ConstraintF::zero(),
+            is_in_the_normal_form: true,
+            simulation_phantom: PhantomData,
+        })
     }
 }
 

@@ -1,27 +1,32 @@
-use algebra::fields::{
-    tweedle::{Fq as TweedleFq, Fr as TweedleFr},
-    bn_382::{Fq as Bn382Fq, Fr as Bn382Fr},
-    secp256k1::Fq as secp256k1Fq,
-    Field, PrimeField
+use algebra::{
+        fields::{
+            tweedle::{Fq as TweedleFq, Fr as TweedleFr},
+            bn_382::{Fq as Bn382Fq, Fr as Bn382Fr},
+            secp256k1::Fq as secp256k1Fq,
+            Field, PrimeField, FpParameters
+        },
+        BigInteger
 };
 use crate::{
     fields::{
         nonnative::{
             nonnative_field_gadget::NonNativeFieldGadget,
-            nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget
+            nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget,
+            params::get_params,
         },
         FieldGadget,
     },
+    bits::boolean::Boolean,
     alloc::AllocGadget,
     eq::EqGadget,
     test_constraint_system::TestConstraintSystem,
-    FromGadget,
+    FromGadget, FromBitsGadget,
     ToBitsGadget, ToBytesGadget
 };
 
 use r1cs_core::ConstraintSystem;
 use rand::{
-    RngCore, thread_rng,
+    Rng, RngCore, thread_rng,
 };
 
 const NUM_REPETITIONS: usize = 10;
@@ -113,6 +118,8 @@ fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
     assert!(cs.is_satisfied());
 }
 
+/// Checks the `mul` of two randomly sampled non-natives against the expected 
+/// value as NonNativeFieldGadget in reduced form.
 fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -147,6 +154,8 @@ fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     assert!(cs.is_satisfied());
 }
 
+/// Tests all combinations of `add` and `mul` of a randomly sampled non-native 
+/// with the neutral elements of non-native field arithmetics.
 fn edge_cases_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -237,6 +246,8 @@ fn edge_cases_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>
     assert!(cs.is_satisfied());
 }
 
+/// Checks the validity of the distributive law `(a+b)*c= a*c + b*c` on randomly
+/// sampled `a`, `b`, and `c`.
 fn distribution_law_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -312,12 +323,16 @@ fn distribution_law_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rn
 	    if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
 }
 
+/// Tests correctness of `add_in_place`, `sub_in_place` and `mul_in_place` on randomly sampled
+/// non-natives.
 fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
     let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
     let mut operations: Vec<u32> = Vec::new();
+    // TODO: a random choice of the operation is not appriate for small numbers
+    // of `TEST_COUNT`. Lets do a deterministic selection instead.
     for _ in 0..TEST_COUNT {
         operations.push(rng.next_u32() % 3);
     }
@@ -361,6 +376,7 @@ fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of `TEST_COUNT` many `add_in_place` on a random instance.
 fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -387,6 +403,7 @@ fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of `TEST_COUNT` many `mul_in_place` on a random instance.
 fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -415,6 +432,8 @@ fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of `TEST_COUNT` many steps of the randomized recursion 
+/// `x <- b*x + a`, starting with a random non-native `x`. 
 fn mul_and_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -452,6 +471,8 @@ fn mul_and_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: 
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of `TEST_COUNT` many steps of the randomized recursion 
+/// `x <- x*x*b + a`, starting with a random non-native `x`. 
 fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -490,6 +511,8 @@ fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of `TEST_COUNT + ConstraintF::size_in_bits()` many steps of the recursion 
+/// `x <- (x+x)*(x+x)`, starting with a random non-native `x`. 
 fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -514,6 +537,8 @@ fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of `TEST_COUNT` many steps of the recursion 
+/// `x <- (x+x)*(x+x)`, starting with a random non-native `x`. 
 fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -542,6 +567,8 @@ fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of `TEST_COUNT` many steps of the recursion 
+/// `x <- (x+x)*(x+x)`, starting with a random non-native `x`.  
 fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -576,6 +603,7 @@ fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
+/// Tests correctness of inverse on `TEST_COUNT` many random instances. 
 fn inverse_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -603,6 +631,103 @@ fn inverse_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
     assert!(cs.is_satisfied());
 }
 
+/// Test basic correctness of from_bits for NonNativeFieldGadget over TEST_COUNT many random instances.
+fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R)
+{
+    let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+    let len_normal_form = params.num_limbs * params.bits_per_limb;
+    let num_bits_modulus = SimulationF::size_in_bits();
+
+    let test_case = |val: SimulationF, val_bits: Vec<bool>, rng: &mut R| {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+        let bits = Vec::<Boolean>::alloc(
+            cs.ns(|| "alloc val bits"),
+            || Ok(val_bits.as_slice())
+        ).unwrap();
+        let val_g = NonNativeFieldGadget::<SimulationF, ConstraintF>::from_bits(
+            cs.ns(|| "pack bits"),
+            bits.as_slice()
+        ).unwrap();
+        assert_eq!(val, val_g.get_value().unwrap());
+        assert!(cs.is_satisfied());
+
+        //Let's alter one random bit and check that the cs is not satisfied anymore
+        let random_bit: usize = rng.gen_range(0..bits.len());
+        let prev_value = bits[random_bit].get_value().unwrap();
+        let new_value = if prev_value {
+            ConstraintF::zero()
+        } else {
+            ConstraintF::one()
+        };
+        cs.set(format!("alloc val bits/value_{}/boolean", random_bit).as_ref(), new_value);
+        assert!(!cs.is_satisfied());
+        assert!(cs.which_is_unsatisfied().unwrap().to_owned().contains("pack bits/unpacking constraint for limb"));
+
+        //Let's change the value of the packed variable and check that the cs is not satisfied anymore
+
+        //Bringing back the modified bit's value to its original one
+        let prev_value = if prev_value {ConstraintF::one()} else {ConstraintF::zero()};
+        cs.set(format!("alloc val bits/value_{}/boolean", random_bit).as_ref(), prev_value);
+        assert!(cs.is_satisfied()); //Situation should be back to positive case
+
+        //Modify packed value
+        let random_limb = rng.gen_range(0..params.num_limbs);
+        cs.set(format!("pack bits/alloc limb {}/alloc", random_limb).as_ref(), ConstraintF::rand(rng));
+        assert!(!cs.is_satisfied());
+        assert_eq!(format!("pack bits/unpacking constraint for limb {}", random_limb).as_str(), cs.which_is_unsatisfied().unwrap());
+    };
+
+    for _ in 0..TEST_COUNT {
+
+        // Case 1: bits.len() == SimulationF::MODULUS_BITS
+        {
+            println!("Test case 1");
+            let val = SimulationF::rand(rng);
+            test_case(val, val.write_bits(), rng);
+        }
+
+        // Case 2: bits.len() < SimulationF::MODULUS_BITS
+        {
+            println!("Test case 2");
+            let truncate_at = rng.gen_range(1..num_bits_modulus);
+            let val_temp = SimulationF::rand(rng);
+            let val_bits = (&val_temp.write_bits()[truncate_at..]).to_vec();
+            let val = SimulationF::read_bits(val_bits.clone()).unwrap();
+            test_case(val, val_bits, rng);
+        }
+
+        /*// Case 3: bits.len() > SimulationF::MODULUS_BITS
+        // only executed when modulus bit length < normal form bit length
+        if num_bits_modulus < len_normal_form {
+            println!("Test case 3");
+            let bits_len = rng.gen_range((num_bits_modulus + 1)..=len_normal_form);
+            let val_bits = (0..bits_len).map(|_| rng.gen()).collect::<Vec<bool>>();
+            let val = {
+                let mut bi = <SimulationF::BigInt as BigInteger>::from_bits(val_bits.as_slice());
+                bi.sub_noborrow(&SimulationF::Params::MODULUS);
+                SimulationF::from_repr(bi)
+            };
+            test_case(val, val_bits, rng);
+        }*/
+
+
+        // Case 4: bits_val >= SimulationF::MODULUS
+        {
+            println!("Test case 4");
+            // for simplicity, we take the maximum possible value
+            let val_bits = vec![true; num_bits_modulus];
+            let val = {
+                let mut bi = <SimulationF::BigInt as BigInteger>::from_bits(val_bits.as_slice());
+                bi.sub_noborrow(&SimulationF::Params::MODULUS);
+                SimulationF::from_repr(bi)
+            };
+            test_case(val, val_bits, rng);
+        }
+    }
+}
+
+// Macros for implementing above tests on non-native arithmetics
 macro_rules! nonnative_test_individual {
     ($test_method:ident, $test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
         paste::item! {
@@ -710,9 +835,16 @@ macro_rules! nonnative_test {
             $test_simulation_field,
             $test_constraint_field
         );
+        nonnative_test_individual!(
+            from_bits_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
     };
 }
 
+// Implementation of the above non-native arithmetic tests for different curves
 nonnative_test!(
     TweedleFqFr,
     TweedleFq,
@@ -744,6 +876,8 @@ nonnative_test!(
     secp256k1Fq
 );
 
+
+// TODO: Make all the tests below generic and add them to the macros above
 #[test]
 fn from_test() {
     use algebra::UniformRand;

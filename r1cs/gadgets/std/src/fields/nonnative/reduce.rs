@@ -63,7 +63,7 @@ pub fn bigint_to_constraint_field<ConstraintF: PrimeField>(bigint: &BigUint) -> 
     val
 }
 
-/// the collections of methods for reducing the presentations
+/// The collections of methods for reducing the presentations of NonNativeFieldGadgets
 pub struct Reducer<SimulationF: PrimeField, ConstraintF: PrimeField> {
     pub simulation_phantom: PhantomData<SimulationF>,
     pub constraint_phantom: PhantomData<ConstraintF>,
@@ -71,7 +71,7 @@ pub struct Reducer<SimulationF: PrimeField, ConstraintF: PrimeField> {
 
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, ConstraintF> {
     /// Convert a limb of `num_bits` into a vector of Boolean gadgets, allowing at most 
-    /// `ConstraintF::size_in_bits() - 1` bits.
+    /// `ConstraintF::size_in_bits() - 1` bits for efficient 'unpacking'.
     pub fn limb_to_bits<CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
         limb: &FpGadget<ConstraintF>,
@@ -110,12 +110,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         Ok(bits)
     }
 
-    /// Reduction to the normal form allocates a non-native field element which carries the reduced
-    /// representation which again has no excess in the limbs
+    /// Reduction to normal form, which again has no excess in its limbs.
     pub fn reduce<CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>
     ) -> Result<(), SynthesisError> {
+        // Alloc of a non-native in normal form (not necessarily below the 
+        // non-native modulus)
         let new_elem = NonNativeFieldGadget::alloc(
             cs.ns(|| "alloc normal form"),
             || { Ok(elem.get_value().unwrap_or_default()) }
