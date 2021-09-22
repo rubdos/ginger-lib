@@ -1,5 +1,5 @@
 //! A submodule of low-level function for modular reduction/normalization of non-native field gadgets.
-use algebra::{biginteger::BigInteger, fields::{PrimeField, FpParameters}, BitIterator};
+use algebra::{biginteger::BigInteger, fields::{PrimeField, FpParameters}};
 
 use crate::{
     prelude::*,
@@ -70,44 +70,24 @@ pub struct Reducer<SimulationF: PrimeField, ConstraintF: PrimeField> {
 }
 
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, ConstraintF> {
-    /// Convert a limb of `num_bits` into a vector of Boolean gadgets, allowing at most 
-    /// `ConstraintF::size_in_bits() - 1` bits for efficient 'unpacking'.
+    /// Convert a limb of `num_bits` into a vector of Boolean gadgets.
+    /// Allowing `num_bits` to be at most `ConstraintF::size_in_bits() - 1` for efficient 'unpacking'.
+    // Consumes `num_bits` + 1 constraints.
     pub fn limb_to_bits<CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
         limb: &FpGadget<ConstraintF>,
         num_bits: usize,
     ) -> Result<Vec<Boolean>, SynthesisError> {
 
-        //TODO: refer to the capacity of ConstraintF instead of recomputing it
-        let num_bits = min(ConstraintF::size_in_bits() - 1, num_bits);
-        let mut bits_considered = Vec::with_capacity(num_bits);
-        let limb_value = limb.get_value().unwrap_or_default();
+        let num_bits = min(num_bits, ConstraintF::Params::CAPACITY as usize);
 
-        for b in BitIterator::new(limb_value.into_repr()).skip(
-            <<ConstraintF as PrimeField>::Params as FpParameters>::REPR_SHAVE_BITS as usize
-                + (ConstraintF::size_in_bits() - num_bits),
-        ) {
-            bits_considered.push(b);
-        }
+        // we extract the bits from the `num_bits` least significant bits
+        let to_skip = ConstraintF::size_in_bits() - num_bits;
+        assert!(to_skip > 0
+            && to_skip <= ConstraintF::Params::CAPACITY as usize
+        );
 
-        let mut bits = vec![];
-        for (i, b) in bits_considered.iter().enumerate() {
-            bits.push(Boolean::alloc(
-                cs.ns(|| format!("alloc bit {}", i)),
-                || Ok(b),
-            )?);
-        }
-
-        // Combine the num_bits many Booleans to an ConstraintF element.
-        let bit_sum = FpGadget::<ConstraintF>::from_bits(
-            cs.ns(|| "pack bits"),
-            bits.as_slice()
-        )?;
-
-        // enforce equality with the limb
-        bit_sum.enforce_equal(cs.ns(|| "bit_sum == limb"), &limb)?;
-
-        Ok(bits)
+        limb.to_bits_with_length_restriction(cs.ns(|| "limb to bits"), to_skip)
     }
 
     /// Reduction to normal form, which again has no excess in its limbs.

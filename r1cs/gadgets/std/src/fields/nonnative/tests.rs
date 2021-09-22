@@ -635,7 +635,6 @@ fn inverse_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
 fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R)
 {
     let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-    let len_normal_form = params.num_limbs * params.bits_per_limb;
     let num_bits_modulus = SimulationF::size_in_bits();
 
     let test_case = |val: SimulationF, val_bits: Vec<bool>, rng: &mut R| {

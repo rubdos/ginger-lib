@@ -62,16 +62,14 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         &mut self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
-        let a = P::COEFF_A;
 
-        let x_squared = self.x.square(cs.ns(|| "x^2"))?;
-
-        let one = P::BaseField::one();
-        let two = one.double();
-        let three = two + &one;
-
-        let three_x_squared = x_squared.mul_by_constant(cs.ns(|| "3 * x^2"), &three)?;
-        let three_x_squared_plus_a = three_x_squared.add_constant(cs.ns(|| "3 * x^2 + a"), &a)?;
+        let x_squared = self.x.mul_without_reduce(cs.ns(|| "x^2"), &self.x)?;
+        //TODO: Once mul_by_constant is implemented properly we can avoid all these adds
+        let three_x_squared_plus_a = x_squared
+            .add(cs.ns(|| "2x^2"), &x_squared)?
+            .add(cs.ns(|| "3x^2"), &x_squared)?
+            .add_constant(cs.ns(|| "3x^2 + a"), &P::COEFF_A)?
+            .reduce(cs.ns(|| "reduce 3x^2 + a"))?;
 
         let two_y = self.y.double(cs.ns(|| "2y"))?;
 
