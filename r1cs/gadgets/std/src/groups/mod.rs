@@ -77,22 +77,21 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
-        result: &Self,
         bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
         let mut power = self.clone();
-        let mut result = result.clone();
+        let mut acc = Self::zero(cs.ns(|| "alloc acc"))?;
         for (i, bit) in bits.enumerate() {
-            let new_encoded = result.add(&mut cs.ns(|| format!("Add {}-th power", i)), &power)?;
-            result = Self::conditionally_select(
+            let new_encoded = acc.add(&mut cs.ns(|| format!("Add {}-th power", i)), &power)?;
+            acc = Self::conditionally_select(
                 &mut cs.ns(|| format!("Select {}", i)),
                 bit.borrow(),
                 &new_encoded,
-                &result,
+                &acc,
             )?;
             power.double_in_place(&mut cs.ns(|| format!("{}-th Doubling", i)))?;
         }
-        Ok(result)
+        Ok(acc)
     }
 
     fn precomputed_base_scalar_mul<'a, CS, I, B>(
@@ -125,14 +124,13 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     /// `precomputed_base_scalar_mul`. Inputs must be specified in
     /// *little-endian* form. If the addition law is incomplete for
     /// the identity element, `result` must not be the identity element.
-    fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
-        base: &'a G,
+    fn mul_bits_fixed_base<CS: ConstraintSystem<ConstraintF>>(
+        base: &G,
         mut cs: CS,
-        result: &Self,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
         let base_g = Self::from_value(cs.ns(|| "hardcode base"), base);
-        base_g.mul_bits(cs, result, bits.into_iter())
+        base_g.mul_bits(cs, bits.into_iter())
     }
 
     fn precomputed_base_3_bit_signed_digit_scalar_mul<'a, CS, I, J, B>(
@@ -316,8 +314,6 @@ pub(crate) mod test {
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<ConstraintF>::new();
             let rng = &mut thread_rng();
-            let shift: G = UniformRand::rand(rng);
-            let result = GG::alloc(cs.ns(|| "alloc random shift"), || Ok(shift)).unwrap();
 
             let g: G = UniformRand::rand(rng);
             let gg = GG::alloc(cs.ns(|| "generate_g"), || Ok(g)).unwrap();
@@ -339,43 +335,22 @@ pub(crate) mod test {
 
             // Additivity test: a * G + b * G = (a + b) * G
             let x = cs.num_constraints();
-            let a_times_gg_vb = {
-                gg
-                    .mul_bits(cs.ns(|| "a * G"), &result, a_bits.iter()).unwrap()
-                    .sub(cs.ns(|| "a * G - result"), &result).unwrap()
-            };
+            let a_times_gg_vb = gg.mul_bits(cs.ns(|| "a * G"), a_bits.iter()).unwrap();
             println!("Variable base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
 
             let x = cs.num_constraints();
-            let a_times_gg_fb = {
-                GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), &result, a_bits.as_slice()).unwrap()
-                    .sub(cs.ns(|| "fb a * G - result"), &result).unwrap()
-            };
+            let a_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
             println!("Fixed base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
             assert_eq!(a_times_gg_vb.get_value().unwrap(), g.mul(&a)); // Check native result
             assert_eq!(a_times_gg_fb.get_value().unwrap(), g.mul(&a)); // Check native result
 
-            let b_times_gg_vb = {
-                gg
-                    .mul_bits(cs.ns(|| "b * G"), &result, b_bits.iter()).unwrap()
-                    .sub(cs.ns(|| "b * G - result"), &result).unwrap()
-            };
-            let b_times_gg_fb = {
-                GG::mul_bits_fixed_base(&g, cs.ns(|| "fb b * G"), &result, b_bits.as_slice()).unwrap()
-                    .sub(cs.ns(|| "fb b * G - result"), &result).unwrap()
-            };
+            let b_times_gg_vb = gg.mul_bits(cs.ns(|| "b * G"), b_bits.iter()).unwrap();
+            let b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb b * G"), b_bits.as_slice()).unwrap();
             assert_eq!(b_times_gg_vb.get_value().unwrap(), g.mul(&b)); // Check native result
             assert_eq!(b_times_gg_fb.get_value().unwrap(), g.mul(&b)); // Check native result
 
-            let a_plus_b_times_gg_vb = {
-                gg
-                    .mul_bits(cs.ns(|| "(a + b) * G"), &result, a_plus_b_bits.iter()).unwrap()
-                    .sub(cs.ns(|| "(a + b) * G - result"), &result).unwrap()
-            };
-            let a_plus_b_times_gg_fb = {
-                GG::mul_bits_fixed_base(&g, cs.ns(|| "fb (a + b) * G"), &result, a_plus_b_bits.as_slice()).unwrap()
-                    .sub(cs.ns(|| "fb (a + b) * G - result"), &result).unwrap()
-            };
+            let a_plus_b_times_gg_vb = gg.mul_bits(cs.ns(|| "(a + b) * G"), a_plus_b_bits.iter()).unwrap();
+            let a_plus_b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb (a + b) * G"), a_plus_b_bits.as_slice()).unwrap();
             assert_eq!(a_plus_b_times_gg_vb.get_value().unwrap(), g.mul(&(a + &b))); // Check native result
             assert_eq!(a_plus_b_times_gg_fb.get_value().unwrap(), g.mul(&(a + &b))); // Check native result
 

@@ -149,7 +149,9 @@ for Groth16VerifierGadget<PairingE, ConstraintF, P>
                 .enumerate()
                 {
                     let input_bits = input.to_bits(cs.ns(|| format!("Input {}", i)))?;
-                    g_ic = b.mul_bits(cs.ns(|| format!("Mul {}", i)), &g_ic, input_bits.iter())?;
+                    g_ic = b
+                        .mul_bits(cs.ns(|| format!("Mul {}", i)), input_bits.iter())?
+                        .add(cs.ns(|| format!("Add {}", i)), &g_ic)?;
                     input_len += 1;
                 }
             // Check that the input and the query in the verification are of the
