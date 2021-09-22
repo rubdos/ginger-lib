@@ -555,8 +555,8 @@ for AffineGadget<P, ConstraintF, F>
         let result = Self::conditionally_select(
             cs.ns(|| "select acc or acc - T"),
             &bits[0],
-            &acc_minus_t,
-            &acc
+            &acc,
+            &acc_minus_t
         )?;
 
         // If self was infinity, return 0 instead of result
