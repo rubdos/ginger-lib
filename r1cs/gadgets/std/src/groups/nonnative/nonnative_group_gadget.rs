@@ -215,12 +215,17 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(Self::new(x_3, y_3, Boolean::Constant(false)))
     }
 
-    /// Variable base exponentiation, avoiding exceptional cases due to incomplete additions.
-    /// Inputs must be specified in *little-endian* form.
-    /// From https://github.com/zcash/zcash/issues/3924
-    /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762
+    /// Hopwood's optimized fixed-length variable base exponentiation.
+    /// The scalar bits (in little endian representation) must be free of leading zeroes, 
+    /// and at most as long as the scalar field modulus.
+    /// 
+    /// The algorithm uses the same symmetrization technique as the signed lookup-table fixed
+    /// base scalar multiplication, and relies on the optimized double_and_add_internal in 
+    /// non-safe setting, as affine arithmetic exceptions are excluded from the presumptions on
+    /// the scalar bits (and an extra treatment of &self being trivial).
     ///
-    /// Goal: [bits] self = [2^n + k] T
+    /// Given an exponent of length n+1, scalar = 2^n + k with len(k) <= n, compute  
+    /// [bits] self = [2^n + k] T
     ///
     /// Acc := [3] T
     /// for i from n-2 down to 0 {
@@ -228,15 +233,20 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     ///     Acc := (Acc + Q) + Acc
     /// }
     /// return (k[0] = 0) ? (Acc - T) : Acc
+    /// 
+    /// See https://github.com/zcash/zcash/issues/3924 for a detailed explanation.
+    /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
         bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
 
+        // TODO: we must assert that bits.length() <= ScalarField::MODULUS.length(), 
+        // otherwise the algorithm is not secure.
         let bits = bits.cloned().collect::<Vec<Boolean>>();
 
-        // Select a random T if self is infinity, to avoid exceptional cases
+        // Select a random T if self is infinity
         let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
             let mut rng = OsRng::default();
             Ok(loop {
@@ -251,14 +261,15 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             self
         )?;
 
-        // Acc := [3] T
+        // Acc := [3] T = [2]*T + T
         let mut acc = {
             let mut t_copy = t.clone();
             t_copy.double_in_place(cs.ns(|| "[2] * T"))?;
-            //TODO: Is it ok unsafe ?
             t_copy.add_unsafe(cs.ns(|| "[3] * T"), &t)
         }?;
 
+        // Since len(bits) <= len(scalar field modulus), no arithemetic 
+        // edge case is met througout this loop. (For T = 0 we don't care.)    
         for (i, bit) in bits.iter().enumerate()
             // Skip the LSB (we handle it after the loop)
             .skip(1)
@@ -279,13 +290,16 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
                 )?;
                 let q = Self::new(t.x.clone(), selected_y, t.infinity);
 
-                // Acc := (Acc + Q) + Acc
-                // TODO: Is it ok unsafe ?
+                // Acc := (Acc + Q) + Acc using double_and_add_internal
                 acc = acc.double_and_add_unsafe(cs.ns(|| "double and add"), &q)?;
             }
 
         // return (k[0] = 0) ? (Acc - T) : Acc
-        // TODO: Is it ok unsafe ?
+        // Note that in this step both Acc and T are non-trivial and Acc != T, 
+        // but it might happen that Acc = -T in the single exceptional case of 
+        // exponent == scalar field modulus. 
+        // TODO: Let us think about whether asserting bits < scalar field modulus
+        // is appropriate. In this case, add_unsafe is secure.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
         let acc_minus_t = acc.add_unsafe(
             cs.ns(|| "Acc - T"),
@@ -662,65 +676,77 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
         safe: bool,
     ) -> Result<Self, SynthesisError>
     {
-        // lambda_1 := (y2 - y1)/(x2 - x1);
-        // x3 = lambda_1^2 - x1 - x2;
-        //
-        // lambda_2 = 2·y1/(x1 - x3) - lambda_1.
-        // x4 = lambda_2^2 - x1 - x3;
-        // y4 = lambda_2 * (x1 - x4) - y1;
+        // The double-and-add sum P_4 = P_3 + P_1, where P_3 = P_1 + P_2,
+        // under the above presumptions on P_1 and P_2 is enforced by just 5 
+        // constraints
+        //      1. (x2 - x1) * lambda_1 = y2 - y1;
+        //      2. lambda_1^2 = x1 +  x2 + x3;
+        //      3. (x1 - x3) * (lambda1 + lambda_2) = 2·y1
+        //      4. lambda_2^2 =   x1 + x3 + x4;
+        //      5. lambda_2 * (x1 - x4) = y_1 + y_4;
+        // Note that 3. is the result of adding the two equations
+        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3 
+        //      3b. (x_1 - x_3) * lambda_2 = y_1 - y_3.
+        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely 
+        // determines lambda_1, and thus x3 is determined by 2. 
+        // Again, since x_1-x_3 is non-zero equation 3. uniquely determines lambda_2
+        // and hence being of the same unique value as enforced by 3a. and 3b.
         let x2_minus_x1 = other.x.sub(cs.ns(|| "x2 - x1"), &self.x)?;
         let y2_minus_y1 = other.y.sub(cs.ns(|| "y2 - y1"), &self.y)?;
 
-        let lambda = if safe {
-            // Check that A.x - B.x != 0, which can be done by
-            // enforcing I * (B.x - A.x) = 1
-            // This is done below when we calculate inv (by NonNativeFieldGadget::inverse)
-            let inv = x2_minus_x1.inverse(cs.ns(|| "compute inv"))?;
-            NonNativeFieldGadget::alloc(cs.ns(|| "lambda"), || {
-                Ok(y2_minus_y1.get_value().get()? * &inv.get_value().get()?)
+        // Allocate lambda_1
+        let lambda_1 = if safe {
+            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget 
+            let inv_1 = x2_minus_x1.inverse(cs.ns(|| "enforce inv"))?;
+            NonNativeFieldGadget::alloc(cs.ns(|| "lambda_1"), || {
+                Ok(y2_minus_y1.get_value().get()? * &inv_1.get_value().get()?)
             })
         } else {
-            NonNativeFieldGadget::alloc(cs.ns(|| "lambda"), || {
+            // By our presumptions, x_2 - x_1 != 0
+            NonNativeFieldGadget::alloc(cs.ns(|| "lambda_1"), || {
                 Ok(y2_minus_y1.get_value().get()? * &x2_minus_x1.get_value().get()?.inverse().get()?)
             })
         }?;
 
-        // Check lambda
-        lambda.mul_equals(cs.ns(|| "check lambda"), &x2_minus_x1, &y2_minus_y1)?;
+        // Constraint 1.
+        lambda_1.mul_equals(cs.ns(|| "check lambda"), &x2_minus_x1, &y2_minus_y1)?;
 
         let x_3 = NonNativeFieldGadget::alloc(&mut cs.ns(|| "x_3"), || {
-            let lambda_val = lambda.get_value().get()?;
+            let lambda_1_val = lambda_1.get_value().get()?;
             let x1 = self.x.get_value().get()?;
             let x2 = other.x.get_value().get()?;
-            Ok((lambda_val.square() - &x1) - &x2)
+            Ok((lambda_1_val.square() - &x1) - &x2)
         })?;
 
-        // Check x3
+        // Constraint 2.
         let x3_plus_x1_plus_x2 = x_3
             .add(cs.ns(|| "x3 + x1"), &self.x)?
             .add(cs.ns(|| "x3 + x1 + x2"), &other.x)?;
-        lambda.mul_equals(cs.ns(|| "check x3"), &lambda, &x3_plus_x1_plus_x2)?;
+        lambda_1.mul_equals(cs.ns(|| "check x3"), &lambda_1, &x3_plus_x1_plus_x2)?;
 
-        // TODO: We already enforced no exceptional cases with lambda_1. Do we need to
-        //       do it here too ?
+        // Allocate lambda_2.
+        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?; 
+        let two_y1 = self.y.double(cs.ns(|| "2y1"))?;
+
         let lambda_2 = NonNativeFieldGadget::alloc(
             cs.ns(|| "lambda_2"),
             || {
-                let x1_val = self.x.get_value().get()?;
-                let y1_val = self.y.get_value().get()?;
-                let x3_val = x_3.get_value().get()?;
-                let lambda_val = lambda.get_value().get()?;
+                let lambda_val = lambda_1.get_value().get()?;
+                let two_y1_val = two_y1.get_value().get()?;
 
-                let x1_minus_x3_inv = (x1_val - &x3_val).inverse().get()?;
-                let y1_div_x1_minus_x3 = y1_val * &x1_minus_x3_inv;
-                Ok((y1_div_x1_minus_x3 + &y1_div_x1_minus_x3) - &lambda_val)
+                let x1_minus_x3_inv = (x1_minus_x3.get_value().get()?).inverse().get()?;
+                let two_y1_div_x1_minus_x3 = two_y1_val * &x1_minus_x3_inv;
+                Ok(two_y1_div_x1_minus_x3 - &lambda_val)
             }
         )?;
 
-        // Check lambda_2
-        let x1_minus_x3 = self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?;
-        let two_y1 = self.y.double(cs.ns(|| "2y1"))?;
-        let lambda_2_plus_lambda = lambda_2.add(cs.ns(|| "lambda_2 + lambda_1"), &lambda)?;
+        if safe {
+            // Set the extra constraint for x_1 - x_3 != 0 
+            let _inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv"))?;
+         };
+
+        // Constraint 3.
+        let lambda_2_plus_lambda = lambda_2.add(cs.ns(|| "lambda_2 + lambda_1"), &lambda_1)?;
 
         lambda_2_plus_lambda.mul_equals(
             cs.ns(|| "(lambda_2 + lambda) * (x1 - x3) = 2y1"),
@@ -728,6 +754,7 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
             &two_y1
         )?;
 
+        // Allocate the final x
         let x_4 = NonNativeFieldGadget::alloc(&mut cs.ns(|| "x_4"), || {
             let lambda_2_val = lambda_2.get_value().get()?;
             let x1_val = self.x.get_value().get()?;
@@ -735,12 +762,13 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
             Ok((lambda_2_val.square() - &x1_val) - &x3_val)
         })?;
 
-        // Check x4
+        // Constraint 4.
         let x4_plus_x1_plus_x3 = x_4
             .add(cs.ns(|| "x4 + x1"), &self.x)?
             .add(cs.ns(|| "x3 + x1 + x3"), &x_3)?;
         lambda_2.mul_equals(cs.ns(|| "check x4"), &lambda_2, &x4_plus_x1_plus_x3)?;
 
+        // alloc the final y
         let y_4 = NonNativeFieldGadget::alloc(&mut cs.ns(|| "y_4"), || {
             let lambda_2_val = lambda_2.get_value().get()?;
             let x_1_val = self.x.get_value().get()?;
@@ -749,7 +777,7 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
             Ok(lambda_2_val * &(x_1_val - &x_4_val) - &y_1_val)
         })?;
 
-        // Check y4
+        // Constraint 5.
         let y4_plus_y1 = y_4.add(cs.ns(|| "y4 + y1"), &self.y)?;
         let x1_minus_x4 = self.x.sub(cs.ns(|| "x1 - x4"), &x_4)?;
         lambda_2.mul_equals(cs.ns(|| ""), &x1_minus_x4, &y4_plus_y1)?;
