@@ -202,7 +202,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
 
         if safe {
            // Set the extra constraint for x_1 - x_3 != 0 
-           let inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv"))?;
+           let _inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv"))?;
         };
 
         // Constraint 3.
@@ -491,12 +491,17 @@ for AffineGadget<P, ConstraintF, F>
         ))
     }
 
-    /// Variable base exponentiation, avoiding exceptional cases due to incomplete additions.
-    /// Inputs must be specified in *little-endian* form.
-    /// From https://github.com/zcash/zcash/issues/3924
-    /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762
+    /// Hopwood's optimized fixed-length variable base exponentiation.
+    /// The scalar bits (in little endian representation) must be free of leading zeroes, 
+    /// and at most as long as the scalar field modulus.
+    /// 
+    /// The algorithm uses the same symmetrization technique as the signed lookup-table fixed
+    /// base scalar multiplication, and relies on the optimized double_and_add_internal in 
+    /// non-safe setting, as affine arithmetic exceptions are excluded from the presumptions on
+    /// the scalar bits (and an extra treatment of &self being trivial).
     ///
-    /// Goal: [bits] self = [2^n + k] T
+    /// Given an exponent of length n+1, scalar = 2^n + k with len(k) <= n, compute  
+    /// [bits] self = [2^n + k] T
     ///
     /// Acc := [3] T
     /// for i from n-2 down to 0 {
@@ -504,15 +509,20 @@ for AffineGadget<P, ConstraintF, F>
     ///     Acc := (Acc + Q) + Acc
     /// }
     /// return (k[0] = 0) ? (Acc - T) : Acc
+    /// 
+    /// See https://github.com/zcash/zcash/issues/3924 for a detailed explanation.
+    /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
         bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
 
+        // TODO: we must assert that bits.length() <= ScalarField::MODULUS.length(), 
+        // otherwise the algorithm is not secure.
         let bits = bits.cloned().collect::<Vec<Boolean>>();
 
-        // Select a random T if self is infinity, to avoid exceptional cases
+        // Select any random T if self is infinity
         let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
             let mut rng = OsRng::default();
             Ok(loop {
@@ -527,20 +537,21 @@ for AffineGadget<P, ConstraintF, F>
             self
         )?;
 
-        // Acc := [3] T
+        // Acc := [3] T = [2]*T + T
         let mut acc = {
             let mut t_copy = t.clone();
             t_copy.double_in_place(cs.ns(|| "[2] * T"))?;
-            //TODO: Is it ok unsafe ?
             t_copy.add_unsafe(cs.ns(|| "[3] * T"), &t)
         }?;
 
+        // Since len(bits) <= len(scalar field modulus), no arithemetic 
+        // edge case is met througout this loop. (For T = 0 we don't care.)    
         for (i, bit) in bits.iter().enumerate()
             // Skip the LSB (we handle it after the loop)
             .skip(1)
             // Scan over the scalar bits in big-endian order
             .rev()
-            // Skip the MSB (already accumulated)
+            // Skip the MSB (already taken into account in the init of Acc)
             .skip(1)
         {
             let mut cs = cs.ns(|| format!("bit {}", i));
@@ -555,15 +566,18 @@ for AffineGadget<P, ConstraintF, F>
             )?;
             let q = Self::new(t.x.clone(), selected_y, t.infinity);
 
-            // Acc := (Acc + Q) + Acc
-            // TODO: Is it ok unsafe ?
+            // Acc := (Acc + Q) + Acc using double_and_add_internal
             acc = acc.double_and_add_unsafe(cs.ns(|| "double and add"), &q)?;
         }
 
         // return (k[0] = 0) ? (Acc - T) : Acc
-        // TODO: Is it ok unsafe ?
+        // Note that in this step both Acc and T are non-trivial and Acc != T, 
+        // but it might happen that Acc = -T in the single exceptional case of 
+        // exponent == scalar field modulus. 
+        // TODO: Let us think about whether asserting bits < scalar field modulus
+        // is appropriate. In this case, add_unsafe is secure.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
-        let acc_minus_t = acc.add_unsafe(
+        let acc_minus_t = acc.add(
             cs.ns(|| "Acc - T"),
             &neg_t
         )?;
