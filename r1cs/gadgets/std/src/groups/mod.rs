@@ -176,6 +176,12 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_double() -> usize;
 }
 
+/// The 'constant' length transformation for scalar multiplication of a group
+/// with scalar field `ScalarF`. 
+/// Implements the non-native big integer addition of the scalar, given as 
+/// little endian vector of BooleanGadgets `bits`, with `MODULUS` the modulus
+/// of the scalar field. The result is a vector of Booleans always one bit longer
+/// than `MODULUS`, possibly having a leading zero.
 pub(crate) fn scalar_bits_to_constant_length<
     'a,
     ConstraintF: PrimeField,
@@ -193,63 +199,95 @@ pub(crate) fn scalar_bits_to_constant_length<
 
     assert!(bits.len() <= ScalarF::size_in_bits());
 
-    // We transform the scalar to almost constant length by adding the ScalarField modulus.
-    // We do that by "misusing" the NonNativeFieldGadget in order to convert BigInteger/bits
-    // to limbs.
+    // We 'misuse' the conversion algorithms of NonNativeFieldGadget in order 
+    // to convert BigInteger/bits to limbs.
     // TODO: Refactor code so that we do not have explicit calls to NonNativeGadgets
     let params = {
-        let bits_per_limb = ((ConstraintF::Params::CAPACITY/2) - 1) as usize;
+        // bits per limb is the remainder of len mod max_
+        let bits_per_limb =  std::cmp::min((ConstraintF::Params::CAPACITY - 1) as usize, ScalarF::size_in_bits());
         // ceil(ScalarF::size_in_bits()/bits_per_limb)
         let num_limbs = (ScalarF::size_in_bits() + bits_per_limb - 1)/bits_per_limb;
+
+        // println!("Capacity {}", ConstraintF::Params::CAPACITY as usize);
+        // println!("Scalar field size {}", ScalarF::size_in_bits());
+        // println!("bits_per_limb {}", bits_per_limb);
+        // println!("num_limbs {}", num_limbs);
 
         NonNativeFieldParams{ num_limbs, bits_per_limb }
     };
 
+    // Convert the scalar field modulus `MODULUS` to its limbs.
     let mut scalar_char_limbs = NonNativeFieldGadget::<
         ScalarF, ConstraintF>::get_limbs_representations_from_big_integer_with_params(
         params, &<ScalarF as PrimeField>::Params::MODULUS
     )?;
     scalar_char_limbs.reverse(); // Convert to LE limbs order
 
+    // Pack `bits` into its limbs.
+    // TODO: when refactored, we will merge the constraints from `from_bits_with_params`
+    // into the linear combinations for the limb-wise sum
+    let mut bits_bigendian = bits;
+    bits_bigendian.reverse();
     let mut scalar_limbs = NonNativeFieldGadget::<ScalarF, ConstraintF>::from_bits_with_params(
         cs.ns(|| "scalar from bits"),
-        bits.as_slice(),
+        bits_bigendian.as_slice(),  // from_bits takes big endian representation
         params
     )?.limbs;
     scalar_limbs.reverse(); // Convert to LE limbs order
 
-    // Manually compute the sum over the limbs taking carries into account
+    // We compute the sum over the limbs taking carries into account
     let mut sum_limbs_bits: Vec<Boolean> = Vec::with_capacity(ScalarF::size_in_bits() + 1); // LE
     let mut carry_bit = Boolean::Constant(false);
+    let mut to_be_processed = ScalarF::size_in_bits();
+    let mut used_in_limb: usize;
 
     for (i, (scalar_limb, scalar_char_limb)) in scalar_limbs
         .into_iter()
         .zip(scalar_char_limbs.into_iter())
         .enumerate()
         {
+            
+            if to_be_processed < params.bits_per_limb{
+                used_in_limb = to_be_processed;            
+            } else {
+                used_in_limb = params.bits_per_limb;
+            }
+            
+            // add the limb of the scalar with that of `MODULUS`
             let mut sum_limb = scalar_limb.add_constant(
                 cs.ns(|| format!("scalar_limb + scalar_char_limb {}", i)),
                 &scalar_char_limb
             )?;
 
+            println!("scalar limb {}: {}",i,scalar_limb.get_value().unwrap());
+            println!("modul. limb {}: {}",i,scalar_char_limb);
+            println!("sum limb {}: {}",i,sum_limb.get_value().unwrap());
+
+            // add the previous carry to the limb
             sum_limb = sum_limb.conditionally_add_constant(
                 cs.ns(|| format!("add carry {}", i)),
                 &carry_bit,
                 ConstraintF::one(),
             )?;
+            
 
-            let to_skip = <ConstraintF::BasePrimeField as PrimeField>::size_in_bits() - (params.bits_per_limb + 1);
+            // unpack `sum_limb` into its `used_in_limb + 1` many bits. 
+            let to_skip = <ConstraintF::BasePrimeField as PrimeField>::size_in_bits() - (used_in_limb + 1);
             let mut sum_limb_bits = sum_limb.to_bits_with_length_restriction(
                 cs.ns(|| format!("sum_limb to_bits_with_length_restriction {}", i)),
                 to_skip
             )?;
             sum_limb_bits.reverse();
-
+            // The leading bit is the carry for the next significant limb
             carry_bit = sum_limb_bits.pop().unwrap();
 
             sum_limbs_bits.append(&mut sum_limb_bits);
+            to_be_processed -= used_in_limb;
         }
 
+    assert_eq!(to_be_processed, 0, "not all bits processed");
+    
+    // The last carry is part of the result.
     sum_limbs_bits.push(carry_bit);
     Ok(sum_limbs_bits)
 }
@@ -379,40 +417,62 @@ pub(crate) mod test {
         assert!(cs.is_satisfied());
     }
 
+    /// Tests the 'constant' length transformation of `scalar_bits_to_constant_length` against
+    /// the result of 'native' big integer arithmetics.
     #[allow(dead_code)]
     fn scalar_bits_to_constant_length_test<
         ConstraintF: PrimeField,
         G: Group,
     >()
     {
-        let mut cs = TestConstraintSystem::<ConstraintF>::new();
-        let rng = &mut thread_rng();
+        for _ in 0..30 {
+            let mut cs = TestConstraintSystem::<ConstraintF>::new();
+            let rng = &mut thread_rng();
 
-        let a = G::ScalarField::rand(rng);
-        let mut a_bigint = a.into_repr();
-        let carry = a_bigint.add_nocarry(&<G::ScalarField as PrimeField>::Params::MODULUS);
-        let mut native_result = a_bigint.to_bits();
-        native_result.reverse();
+            let a = G::ScalarField::rand(rng);
+            let mut a_bigint = a.into_repr();
+            println!("scalar bigint: {}", a_bigint);
+            println!("modulus bigint: {}", <G::ScalarField as PrimeField>::Params::MODULUS);
+            // the 'native' addition of the scalar a and the scalar field modulus
+            let carry = a_bigint.add_nocarry(&<G::ScalarField as PrimeField>::Params::MODULUS);
+            println!("sum bigint: {}", a_bigint);
+            // add_nocarry should never return a non-zero as the BigInt's are always oversized to
+            // prevent this.
+            assert_eq!(carry, false, "add_nocarry overflow.");
 
-        let to_pad = <G::ScalarField as PrimeField>::size_in_bits() - native_result.len() + 1;
-        native_result.append(&mut vec![false; to_pad]);
-        native_result.push(carry);
+            // get the bits in little endian order. 
+            // Note: `to_bits()` seems not to skip leading zeroes
+            let mut native_result = a_bigint.to_bits();
+            native_result.reverse();
 
-        let mut a_bits_gadget = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
-        a_bits_gadget.reverse();
+            // Checking plausability of native sum
+            let expected_len = <G::ScalarField as PrimeField>::size_in_bits() + 1;
+            assert_eq!(native_result[expected_len..], vec![false; native_result.len() - expected_len], "unexpected large native result");
+            assert!(
+                native_result[expected_len-1] == true ||
+                (native_result[expected_len-1] == false && native_result[expected_len-2] == true),
+                "unexpected value of native result"
+            );
 
-        let gadget_result = crate::groups::scalar_bits_to_constant_length::<_, G::ScalarField, _>(
-            cs.ns(|| "a bits to constant length"), a_bits_gadget
-        )
-            .unwrap()
-            .into_iter()
-            .map(|b| b.get_value().unwrap())
-            .collect::<Vec<bool>>();
+            // Alloc a vector of Boolean Gadgets with values according to the scalar bits, little endian.
+            let mut a_bits_gadget = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
+            a_bits_gadget.reverse();
 
-        assert_eq!(native_result.len(), gadget_result.len(), "Native and circuit length not equal");
-        assert_eq!(native_result, gadget_result, "Native and circuit value not equal");
+            // Compute the sum by means of the arithmetic circuit of `scalar_bits_to_constant_length()`
+            let gadget_result = crate::groups::scalar_bits_to_constant_length::<_, G::ScalarField, _>(
+                cs.ns(|| "a bits to constant length"), a_bits_gadget
+            )
+                .unwrap()
+                .into_iter()
+                .map(|b| b.get_value().unwrap())
+                .collect::<Vec<bool>>();
 
-        assert!(cs.is_satisfied());
+            // check equality with the native sum
+            assert_eq!(expected_len, gadget_result.len(), "Native and circuit length not equal");
+            assert_eq!(native_result[..expected_len], gadget_result, "Native and circuit value not equal");
+
+            assert!(cs.is_satisfied());
+        }
     }
 
     #[allow(dead_code)]

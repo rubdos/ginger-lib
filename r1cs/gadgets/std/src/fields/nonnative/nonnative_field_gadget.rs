@@ -324,7 +324,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         Ok(bits[bits.len() - 1])
     }
 
-    // Packs a bit sequence (which does not exceed the length of a normal form) into a NonNativeFieldGadget
+    // Packs a big endian bit sequence (which does not exceed the length of a normal form) 
+    // into a NonNativeFieldGadget
     pub fn from_bits_with_params<CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
         bits: &[Boolean],
