@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use algebra::{Field, Group};
+use algebra::{Field, PrimeField, Group};
 use r1cs_core::{ConstraintSystem, SynthesisError};
 
 use std::{borrow::Borrow, fmt::Debug};
@@ -176,13 +176,90 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_double() -> usize;
 }
 
+pub(crate) fn scalar_bits_to_constant_length<
+    'a,
+    ConstraintF: PrimeField,
+    ScalarF: PrimeField,
+    CS: ConstraintSystem<ConstraintF>
+>(
+    mut cs: CS,
+    bits: Vec<Boolean>
+) -> Result<Vec<Boolean>, SynthesisError>
+{
+    use crate::fields::nonnative::{
+        NonNativeFieldParams, nonnative_field_gadget::NonNativeFieldGadget,
+    };
+    use algebra::FpParameters;
+
+    assert!(bits.len() <= ScalarF::size_in_bits());
+
+    // We transform the scalar to almost constant length by adding the ScalarField modulus.
+    // We do that by "misusing" the NonNativeFieldGadget in order to convert BigInteger/bits
+    // to limbs.
+    // TODO: Refactor code so that we do not have explicit calls to NonNativeGadgets
+    let params = {
+        let bits_per_limb = ((ConstraintF::Params::CAPACITY/2) - 1) as usize;
+        // ceil(ScalarF::size_in_bits()/bits_per_limb)
+        let num_limbs = (ScalarF::size_in_bits() + bits_per_limb - 1)/bits_per_limb;
+
+        NonNativeFieldParams{ num_limbs, bits_per_limb }
+    };
+
+    let mut scalar_char_limbs = NonNativeFieldGadget::<
+        ScalarF, ConstraintF>::get_limbs_representations_from_big_integer_with_params(
+        params, &<ScalarF as PrimeField>::Params::MODULUS
+    )?;
+    scalar_char_limbs.reverse(); // Convert to LE limbs order
+
+    let mut scalar_limbs = NonNativeFieldGadget::<ScalarF, ConstraintF>::from_bits_with_params(
+        cs.ns(|| "scalar from bits"),
+        bits.as_slice(),
+        params
+    )?.limbs;
+    scalar_limbs.reverse(); // Convert to LE limbs order
+
+    // Manually compute the sum over the limbs taking carries into account
+    let mut sum_limbs_bits: Vec<Boolean> = Vec::with_capacity(ScalarF::size_in_bits() + 1); // LE
+    let mut carry_bit = Boolean::Constant(false);
+
+    for (i, (scalar_limb, scalar_char_limb)) in scalar_limbs
+        .into_iter()
+        .zip(scalar_char_limbs.into_iter())
+        .enumerate()
+        {
+            let mut sum_limb = scalar_limb.add_constant(
+                cs.ns(|| format!("scalar_limb + scalar_char_limb {}", i)),
+                &scalar_char_limb
+            )?;
+
+            sum_limb = sum_limb.conditionally_add_constant(
+                cs.ns(|| format!("add carry {}", i)),
+                &carry_bit,
+                ConstraintF::one(),
+            )?;
+
+            let to_skip = <ConstraintF::BasePrimeField as PrimeField>::size_in_bits() - (params.bits_per_limb + 1);
+            let mut sum_limb_bits = sum_limb.to_bits_with_length_restriction(
+                cs.ns(|| format!("sum_limb to_bits_with_length_restriction {}", i)),
+                to_skip
+            )?;
+            sum_limb_bits.reverse();
+
+            carry_bit = sum_limb_bits.pop().unwrap();
+
+            sum_limbs_bits.append(&mut sum_limb_bits);
+        }
+
+    sum_limbs_bits.push(carry_bit);
+    Ok(sum_limbs_bits)
+}
+
 #[cfg(test)]
 pub(crate) mod test {
-    use algebra::{Field, UniformRand};
+    use algebra::{Field, PrimeField, FpParameters, BigInteger, Group, UniformRand, ToBits};
     use r1cs_core::ConstraintSystem;
 
     use crate::{prelude::*, test_constraint_system::TestConstraintSystem};
-    use algebra::groups::Group;
     use rand::thread_rng;
 
     #[allow(dead_code)]
@@ -303,13 +380,51 @@ pub(crate) mod test {
     }
 
     #[allow(dead_code)]
+    fn scalar_bits_to_constant_length_test<
+        ConstraintF: PrimeField,
+        G: Group,
+    >()
+    {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let rng = &mut thread_rng();
+
+        let a = G::ScalarField::rand(rng);
+        let mut a_bigint = a.into_repr();
+        let carry = a_bigint.add_nocarry(&<G::ScalarField as PrimeField>::Params::MODULUS);
+        let mut native_result = a_bigint.to_bits();
+        native_result.reverse();
+
+        let to_pad = <G::ScalarField as PrimeField>::size_in_bits() - native_result.len() + 1;
+        native_result.append(&mut vec![false; to_pad]);
+        native_result.push(carry);
+
+        let mut a_bits_gadget = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
+        a_bits_gadget.reverse();
+
+        let gadget_result = crate::groups::scalar_bits_to_constant_length::<_, G::ScalarField, _>(
+            cs.ns(|| "a bits to constant length"), a_bits_gadget
+        )
+            .unwrap()
+            .into_iter()
+            .map(|b| b.get_value().unwrap())
+            .collect::<Vec<bool>>();
+
+        assert_eq!(native_result.len(), gadget_result.len(), "Native and circuit length not equal");
+        assert_eq!(native_result, gadget_result, "Native and circuit value not equal");
+
+        assert!(cs.is_satisfied());
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn mul_bits_test<
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
     >()
     {
-        use crate::algebra::ToBits;
+        scalar_bits_to_constant_length_test::<<ConstraintF as Field>::BasePrimeField, G>();
+
+        /*use crate::algebra::ToBits;
 
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<ConstraintF>::new();
@@ -363,6 +478,6 @@ pub(crate) mod test {
                 .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
 
             assert!(cs.is_satisfied());
-        }
+        }*/
     }
 }

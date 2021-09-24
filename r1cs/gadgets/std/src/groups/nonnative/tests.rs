@@ -33,14 +33,14 @@ macro_rules! nonnative_group_test {
             $test_constraint_field,
             $test_simulation_field
         );
-        /*nonnative_test_individual!(
+        nonnative_test_individual!(
             mul_bits_test,
             $test_name,
             $num_samples,
             $group_params,
             $test_constraint_field,
             $test_simulation_field
-        );*/
+        );
     };
 }
 
@@ -54,14 +54,14 @@ macro_rules! nonnative_group_test_unsafe_add {
             $test_constraint_field,
             $test_simulation_field
         );
-        /*nonnative_test_individual!(
+        nonnative_test_individual!(
             mul_bits_test,
             $test_name,
             $num_samples,
             $group_params,
             $test_constraint_field,
             $test_simulation_field
-        );*/
+        );
     };
 }
 

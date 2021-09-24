@@ -13,7 +13,7 @@ use crate::{prelude::*, Assignment};
 #[must_use]
 pub struct AffineGadget<
     P: SWModelParameters,
-    ConstraintF: Field,
+    ConstraintF: PrimeField,
     F: FieldGadget<P::BaseField, ConstraintF>,
 > {
     pub x:   F,
@@ -26,7 +26,7 @@ pub struct AffineGadget<
 impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 
 {
@@ -126,7 +126,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     #[inline]
     /// Compute 2 * self + other as (self + other) + self: this requires less constraints
     /// than computing self.double().add(other).
-    /// Neither `self` nor `other` can be the neutral element, and other != ±self;
+    /// Incomplete add: neither `self` nor `other` can be the neutral element, and other != ±self;
     /// If `safe` is set, enforce in the circuit that exceptional cases not occurring.
     fn double_and_add_internal<CS: ConstraintSystem<ConstraintF>>(
         &self,
@@ -273,7 +273,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> PartialEq for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -284,7 +284,7 @@ impl<P, ConstraintF, F> PartialEq for AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> Eq for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
 }
@@ -293,7 +293,7 @@ impl<P, ConstraintF, F> GroupGadget<SWProjective<P>, ConstraintF>
 for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     type Value = SWProjective<P>;
@@ -518,9 +518,11 @@ for AffineGadget<P, ConstraintF, F>
         bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
 
-        // TODO: we must assert that bits.length() <= ScalarField::MODULUS.length(), 
-        // otherwise the algorithm is not secure.
-        let bits = bits.cloned().collect::<Vec<Boolean>>();
+        let mut bits = bits.cloned().collect::<Vec<Boolean>>();
+        bits = crate::groups::scalar_bits_to_constant_length::<_, P::ScalarField, _>(
+            cs.ns(|| "scalar bits to constant length"),
+            bits
+        )?;
 
         // Select any random T if self is infinity
         let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
@@ -661,7 +663,6 @@ for AffineGadget<P, ConstraintF, F>
 
             //Perform addition
             let adder: Self = Self::new(x, y, Boolean::constant(false));
-            //TODO: Can we use add unsafe ?
             acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
             t = t.double().double();
             to_sub += &sigma;
@@ -793,7 +794,7 @@ for AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> CondSelectGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     #[inline]
@@ -819,7 +820,7 @@ impl<P, ConstraintF, F> CondSelectGadget<ConstraintF> for AffineGadget<P, Constr
 impl<P, ConstraintF, F> EqGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn is_eq<CS: ConstraintSystem<ConstraintF>>(
@@ -872,7 +873,7 @@ impl<P, ConstraintF, F> AllocGadget<SWProjective<P>, ConstraintF>
 for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     #[inline]
@@ -1086,7 +1087,7 @@ for AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> ConstantGadget<SWProjective<P>, ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn from_value<CS: ConstraintSystem<ConstraintF>>(
@@ -1118,7 +1119,7 @@ impl<P, ConstraintF, F> ConstantGadget<SWProjective<P>, ConstraintF> for AffineG
 impl<P, ConstraintF, F> ToBitsGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn to_bits<CS: ConstraintSystem<ConstraintF>>(
@@ -1152,7 +1153,7 @@ impl<P, ConstraintF, F> ToBitsGadget<ConstraintF> for AffineGadget<P, Constraint
 impl<P, ConstraintF, F> ToBytesGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
