@@ -22,7 +22,7 @@ use crate::{
     overhead,
     Assignment,
 };
-use r1cs_core::{ConstraintSystem, LinearCombination, SynthesisError};
+use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::{borrow::Borrow, vec, vec::Vec};
@@ -31,7 +31,7 @@ use crate::fields::nonnative::NonNativeFieldParams;
 #[derive(Debug, Eq, PartialEq)]
 #[must_use]
 pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField> {
-    /// The limbs as elements of ConstraintF. 
+    /// The limbs as elements of ConstraintF, big endian ordered. 
     /// Recall that in the course of arithmetic operations bits the bit length of 
     /// a limb exceeds `NonNativeFieldParams::bits_per_limb`. Reduction transforms 
     /// back to normal form, which again has at most `bits_per_limb` many bits (but
@@ -335,52 +335,28 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let len_normal_form = params.num_limbs * params.bits_per_limb;
         assert!(bits.len() <= len_normal_form);
 
-        // Create a look up table for the `num_limbs` many powers
-        // of two as ConstraintF elements (in reverse order).
-        // Used as coefficients for the packing constraints.
-        let mut powers_of_two = Vec::<ConstraintF>::new();
-        for i in (0..params.bits_per_limb).rev() {
-            let repr = ConstraintF::read_bits({
-                // 2^i as limb, big endian
-                let mut bits = vec![false; ConstraintF::size_in_bits()];
-                bits[ConstraintF::size_in_bits() - 1 - i] = true;
-                bits
-            })?;
-            powers_of_two.push(repr);
-        }
-
         // Pad big endian representation to length of normal form
         let mut per_nonnative_bits = vec![Boolean::Constant(false); len_normal_form - bits.len()];
         per_nonnative_bits.extend_from_slice(bits);
 
-        // Pack each chunk of `num_bits` into a separate limb
-        let limbs = per_nonnative_bits.chunks_exact(params.bits_per_limb).enumerate().map(|(chunk_i, bits)| {
-            let mut lc = LinearCombination::<ConstraintF>::zero();
-
-            for k in 0..params.bits_per_limb {
-                lc = &lc + bits[k].lc(CS::one(), powers_of_two[k]);
-            }
-
-            let limb = FpGadget::<ConstraintF>::alloc(
-                cs.ns(|| format!("alloc limb {}", chunk_i)),
-                || {
-                    let bits_val = bits.iter().map(|b| b.get_value().unwrap()).collect::<Vec<bool>>();
-                    Ok(ConstraintF::read_bits(bits_val).unwrap())
+        // Pack each chunk of `bits_per_limb` many Booleans into a limb, 
+        // big endian ordered.
+        let limbs = 
+            per_nonnative_bits
+            .chunks_exact(params.bits_per_limb)
+            .enumerate()
+            .map(|(i,chunk)| 
+                {
+                    // from_bits() assumes big endian vector of bits
+                    let limb = FpGadget::<ConstraintF>::from_bits(
+                        cs.ns(|| format!("packing bits to limb {}", i)),
+                        &chunk.to_vec()
+                    )?;
+                    
+                    Ok(limb)   
                 }
-            )?;
-
-            // Packing constraint: we enforce that
-            // limb lc - limb gadget == 0
-            lc = limb.get_variable() - lc.clone();
-            cs.enforce(
-                || format!("unpacking constraint for limb {}", chunk_i),
-                |lc| lc,
-                |lc| lc,
-                |_| lc.clone()
-            );
-
-            Ok(limb)
-        }).collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
+            )
+        .collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
 
         Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
