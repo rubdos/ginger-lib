@@ -176,12 +176,12 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_double() -> usize;
 }
 
-/// The 'constant' length transformation for scalar multiplication of a group
+/// The 'constant' length transformation for scalar multiplication in a group
 /// with scalar field `ScalarF`. 
 /// Implements the non-native big integer addition of the scalar, given as 
-/// little endian vector of BooleanGadgets `bits`, with `MODULUS` the modulus
-/// of the scalar field. The result is a vector of Booleans always one bit longer
-/// than `MODULUS`, possibly having a leading zero.
+/// little endian vector of Boolean gadgets `bits`, and the modulus of the 
+/// scalar field. The result is a vector of Booleans always one bit longer
+/// than the scalar field modulus, possibly having a leading zero.
 pub(crate) fn scalar_bits_to_constant_length<
     'a,
     ConstraintF: PrimeField,
@@ -192,48 +192,65 @@ pub(crate) fn scalar_bits_to_constant_length<
     bits: Vec<Boolean>
 ) -> Result<Vec<Boolean>, SynthesisError>
 {
-    use crate::fields::nonnative::{
-        NonNativeFieldParams, nonnative_field_gadget::NonNativeFieldGadget,
-    };
-    use algebra::FpParameters;
+    use algebra::{BigInteger, FpParameters};
+    use crate::fields::fp::FpGadget;
 
     assert!(bits.len() <= ScalarF::size_in_bits());
 
-    // We 'misuse' the conversion algorithms of NonNativeFieldGadget in order 
-    // to convert BigInteger/bits to limbs.
-    // TODO: Refactor code so that we do not have explicit calls to NonNativeGadgets
-    let params = {
-        // bits per limb is the remainder of len mod max_
-        let bits_per_limb =  std::cmp::min((ConstraintF::Params::CAPACITY - 1) as usize, ScalarF::size_in_bits());
-        // ceil(ScalarF::size_in_bits()/bits_per_limb)
-        let num_limbs = (ScalarF::size_in_bits() + bits_per_limb - 1)/bits_per_limb;
+    // bits per limb must not exceed the CAPACITY minus one bit, which is 
+    // reserved for the addition.
+    let bits_per_limb =  std::cmp::min(
+        (ConstraintF::Params::CAPACITY - 1) as usize, 
+        ScalarF::size_in_bits()
+    );
+    // ceil(ScalarF::size_in_bits()/bits_per_limb)
+    // let num_limbs = (ScalarF::size_in_bits() + bits_per_limb - 1)/bits_per_limb;
+    
+    // Convert the scalar field modulus `MODULUS` to its vector of limbs,
+    // little endian ordered.
 
-        // println!("Capacity {}", ConstraintF::Params::CAPACITY as usize);
-        // println!("Scalar field size {}", ScalarF::size_in_bits());
-        // println!("bits_per_limb {}", bits_per_limb);
-        // println!("num_limbs {}", num_limbs);
+    let scalar_char = &ScalarF::Params::MODULUS;
+    let mut char_bits = scalar_char.to_bits();
+    char_bits.reverse(); // little endian, including trailing zeros 
 
-        NonNativeFieldParams{ num_limbs, bits_per_limb }
-    };
+    let char_limbs: Vec<ConstraintF> = 
+        char_bits[..ScalarF::size_in_bits()] 
+        .chunks(bits_per_limb)
+        .map(|chunk| 
+            {
+                // read_bits for PrimeField takes big endian order
+                let mut chunk_rev = chunk.to_vec();
+                chunk_rev.reverse();
+                let limb = ConstraintF::read_bits(chunk_rev.to_vec());
 
-    // Convert the scalar field modulus `MODULUS` to its limbs.
-    let mut scalar_char_limbs = NonNativeFieldGadget::<
-        ScalarF, ConstraintF>::get_limbs_representations_from_big_integer_with_params(
-        params, &<ScalarF as PrimeField>::Params::MODULUS
-    )?;
-    scalar_char_limbs.reverse(); // Convert to LE limbs order
+                limb
+            }
+        )
+    .collect::<Result<_, _>>()?;
 
-    // Pack `bits` into its limbs.
-    // TODO: when refactored, we will merge the constraints from `from_bits_with_params`
-    // into the linear combinations for the limb-wise sum
-    let mut bits_bigendian = bits;
-    bits_bigendian.reverse();
-    let mut scalar_limbs = NonNativeFieldGadget::<ScalarF, ConstraintF>::from_bits_with_params(
-        cs.ns(|| "scalar from bits"),
-        bits_bigendian.as_slice(),  // from_bits takes big endian representation
-        params
-    )?.limbs;
-    scalar_limbs.reverse(); // Convert to LE limbs order
+    // Pad `bits` to the same length as the scalar field characteristic,
+    // and pack them into its limbs.
+    let to_append = ScalarF::size_in_bits() - bits.len();
+    let mut bits_padded = bits;
+    bits_padded.append(&mut vec![Boolean::Constant(false); to_append]);
+
+    let scalar_limbs = 
+        bits_padded
+        .chunks(bits_per_limb)
+        .enumerate()
+        .map(|(i,chunk)| 
+            {
+                // from_bits() assumes big endian vector of bits
+                let mut chunk_rev = chunk.to_vec();
+                chunk_rev.reverse();
+                let limb = FpGadget::<ConstraintF>::from_bits(
+                    cs.ns(|| format!("packing scalar limb {}", i)),
+                    &chunk_rev.to_vec()
+                )?;
+                
+                Ok(limb)   
+            }
+        ).collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
 
     // We compute the sum over the limbs taking carries into account
     let mut sum_limbs_bits: Vec<Boolean> = Vec::with_capacity(ScalarF::size_in_bits() + 1); // LE
@@ -241,27 +258,23 @@ pub(crate) fn scalar_bits_to_constant_length<
     let mut to_be_processed = ScalarF::size_in_bits();
     let mut used_in_limb: usize;
 
-    for (i, (scalar_limb, scalar_char_limb)) in scalar_limbs
+    for (i, (scalar_limb, char_limb)) in scalar_limbs
         .into_iter()
-        .zip(scalar_char_limbs.into_iter())
+        .zip(char_limbs.into_iter())
         .enumerate()
         {
             
-            if to_be_processed < params.bits_per_limb{
+            if to_be_processed < bits_per_limb{
                 used_in_limb = to_be_processed;            
             } else {
-                used_in_limb = params.bits_per_limb;
+                used_in_limb = bits_per_limb;
             }
             
             // add the limb of the scalar with that of `MODULUS`
             let mut sum_limb = scalar_limb.add_constant(
-                cs.ns(|| format!("scalar_limb + scalar_char_limb {}", i)),
-                &scalar_char_limb
+                cs.ns(|| format!("scalar_limb + char_limb {}", i)),
+                &char_limb
             )?;
-
-            println!("scalar limb {}: {}",i,scalar_limb.get_value().unwrap());
-            println!("modul. limb {}: {}",i,scalar_char_limb);
-            println!("sum limb {}: {}",i,sum_limb.get_value().unwrap());
 
             // add the previous carry to the limb
             sum_limb = sum_limb.conditionally_add_constant(
@@ -270,7 +283,6 @@ pub(crate) fn scalar_bits_to_constant_length<
                 ConstraintF::one(),
             )?;
             
-
             // unpack `sum_limb` into its `used_in_limb + 1` many bits. 
             let to_skip = <ConstraintF::BasePrimeField as PrimeField>::size_in_bits() - (used_in_limb + 1);
             let mut sum_limb_bits = sum_limb.to_bits_with_length_restriction(
