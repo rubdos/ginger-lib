@@ -462,7 +462,7 @@ mod test {
     use algebra::{
         curves::bls12_377::Bls12_377,
         fields::bls12_377::{Fq, Fr},
-        BitIterator, PrimeField,
+        ToBits,
     };
     use r1cs_std::{
         boolean::Boolean, instantiated::bls12_377::PairingGadget as Bls12_377PairingGadget,
@@ -561,7 +561,7 @@ mod test {
             {
                 let mut cs = cs.ns(|| "Allocate Input");
                 for (i, input) in inputs.iter().enumerate() {
-                    let mut input_bits = BitIterator::new(input.into_repr()).collect::<Vec<_>>();
+                    let mut input_bits = input.write_bits();
                     // Input must be in little-endian, but BitIterator outputs in big-endian.
                     input_bits.reverse();
 

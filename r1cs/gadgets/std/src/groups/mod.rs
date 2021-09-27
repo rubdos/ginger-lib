@@ -180,8 +180,10 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 /// with scalar field `ScalarF`. 
 /// Implements the non-native big integer addition of the scalar, given as 
 /// little endian vector of Boolean gadgets `bits`, and the modulus of the 
-/// scalar field. The result is a vector of Booleans always one bit longer
-/// than the scalar field modulus, possibly having a leading zero.
+/// scalar field. The result is a vector of Booleans in little-endian
+/// always one bit longer than the scalar field modulus, possibly having
+/// a leading zero.
+/// This costs roughly ( n + 1 ) * num_limbs constraints
 pub(crate) fn scalar_bits_to_constant_length<
     'a,
     ConstraintF: PrimeField,
@@ -195,7 +197,10 @@ pub(crate) fn scalar_bits_to_constant_length<
     use algebra::{BigInteger, FpParameters};
     use crate::fields::fp::FpGadget;
 
-    assert!(bits.len() <= ScalarF::size_in_bits());
+    assert!(
+        bits.len() <= ScalarF::size_in_bits(),
+        "Input bits size: {}, max allowed size: {}", bits.len(), ScalarF::size_in_bits()
+    );
 
     // bits per limb must not exceed the CAPACITY minus one bit, which is 
     // reserved for the addition.
@@ -301,6 +306,8 @@ pub(crate) fn scalar_bits_to_constant_length<
     
     // The last carry is part of the result.
     sum_limbs_bits.push(carry_bit);
+
+    assert_eq!(sum_limbs_bits.len(), ScalarF::size_in_bits() + 1);
     Ok(sum_limbs_bits)
 }
 
@@ -368,10 +375,12 @@ pub(crate) mod test {
             .to_bytes_strict(&mut cs.ns(|| "b ToBytes Strict"))
             .unwrap();
         assert!(cs.is_satisfied());
+
+        scalar_bits_to_constant_length_test::<<ConstraintF as Field>::BasePrimeField, G>();
     }
 
     #[allow(dead_code)]
-    pub(crate) fn group_test_with_unsafe_add<
+    pub(crate) fn group_test_with_incomplete_add<
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
@@ -427,6 +436,8 @@ pub(crate) mod test {
             .to_bytes_strict(&mut cs.ns(|| "b ToBytes Strict"))
             .unwrap();
         assert!(cs.is_satisfied());
+
+        scalar_bits_to_constant_length_test::<<ConstraintF as Field>::BasePrimeField, G>();
     }
 
     /// Tests the 'constant' length transformation of `scalar_bits_to_constant_length` against
@@ -494,10 +505,6 @@ pub(crate) mod test {
         GG: GroupGadget<G, ConstraintF, Value = G>,
     >()
     {
-        scalar_bits_to_constant_length_test::<<ConstraintF as Field>::BasePrimeField, G>();
-
-        /*use crate::algebra::ToBits;
-
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<ConstraintF>::new();
             let rng = &mut thread_rng();
@@ -549,7 +556,11 @@ pub(crate) mod test {
                 .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb).unwrap()
                 .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
 
+            // Test zero case
+            let zero = GG::zero(cs.ns(|| "alloc zero")).unwrap();
+            let zero_times_a = zero.mul_bits(cs.ns(|| "0 ^ a"), a_bits.iter()).unwrap();
+            assert_eq!(zero_times_a, zero);
             assert!(cs.is_satisfied());
-        }*/
+        }
     }
 }

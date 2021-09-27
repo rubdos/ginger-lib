@@ -242,11 +242,36 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
 
-        // TODO: we must assert that bits.length() <= ScalarField::MODULUS.length(), 
-        // otherwise the algorithm is not secure.
-        let bits = bits.cloned().collect::<Vec<Boolean>>();
+        assert!(P::ScalarField::size_in_bits() >= 3);
 
-        // Select a random T if self is infinity
+        let double_and_add_step =
+            |mut cs: r1cs_core::Namespace<_, _>, bit: &Boolean, acc: &mut Self, t: &Self, safe_arithmetics: bool| -> Result<(), SynthesisError>
+                {
+                    // Q := k[i+1] ? T : −T
+                    let neg_y = t.y.negate(cs.ns(|| "neg y"))?;
+                    let selected_y = NonNativeFieldGadget::conditionally_select(
+                        cs.ns(|| "select y or -y"),
+                        bit,
+                        &t.y,
+                        &neg_y
+                    )?;
+                    let q = Self::new(t.x.clone(), selected_y, t.infinity);
+
+                    // Acc := (Acc + Q) + Acc using double_and_add_internal
+                    *acc = acc.double_and_add_internal(cs.ns(|| "double and add"), &q, safe_arithmetics)?;
+
+                    Ok(())
+                };
+
+        let mut bits = bits.cloned().collect::<Vec<Boolean>>();
+        // If n == P::ScalarField::MODULUS_BITS then the result of this call
+        // is n + 1 bits long
+        bits = crate::groups::scalar_bits_to_constant_length::<_, P::ScalarField, _>(
+            cs.ns(|| "scalar bits to constant length"),
+            bits
+        )?;
+
+        // Select any random T if self is infinity
         let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
             let mut rng = OsRng::default();
             Ok(loop {
@@ -262,46 +287,78 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         )?;
 
         // Acc := [3] T = [2]*T + T
-        let mut acc = {
+        let init = {
             let mut t_copy = t.clone();
             t_copy.double_in_place(cs.ns(|| "[2] * T"))?;
             t_copy.add_unsafe(cs.ns(|| "[3] * T"), &t)
         }?;
 
-        // Since len(bits) <= len(scalar field modulus), no arithemetic 
-        // edge case is met througout this loop. (For T = 0 we don't care.)    
+        /* Separate treatment of the two leading bits
+        */
+
+        // This processes the most significant bit for the case
+        // bits[n]=1.
+        // We can use unsafe add here as no exceptions
+        // can be hit (assuming that T is on the curve)
+        let mut acc = init.clone();
+        let leading_bit = bits.pop().unwrap();
+
+        // Processing bits[n-1] for the case bits[n] = 1
+        double_and_add_step(
+            cs.ns(|| "Processing bits[n-1] for the case bits[n] == 1"),
+            &bits.pop().unwrap(),
+            &mut acc,
+            &t,
+            false
+        )?;
+
+        // If leading_bit is one we reset acc to the case bits[n-1]==1
+        acc = Self::conditionally_select(
+            cs.ns(|| "reset acc if leading_bit == 1"),
+            &leading_bit,
+            &acc,
+            &init
+        )?;
+
+        /* The next bits bits[n-2],...,bits[2] (i.e. except the least significant)
+        are treated as in Hopwoods' algorithm.
+        */
+
+        // No exceptions can be hit here either, so we are allowed to use unsafe add.
+        // (For T = 0 we don't care.)
         for (i, bit) in bits.iter().enumerate()
-            // Skip the LSB (we handle it after the loop)
-            .skip(1)
+            // Skip the two least significant bits (we handle them after the loop)
+            .skip(2)
             // Scan over the scalar bits in big-endian order
             .rev()
-            // Skip the MSB (already accumulated)
-            .skip(1)
             {
-                let mut cs = cs.ns(|| format!("bit {}", i));
-
-                // Q := k[i+1] ? T : −T
-                let neg_y = t.y.negate(cs.ns(|| "neg y"))?;
-                let selected_y = NonNativeFieldGadget::conditionally_select(
-                    cs.ns(|| "select y or -y"),
+                double_and_add_step(
+                    cs.ns(|| format!("bit {}", i + 2)),
                     bit,
-                    &t.y,
-                    &neg_y
+                    &mut acc,
+                    &t,
+                    false
                 )?;
-                let q = Self::new(t.x.clone(), selected_y, t.infinity);
-
-                // Acc := (Acc + Q) + Acc using double_and_add_internal
-                acc = acc.double_and_add_unsafe(cs.ns(|| "double and add"), &q)?;
             }
 
+        /*
+         * The last two bits are treated using secure arithmetics
+         */
+
+        double_and_add_step(
+            cs.ns(|| "bit 1"),
+            &bits[1],
+            &mut acc,
+            &t,
+            true
+        )?;
+
         // return (k[0] = 0) ? (Acc - T) : Acc
-        // Note that in this step both Acc and T are non-trivial and Acc != T, 
-        // but it might happen that Acc = -T in the single exceptional case of 
-        // exponent == scalar field modulus. 
-        // TODO: Let us think about whether asserting bits < scalar field modulus
-        // is appropriate. In this case, add_unsafe is secure.
+        // Note that in this step both Acc and T are non-trivial and Acc != T,
+        // but it might happen that Acc = -T in the single exceptional case of
+        // exponent == scalar field modulus.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
-        let acc_minus_t = acc.add_unsafe(
+        let acc_minus_t = acc.add(
             cs.ns(|| "Acc - T"),
             &neg_t
         )?;
@@ -325,6 +382,9 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
     ///This will take [(4 + 1) * ceil(len(bits)/2)] constraints to put the x lookup constraint
     ///into the addition formula. See coda/src/lib/snarky_curves/snarky_curves.ml "scale_known"
+    // TODO: let us redesign this algorithm with no random shift and explicit use of complete
+    //      arithmetics of the "last" steps of the loop. Such redesign allows even the
+    //      usage of unsafe add for large parts of the loop.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
@@ -334,10 +394,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
         // Avoid exceptional cases when base = infinity
         if base.is_zero() {
-            // TODO: If returning error is too much we might as well hardcode base,
-            //       retrieve the infinity flag and return 0 or the mul result at
-            //       the end
-            return Err(SynthesisError::Other("Base cannot be infinity !".to_owned()));
+            return Err(SynthesisError::Other("Base must not be infinity !".to_owned()));
         }
         let mut to_sub = SWProjective::<P>::zero();
 
@@ -385,7 +442,8 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
             //Perform addition
             let adder: Self = Self::new(x, y, Boolean::constant(false));
-            //TODO: Can we use add unsafe ?
+            // As long as we keep with the random shift strategy we cannot
+            // use unsafe add here.
             acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
             t = t.double().double();
             to_sub += &sigma;
@@ -610,7 +668,7 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
         let lambda = if safe {
             // Check that A.x - B.x != 0, which can be done by
             // enforcing I * (B.x - A.x) = 1
-            // This is done below when we calculate inv (by F::inverse)
+            // This is done below when we calculate inv (by NonNativeFieldGadget::inverse)
             let inv = x2_minus_x1.inverse(cs.ns(|| "compute inv"))?;
             NonNativeFieldGadget::alloc(cs.ns(|| "lambda"), || {
                 Ok(y2_minus_y1.get_value().get()? * &inv.get_value().get()?)
@@ -667,8 +725,8 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
     #[inline]
     /// Compute 2 * self + other as (self + other) + self: this requires less constraints
     /// than computing self.double().add(other).
-    /// Neither `self` nor `other` can be the neutral element, and other != ±self;
-    /// If `safe` is set, enforce in the circuit exceptional cases not occurring.
+    /// Incomplete add: neither `self` nor `other` can be the neutral element, and other != ±self;
+    /// If `safe` is set, enforce in the circuit that exceptional cases not occurring.
     fn double_and_add_internal<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -677,7 +735,7 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
     ) -> Result<Self, SynthesisError>
     {
         // The double-and-add sum P_4 = P_3 + P_1, where P_3 = P_1 + P_2,
-        // under the above presumptions on P_1 and P_2 is enforced by just 5 
+        // under the above presumptions on P_1 and P_2 is enforced by just 5
         // constraints
         //      1. (x2 - x1) * lambda_1 = y2 - y1;
         //      2. lambda_1^2 = x1 +  x2 + x3;
@@ -685,10 +743,10 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
         //      4. lambda_2^2 =   x1 + x3 + x4;
         //      5. lambda_2 * (x1 - x4) = y_1 + y_4;
         // Note that 3. is the result of adding the two equations
-        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3 
+        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3
         //      3b. (x_1 - x_3) * lambda_2 = y_1 - y_3.
-        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely 
-        // determines lambda_1, and thus x3 is determined by 2. 
+        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely
+        // determines lambda_1, and thus x3 is determined by 2.
         // Again, since x_1-x_3 is non-zero equation 3. uniquely determines lambda_2
         // and hence being of the same unique value as enforced by 3a. and 3b.
         let x2_minus_x1 = other.x.sub(cs.ns(|| "x2 - x1"), &self.x)?;
@@ -696,8 +754,8 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
 
         // Allocate lambda_1
         let lambda_1 = if safe {
-            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget 
-            let inv_1 = x2_minus_x1.inverse(cs.ns(|| "enforce inv"))?;
+            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget
+            let inv_1 = x2_minus_x1.inverse(cs.ns(|| "enforce inv 1"))?;
             NonNativeFieldGadget::alloc(cs.ns(|| "lambda_1"), || {
                 Ok(y2_minus_y1.get_value().get()? * &inv_1.get_value().get()?)
             })
@@ -709,7 +767,7 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
         }?;
 
         // Constraint 1.
-        lambda_1.mul_equals(cs.ns(|| "check lambda"), &x2_minus_x1, &y2_minus_y1)?;
+        lambda_1.mul_equals(cs.ns(|| "check lambda_1"), &x2_minus_x1, &y2_minus_y1)?;
 
         let x_3 = NonNativeFieldGadget::alloc(&mut cs.ns(|| "x_3"), || {
             let lambda_1_val = lambda_1.get_value().get()?;
@@ -725,30 +783,40 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
         lambda_1.mul_equals(cs.ns(|| "check x3"), &lambda_1, &x3_plus_x1_plus_x2)?;
 
         // Allocate lambda_2.
-        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?; 
+        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?;
         let two_y1 = self.y.double(cs.ns(|| "2y1"))?;
 
-        let lambda_2 = NonNativeFieldGadget::alloc(
-            cs.ns(|| "lambda_2"),
-            || {
-                let lambda_val = lambda_1.get_value().get()?;
-                let two_y1_val = two_y1.get_value().get()?;
+        let lambda_2 = if safe {
+            // Set the extra constraint for x_1 - x_3 != 0
+            let inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv 2"))?;
+            NonNativeFieldGadget::alloc(
+                cs.ns(|| "lambda_2"),
+                || {
+                    let lambda_val = lambda_1.get_value().get()?;
+                    let two_y1_val = two_y1.get_value().get()?;
 
-                let x1_minus_x3_inv = (x1_minus_x3.get_value().get()?).inverse().get()?;
-                let two_y1_div_x1_minus_x3 = two_y1_val * &x1_minus_x3_inv;
-                Ok(two_y1_div_x1_minus_x3 - &lambda_val)
-            }
-        )?;
+                    let two_y1_div_x1_minus_x3 = two_y1_val * &inv_2.get_value().get()?;
+                    Ok(two_y1_div_x1_minus_x3 - &lambda_val)
+                }
+            )
+        } else {
+            NonNativeFieldGadget::alloc(
+                cs.ns(|| "lambda_2"),
+                || {
+                    let lambda_val = lambda_1.get_value().get()?;
+                    let two_y1_val = two_y1.get_value().get()?;
 
-        if safe {
-            // Set the extra constraint for x_1 - x_3 != 0 
-            let _inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv"))?;
-         };
+                    let x1_minus_x3_inv = (x1_minus_x3.get_value().get()?).inverse().get()?;
+                    let two_y1_div_x1_minus_x3 = two_y1_val * &x1_minus_x3_inv;
+                    Ok(two_y1_div_x1_minus_x3 - &lambda_val)
+                }
+            )
+        }?;
 
         // Constraint 3.
-        let lambda_2_plus_lambda = lambda_2.add(cs.ns(|| "lambda_2 + lambda_1"), &lambda_1)?;
+        let lambda_2_plus_lambda_1 = lambda_2.add(cs.ns(|| "lambda_2 + lambda_1"), &lambda_1)?;
 
-        lambda_2_plus_lambda.mul_equals(
+        lambda_2_plus_lambda_1.mul_equals(
             cs.ns(|| "(lambda_2 + lambda) * (x1 - x3) = 2y1"),
             &x1_minus_x3,
             &two_y1
@@ -837,8 +905,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             <Boolean as CondSelectGadget<ConstraintF>>::cost()
     }
 }
-
-
 
 impl<P, ConstraintF, SimulationF> ConstantGadget<SWProjective<P>, ConstraintF>
 for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>

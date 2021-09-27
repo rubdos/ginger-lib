@@ -569,7 +569,7 @@ mod test {
 
     use super::*;
     use algebra::{
-        BitIterator, PrimeField, UniformRand
+        UniformRand, ToBits,
     };
     use r1cs_std::{
         boolean::Boolean, test_constraint_system::TestConstraintSystem
@@ -662,7 +662,7 @@ mod test {
             {
                 let mut cs = cs.ns(|| "Allocate Input");
                 for (i, input) in inputs.into_iter().enumerate() {
-                    let mut input_bits = BitIterator::new(input.into_repr()).collect::<Vec<_>>();
+                    let mut input_bits = input.write_bits();
                     // Input must be in little-endian, but BitIterator outputs in big-endian.
                     input_bits.reverse();
 

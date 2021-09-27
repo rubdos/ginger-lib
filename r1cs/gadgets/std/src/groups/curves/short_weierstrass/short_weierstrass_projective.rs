@@ -5,6 +5,7 @@ use algebra::{
 use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
 use rand::rngs::OsRng;
+
 use crate::{prelude::*, Assignment};
 
 #[derive(Derivative)]
@@ -12,7 +13,7 @@ use crate::{prelude::*, Assignment};
 #[must_use]
 pub struct AffineGadget<
     P: SWModelParameters,
-    ConstraintF: Field,
+    ConstraintF: PrimeField,
     F: FieldGadget<P::BaseField, ConstraintF>,
 > {
     pub x:   F,
@@ -25,7 +26,7 @@ pub struct AffineGadget<
 impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 
 {
@@ -123,9 +124,9 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-      /// Compute 2 * self + other as (self + other) + self: this requires less constraints
+    /// Compute 2 * self + other as (self + other) + self: this requires less constraints
     /// than computing self.double().add(other).
-    /// Neither `self` nor `other` can be the neutral element, and other != ±self;
+    /// Incomplete add: neither `self` nor `other` can be the neutral element, and other != ±self;
     /// If `safe` is set, enforce in the circuit that exceptional cases not occurring.
     fn double_and_add_internal<CS: ConstraintSystem<ConstraintF>>(
         &self,
@@ -135,7 +136,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     ) -> Result<Self, SynthesisError>
     {
         // The double-and-add sum P_4 = P_3 + P_1, where P_3 = P_1 + P_2,
-        // under the above presumptions on P_1 and P_2 is enforced by just 5 
+        // under the above presumptions on P_1 and P_2 is enforced by just 5
         // constraints
         //      1. (x2 - x1) * lambda_1 = y2 - y1;
         //      2. lambda_1^2 = x1 +  x2 + x3;
@@ -143,10 +144,10 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         //      4. lambda_2^2 =   x1 + x3 + x4;
         //      5. lambda_2 * (x1 - x4) = y_1 + y_4;
         // Note that 3. is the result of adding the two equations
-        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3 
+        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3
         //      3b. (x_1 - x_3) * lambda_2 = y_1 - y_3.
-        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely 
-        // determines lambda_1, and thus x3 is determined by 2. 
+        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely
+        // determines lambda_1, and thus x3 is determined by 2.
         // Again, since x_1-x_3 is non-zero equation 3. uniquely determines lambda_2
         // and hence being of the same unique value as enforced by 3a. and 3b.
         let x2_minus_x1 = other.x.sub(cs.ns(|| "x2 - x1"), &self.x)?;
@@ -155,8 +156,8 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
 
         // Allocate lambda_1
         let lambda_1 = if safe {
-            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget 
-            let inv_1 = x2_minus_x1.inverse(cs.ns(|| "enforce inv"))?;
+            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget
+            let inv_1 = x2_minus_x1.inverse(cs.ns(|| "enforce inv 1"))?;
             F::alloc(cs.ns(|| "lambda_1"), || {
                 Ok(y2_minus_y1.get_value().get()? * &inv_1.get_value().get()?)
             })
@@ -182,27 +183,37 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
             .add(cs.ns(|| "x3 + x1"), &self.x)?
             .add(cs.ns(|| "x3 + x1 + x2"), &other.x)?;
         lambda_1.mul_equals(cs.ns(|| "check x3"), &lambda_1, &x3_plus_x1_plus_x2)?;
-        
+
         // Allocate lambda_2.
-        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?; 
+        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?;
         let two_y1 = self.y.double(cs.ns(|| "2y1"))?;
 
-        let lambda_2 =  F::alloc(
-            cs.ns(|| "lambda_2"),
-            || {
-                let lambda_val = lambda_1.get_value().get()?;
-                let two_y1_val = two_y1.get_value().get()?;
+        let lambda_2 = if safe {
+            // Set the extra constraint for x_1 - x_3 != 0
+            let inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv 2"))?;
+            F::alloc(
+                cs.ns(|| "lambda_2"),
+                || {
+                    let lambda_val = lambda_1.get_value().get()?;
+                    let two_y1_val = two_y1.get_value().get()?;
 
-                let x1_minus_x3_inv = (x1_minus_x3.get_value().get()?).inverse().get()?;
-                let two_y1_div_x1_minus_x3 = two_y1_val * &x1_minus_x3_inv;
-                Ok(two_y1_div_x1_minus_x3 - &lambda_val)
-            }
-        )?;
+                    let two_y1_div_x1_minus_x3 = two_y1_val * &inv_2.get_value().get()?;
+                    Ok(two_y1_div_x1_minus_x3 - &lambda_val)
+                }
+            )
+        } else {
+            F::alloc(
+                cs.ns(|| "lambda_2"),
+                || {
+                    let lambda_val = lambda_1.get_value().get()?;
+                    let two_y1_val = two_y1.get_value().get()?;
 
-        if safe {
-           // Set the extra constraint for x_1 - x_3 != 0 
-           let _inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv"))?;
-        };
+                    let x1_minus_x3_inv = (x1_minus_x3.get_value().get()?).inverse().get()?;
+                    let two_y1_div_x1_minus_x3 = two_y1_val * &x1_minus_x3_inv;
+                    Ok(two_y1_div_x1_minus_x3 - &lambda_val)
+                }
+            )
+        }?;
 
         // Constraint 3.
         let lambda_2_plus_lambda_1 = lambda_2.add(cs.ns(|| "lambda_2 + lambda_1"), &lambda_1)?;
@@ -272,7 +283,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> PartialEq for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -283,7 +294,7 @@ impl<P, ConstraintF, F> PartialEq for AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> Eq for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
 }
@@ -292,7 +303,7 @@ impl<P, ConstraintF, F> GroupGadget<SWProjective<P>, ConstraintF>
 for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     type Value = SWProjective<P>;
@@ -329,7 +340,7 @@ for AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-    /// Incomplete addition: neither `self` nor `other` can be the neutral
+    /// Incomplete, safe, addition: neither `self` nor `other` can be the neutral
     /// element.
     fn add<CS: ConstraintSystem<ConstraintF>>(
         &self,
@@ -490,16 +501,16 @@ for AffineGadget<P, ConstraintF, F>
         ))
     }
 
-  /// Hopwood's optimized fixed-length variable base exponentiation.
-    /// The scalar bits (in little endian representation) must be free of leading zeroes, 
+    /// Hopwood's optimized fixed-length variable base exponentiation.
+    /// The scalar bits (in little endian representation) must be free of leading zeroes,
     /// and at most as long as the scalar field modulus.
-    /// 
+    ///
     /// The algorithm uses the same symmetrization technique as the signed lookup-table fixed
-    /// base scalar multiplication, and relies on the optimized double_and_add_internal in 
+    /// base scalar multiplication, and relies on the optimized double_and_add_internal in
     /// non-safe setting, as affine arithmetic exceptions are excluded from the presumptions on
     /// the scalar bits (and an extra treatment of &self being trivial).
     ///
-    /// Given an exponent of length n+1, scalar = 2^n + k with len(k) <= n, compute  
+    /// Given an exponent of length n+1, scalar = 2^n + k with len(k) <= n, compute
     /// [bits] self = [2^n + k] T
     ///
     /// Acc := [3] T
@@ -508,7 +519,7 @@ for AffineGadget<P, ConstraintF, F>
     ///     Acc := (Acc + Q) + Acc
     /// }
     /// return (k[0] = 0) ? (Acc - T) : Acc
-    /// 
+    ///
     /// See https://github.com/zcash/zcash/issues/3924 for a detailed explanation.
     /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
@@ -517,9 +528,34 @@ for AffineGadget<P, ConstraintF, F>
         bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
 
-        // TODO: we must assert that bits.length() <= ScalarField::MODULUS.length(), 
-        // otherwise the algorithm is not secure.
-        let bits = bits.cloned().collect::<Vec<Boolean>>();
+        assert!(P::ScalarField::size_in_bits() >= 3);
+
+        let double_and_add_step =
+            |mut cs: r1cs_core::Namespace<_, _>, bit: &Boolean, acc: &mut Self, t: &Self, safe_arithmetics: bool| -> Result<(), SynthesisError>
+                {
+                    // Q := k[i+1] ? T : −T
+                    let neg_y = t.y.negate(cs.ns(|| "neg y"))?;
+                    let selected_y = F::conditionally_select(
+                        cs.ns(|| "select y or -y"),
+                        bit,
+                        &t.y,
+                        &neg_y
+                    )?;
+                    let q = Self::new(t.x.clone(), selected_y, t.infinity);
+
+                    // Acc := (Acc + Q) + Acc using double_and_add_internal
+                    *acc = acc.double_and_add_internal(cs.ns(|| "double and add"), &q, safe_arithmetics)?;
+
+                    Ok(())
+                };
+
+        let mut bits = bits.cloned().collect::<Vec<Boolean>>();
+        // If n == P::ScalarField::MODULUS_BITS then the result of this call
+        // is n + 1 bits long
+        bits = crate::groups::scalar_bits_to_constant_length::<_, P::ScalarField, _>(
+            cs.ns(|| "scalar bits to constant length"),
+            bits
+        )?;
 
         // Select any random T if self is infinity
         let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
@@ -537,44 +573,76 @@ for AffineGadget<P, ConstraintF, F>
         )?;
 
         // Acc := [3] T = [2]*T + T
-        let mut acc = {
+        let init = {
             let mut t_copy = t.clone();
             t_copy.double_in_place(cs.ns(|| "[2] * T"))?;
             t_copy.add_unsafe(cs.ns(|| "[3] * T"), &t)
         }?;
 
-        // Since len(bits) <= len(scalar field modulus), no arithemetic 
-        // edge case is met througout this loop. (For T = 0 we don't care.)    
+        /* Separate treatment of the two leading bits
+        */
+
+        // This processes the most significant bit for the case
+        // bits[n]=1.
+        // We can use unsafe add here as no exceptions
+        // can be hit (assuming that T is on the curve)
+        let mut acc = init.clone();
+        let leading_bit = bits.pop().unwrap();
+
+        // Processing bits[n-1] for the case bits[n] = 1
+        double_and_add_step(
+            cs.ns(|| "Processing bits[n-1] for the case bits[n] == 1"),
+            &bits.pop().unwrap(),
+            &mut acc,
+            &t,
+            false
+        )?;
+
+        // If leading_bit is one we reset acc to the case bits[n-1]==1
+        acc = Self::conditionally_select(
+            cs.ns(|| "reset acc if leading_bit == 1"),
+            &leading_bit,
+            &acc,
+            &init
+        )?;
+
+        /* The next bits bits[n-2],...,bits[2] (i.e. except the least significant)
+        are treated as in Hopwoods' algorithm.
+        */
+
+        // No exceptions can be hit here either, so we are allowed to use unsafe add.
+        // (For T = 0 we don't care.)
         for (i, bit) in bits.iter().enumerate()
-            // Skip the LSB (we handle it after the loop)
-            .skip(1)
+            // Skip the two least significant bits (we handle them after the loop)
+            .skip(2)
             // Scan over the scalar bits in big-endian order
             .rev()
-            // Skip the MSB (already taken into account in the init of Acc)
-            .skip(1)
-        {
-            let mut cs = cs.ns(|| format!("bit {}", i));
+            {
+                double_and_add_step(
+                    cs.ns(|| format!("bit {}", i + 2)),
+                    bit,
+                    &mut acc,
+                    &t,
+                    false
+                )?;
+            }
 
-            // Q := k[i+1] ? T : −T
-            let neg_y = t.y.negate(cs.ns(|| "neg y"))?;
-            let selected_y = F::conditionally_select(
-                cs.ns(|| "select y or -y"),
-                bit,
-                &t.y,
-                &neg_y
-            )?;
-            let q = Self::new(t.x.clone(), selected_y, t.infinity);
+        /*
+         * The last two bits are treated using secure arithmetics
+         */
 
-            // Acc := (Acc + Q) + Acc using double_and_add_internal
-            acc = acc.double_and_add_unsafe(cs.ns(|| "double and add"), &q)?;
-        }
+        double_and_add_step(
+            cs.ns(|| "bit 1"),
+            &bits[1],
+            &mut acc,
+            &t,
+            true
+        )?;
 
         // return (k[0] = 0) ? (Acc - T) : Acc
-        // Note that in this step both Acc and T are non-trivial and Acc != T, 
-        // but it might happen that Acc = -T in the single exceptional case of 
-        // exponent == scalar field modulus. 
-        // TODO: Let us think about whether asserting bits < scalar field modulus
-        // is appropriate. In this case, add_unsafe is secure.
+        // Note that in this step both Acc and T are non-trivial and Acc != T,
+        // but it might happen that Acc = -T in the single exceptional case of
+        // exponent == scalar field modulus.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
         let acc_minus_t = acc.add(
             cs.ns(|| "Acc - T"),
@@ -600,6 +668,9 @@ for AffineGadget<P, ConstraintF, F>
 
     ///This will take [(4 + 1) * ceil(len(bits)/2)] constraints to put the x lookup constraint
     ///into the addition formula. See coda/src/lib/snarky_curves/snarky_curves.ml "scale_known"
+    // TODO: let us redesign this algorithm with no random shift and explicit use of complete
+    //      arithmetics of the "last" steps of the loop. Such redesign allows even the
+    //      usage of unsafe add for large parts of the loop.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
@@ -609,10 +680,7 @@ for AffineGadget<P, ConstraintF, F>
 
         // Avoid exceptional cases when base = infinity
         if base.is_zero() {
-            // TODO: If returning error is too much we might as well hardcode base,
-            //       retrieve the infinity flag and return 0 or the mul result at
-            //       the end
-            return Err(SynthesisError::Other("Base cannot be infinity !".to_owned()));
+            return Err(SynthesisError::Other("Base must not be infinity !".to_owned()));
         }
         let mut to_sub = SWProjective::<P>::zero();
 
@@ -660,7 +728,8 @@ for AffineGadget<P, ConstraintF, F>
 
             //Perform addition
             let adder: Self = Self::new(x, y, Boolean::constant(false));
-            //TODO: Can we use add unsafe ?
+            // As long as we keep with the random shift strategy we cannot
+            // use unsafe add here.
             acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
             t = t.double().double();
             to_sub += &sigma;
@@ -689,7 +758,6 @@ for AffineGadget<P, ConstraintF, F>
         const CHUNK_SIZE: usize = 3;
         let mut sw_result: Option<AffineGadget<P, ConstraintF, F>> = None;
         let mut result: Option<AffineGadget<P, ConstraintF, F>> = None;
-
         let mut process_segment_result =
             |mut cs: r1cs_core::Namespace<_, _>,
              result: &AffineGadget<P, ConstraintF, F>|
@@ -706,10 +774,8 @@ for AffineGadget<P, ConstraintF, F>
                         )?;
                     },
                 }
-
                 Ok(())
             };
-
         // Compute ∏(h_i^{m_i}) for all i.
         for (segment_i, (segment_bits_chunks, segment_powers)) in
             scalars.into_iter().zip(bases.iter()).enumerate()
@@ -727,46 +793,38 @@ for AffineGadget<P, ConstraintF, F>
                             coords.push(acc_power);
                             acc_power = acc_power + base_power;
                         }
-
                         let bits = bits.borrow().to_bits(
                             &mut cs.ns(|| format!("Convert Scalar {}, {} to bits", segment_i, i)),
                         )?;
                         if bits.len() != CHUNK_SIZE {
                             return Err(SynthesisError::Unsatisfiable);
                         }
-
                         let coords = coords
                             .iter()
                             .map(|p| {
                                 p.into_affine()
                             })
                             .collect::<Vec<_>>();
-
                         let x_coeffs = coords.iter().map(|p| p.x).collect::<Vec<_>>();
                         let y_coeffs = coords.iter().map(|p| p.y).collect::<Vec<_>>();
-
                         let precomp = Boolean::and(
                             cs.ns(|| format!("precomp in window {}, {}", segment_i, i)),
                             &bits[0],
                             &bits[1],
                         )?;
-
                         let x = F::two_bit_lookup_lc(
                             cs.ns(|| format!("x in window {}, {}", segment_i, i)),
                             &precomp,
                             &[bits[0], bits[1]],
                             &x_coeffs
                         )?;
-
                         let y = F::three_bit_cond_neg_lookup(
                             cs.ns(|| format!("y lookup in window {}, {}", segment_i, i)),
                             &bits,
                             &precomp,
                             &y_coeffs,
                         )?;
-
                         let tmp = Self::new(x, y, Boolean::constant(false));
-
                         match result {
                             None => {
                                 result = Some(tmp);
@@ -779,7 +837,6 @@ for AffineGadget<P, ConstraintF, F>
                             },
                         }
                     }
-
                 process_segment_result(
                     cs.ns(|| format!("window {}", segment_i)),
                     &result.unwrap(),
@@ -804,7 +861,7 @@ for AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> CondSelectGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     #[inline]
@@ -830,7 +887,7 @@ impl<P, ConstraintF, F> CondSelectGadget<ConstraintF> for AffineGadget<P, Constr
 impl<P, ConstraintF, F> EqGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn is_eq<CS: ConstraintSystem<ConstraintF>>(
@@ -883,12 +940,9 @@ impl<P, ConstraintF, F> AllocGadget<SWProjective<P>, ConstraintF>
 for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    /// On curve test is performed on x and y coordinates regardless of the infinity flag.
-    /// NOTE: Depending on the curve, this might be inconsistent with our default values
-    /// for x and y if infinity is true.
     #[inline]
     fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
@@ -925,6 +979,7 @@ for AffineGadget<P, ConstraintF, F>
 
         let x2_plus_a = x2.add_constant(cs.ns(|| "x^2 + a"), &a)?;
         let y2_minus_b = y2.add_constant(cs.ns(|| "y^2 - b"), &b.neg())?;
+
         let x2_plus_a_times_x = x2_plus_a.mul(cs.ns(|| "(x^2 + a)*x"), &x)?;
 
         x2_plus_a_times_x.conditional_enforce_equal(
@@ -964,10 +1019,6 @@ for AffineGadget<P, ConstraintF, F>
         Ok(Self::new(x, y, infinity))
     }
 
-    /// On curve and group membership test is performed on x and y coordinates regardless
-    /// of the infinity flag.
-    /// NOTE: Depending on the curve, this might be inconsistent with our default values
-    /// for x and y if infinity is true.
     #[inline]
     fn alloc_checked<FN, T, CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
@@ -983,7 +1034,6 @@ for AffineGadget<P, ConstraintF, F>
                 // If we multiply by r, we actually multiply by r - 2.
                 let r_minus_1 = (-P::ScalarField::one()).into_repr();
                 let r_weight = BitIterator::new(&r_minus_1).filter(|b| *b).count();
-
                 // We pick the most efficient method of performing the prime order check:
                 // If the cofactor has lower hamming weight than the scalar field's modulus,
                 // we first multiply by the inverse of the cofactor, and then, after allocating,
@@ -1004,14 +1054,12 @@ for AffineGadget<P, ConstraintF, F>
                     let mut result = Self::zero(cs.ns(|| "result"))?;
                     for (i, b) in BitIterator::new(P::COFACTOR).enumerate() {
                         let mut cs = cs.ns(|| format!("Iteration {}", i));
-
                         let old_seen_one = seen_one;
                         if seen_one {
                             result.double_in_place(cs.ns(|| "Double"))?;
                         } else {
                             seen_one = b;
                         }
-
                         if b {
                             result = if old_seen_one {
                                 result.add(cs.ns(|| "Add"), &ge)?
@@ -1028,14 +1076,12 @@ for AffineGadget<P, ConstraintF, F>
                     // Returns bits in big-endian order
                     for (i, b) in BitIterator::new(r_minus_1).enumerate() {
                         let mut cs = cs.ns(|| format!("Iteration {}", i));
-
                         let old_seen_one = seen_one;
                         if seen_one {
                             result.double_in_place(cs.ns(|| "Double"))?;
                         } else {
                             seen_one = b;
                         }
-
                         if b {
                             result = if old_seen_one {
                                 result.add(cs.ns(|| "Add"), &ge)?
@@ -1049,7 +1095,6 @@ for AffineGadget<P, ConstraintF, F>
                     Ok(ge)
                 }
             };
-
         let ge = alloc_and_prime_order_check(
             cs.ns(|| "alloc and prime order check"),
             value_gen
@@ -1109,7 +1154,7 @@ for AffineGadget<P, ConstraintF, F>
 impl<P, ConstraintF, F> ConstantGadget<SWProjective<P>, ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn from_value<CS: ConstraintSystem<ConstraintF>>(
@@ -1141,7 +1186,7 @@ impl<P, ConstraintF, F> ConstantGadget<SWProjective<P>, ConstraintF> for AffineG
 impl<P, ConstraintF, F> ToBitsGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn to_bits<CS: ConstraintSystem<ConstraintF>>(
@@ -1175,7 +1220,7 @@ impl<P, ConstraintF, F> ToBitsGadget<ConstraintF> for AffineGadget<P, Constraint
 impl<P, ConstraintF, F> ToBytesGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
-        ConstraintF: Field,
+        ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
@@ -1208,7 +1253,6 @@ impl<P, ConstraintF, F> ToBytesGadget<ConstraintF> for AffineGadget<P, Constrain
     }
 }
 
-
 #[derive(Derivative)]
 #[derivative(Debug, Clone)]
 #[must_use]
@@ -1237,12 +1281,10 @@ impl<ConstraintF> CompressAffinePointGadget<ConstraintF>
 
 use crate::ToCompressedBitsGadget;
 use crate::fields::fp::FpGadget;
-
 impl<ConstraintF> ToCompressedBitsGadget<ConstraintF> for CompressAffinePointGadget<ConstraintF>
     where
         ConstraintF: PrimeField,
 {
-
     /// Enforce compression of a point through serialization of the x coordinate and storing
     /// a sign bit for the y coordinate.
     fn to_compressed<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS)
@@ -1250,10 +1292,8 @@ impl<ConstraintF> ToCompressedBitsGadget<ConstraintF> for CompressAffinePointGad
         //Enforce x_coordinate to bytes
         let mut compressed_bits = self.x.to_bits_strict(cs.ns(|| "x_to_bits_strict"))?;
         compressed_bits.push(self.infinity);
-
         let is_odd = self.y.is_odd(cs.ns(|| "y parity"))?;
         compressed_bits.push(is_odd);
-
         Ok(compressed_bits)
     }
 }
