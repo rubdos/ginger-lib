@@ -501,30 +501,24 @@ for AffineGadget<P, ConstraintF, F>
         ))
     }
 
-    /// Hopwood's optimized fixed-length variable base exponentiation.
-    /// The scalar bits (in little endian representation) must be free of leading zeroes,
-    /// and at most as long as the scalar field modulus.
-    ///
-    /// The algorithm uses the same symmetrization technique as the signed lookup-table fixed
-    /// base scalar multiplication, and relies on the optimized double_and_add_internal in
-    /// non-safe setting, as affine arithmetic exceptions are excluded from the presumptions on
-    /// the scalar bits (and an extra treatment of &self being trivial).
-    ///
-    /// Given an exponent of length n+1, scalar = 2^n + k with len(k) <= n, compute
-    /// [bits] self = [2^n + k] T
-    ///
-    /// Acc := [3] T
-    /// for i from n-2 down to 0 {
-    ///     Q := k[i+1] ? T : −T
-    ///     Acc := (Acc + Q) + Acc
-    /// }
-    /// return (k[0] = 0) ? (Acc - T) : Acc
-    ///
-    /// See https://github.com/zcash/zcash/issues/3924 for a detailed explanation.
-    /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762
+    /// [Hopwood]'s optimized scalar multiplication, adapted to the general case of no
+    /// leading-one assumption. This is achieved by transforming the scalar to (almost) 
+    /// constant length by adding the scalar field modulus, and applying the Hopwood algorithm
+    /// to a bit sequence of length `n+1`, where `n` is the length of the scalar field modulus.
+    /// Takes `7*n + O(1)` number of constraints instead of `6*n+O(1)`.
+    /// 
+    /// Given a little-endian sequence `bits` of at most `n` Boolean gadgets, computes 
+    /// the scalar multiple of `&self`, assuming the latter is assured to be in the prime order 
+    /// subgroup. Due to incomplete arithmetics, is not satifiable for the scalars from
+    /// {p-2, p-1, p, p+1}.
+    /// 
+    /// [Hopwood] https://github.com/zcash/zcash/issues/3924 
+    /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762.
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
+        // variable base point, must be in the prime order subgroup 
         &self,
         mut cs: CS,
+        // little endian, of length <= than the scalar field modulus.
         bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
 
@@ -532,32 +526,34 @@ for AffineGadget<P, ConstraintF, F>
 
         let double_and_add_step =
             |mut cs: r1cs_core::Namespace<_, _>, bit: &Boolean, acc: &mut Self, t: &Self, safe_arithmetics: bool| -> Result<(), SynthesisError>
-                {
-                    // Q := k[i+1] ? T : −T
-                    let neg_y = t.y.negate(cs.ns(|| "neg y"))?;
-                    let selected_y = F::conditionally_select(
-                        cs.ns(|| "select y or -y"),
-                        bit,
-                        &t.y,
-                        &neg_y
-                    )?;
-                    let q = Self::new(t.x.clone(), selected_y, t.infinity);
+        {
+            // Q := k[i+1] ? T : −T
+            let neg_y = t.y.negate(cs.ns(|| "neg y"))?;
+            let selected_y = F::conditionally_select(
+                cs.ns(|| "select y or -y"),
+                bit,
+                &t.y,
+                &neg_y
+            )?;
+            let q = Self::new(t.x.clone(), selected_y, t.infinity);
 
-                    // Acc := (Acc + Q) + Acc using double_and_add_internal
-                    *acc = acc.double_and_add_internal(cs.ns(|| "double and add"), &q, safe_arithmetics)?;
+            // Acc := (Acc + Q) + Acc using double_and_add_internal
+            *acc = acc.double_and_add_internal(cs.ns(|| "double and add"), &q, safe_arithmetics)?;
 
-                    Ok(())
-                };
+            Ok(())
+        };
 
         let mut bits = bits.cloned().collect::<Vec<Boolean>>();
-        // If n == P::ScalarField::MODULUS_BITS then the result of this call
-        // is n + 1 bits long
+        // Length normalization by adding the scalar field modulus. 
+        // The result is alway n + 1 bits long, although the leading bit might be zero.
+        // Costs ~ 1*n + O(1) many constraints.
         bits = crate::groups::scalar_bits_to_constant_length::<_, P::ScalarField, _>(
             cs.ns(|| "scalar bits to constant length"),
             bits
         )?;
-
+     
         // Select any random T if self is infinity
+        // TODO: let us overthink whether we serve trivial base points inside `mul_bits()`
         let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
             let mut rng = OsRng::default();
             Ok(loop {
@@ -579,13 +575,13 @@ for AffineGadget<P, ConstraintF, F>
             t_copy.add_unsafe(cs.ns(|| "[3] * T"), &t)
         }?;
 
-        /* Separate treatment of the two leading bits
+        /* Separate treatment of the two leading bits. 
+        Assuming that T is in the correct subgroup, no exceptions for affine arithmetic 
+        are met.
         */
 
         // This processes the most significant bit for the case
         // bits[n]=1.
-        // We can use unsafe add here as no exceptions
-        // can be hit (assuming that T is on the curve)
         let mut acc = init.clone();
         let leading_bit = bits.pop().unwrap();
 
@@ -606,7 +602,7 @@ for AffineGadget<P, ConstraintF, F>
             &init
         )?;
 
-        /* The next bits bits[n-2],...,bits[2] (i.e. except the least significant)
+        /* The next bits bits[n-2],...,bits[3] (i.e. except the three least significant)
         are treated as in Hopwoods' algorithm.
         */
 
@@ -614,22 +610,29 @@ for AffineGadget<P, ConstraintF, F>
         // (For T = 0 we don't care.)
         for (i, bit) in bits.iter().enumerate()
             // Skip the two least significant bits (we handle them after the loop)
-            .skip(2)
+            .skip(3)
             // Scan over the scalar bits in big-endian order
             .rev()
-            {
-                double_and_add_step(
-                    cs.ns(|| format!("bit {}", i + 2)),
-                    bit,
-                    &mut acc,
-                    &t,
-                    false
-                )?;
-            }
+        {
+            double_and_add_step(
+                cs.ns(|| format!("bit {}", i + 2)),
+                bit,
+                &mut acc,
+                &t,
+                false
+            )?;
+        }
 
-        /*
-         * The last two bits are treated using secure arithmetics
-         */
+        /* The last three bits are treated using secure arithmetics
+        */
+        
+        double_and_add_step(
+            cs.ns(|| "bit 2"),
+            &bits[2],
+            &mut acc,
+            &t,
+            true
+        )?;
 
         double_and_add_step(
             cs.ns(|| "bit 1"),
@@ -640,9 +643,6 @@ for AffineGadget<P, ConstraintF, F>
         )?;
 
         // return (k[0] = 0) ? (Acc - T) : Acc
-        // Note that in this step both Acc and T are non-trivial and Acc != T,
-        // but it might happen that Acc = -T in the single exceptional case of
-        // exponent == scalar field modulus.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
         let acc_minus_t = acc.add(
             cs.ns(|| "Acc - T"),

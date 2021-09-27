@@ -215,31 +215,23 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(Self::new(x_3, y_3, Boolean::Constant(false)))
     }
 
-    /// Hopwood's optimized fixed-length variable base exponentiation.
-    /// The scalar bits (in little endian representation) must be free of leading zeroes, 
-    /// and at most as long as the scalar field modulus.
+    /// [Hopwood]'s optimized scalar multiplication, adapted to the general case of no
+    /// leading-one assumption. This is achieved by transforming the scalar to (almost) 
+    /// constant length by adding the scalar field modulus, and applying the Hopwood algorithm
+    /// to a bit sequence of length `n+1`, where `n` is the length of the scalar field modulus.
     /// 
-    /// The algorithm uses the same symmetrization technique as the signed lookup-table fixed
-    /// base scalar multiplication, and relies on the optimized double_and_add_internal in 
-    /// non-safe setting, as affine arithmetic exceptions are excluded from the presumptions on
-    /// the scalar bits (and an extra treatment of &self being trivial).
-    ///
-    /// Given an exponent of length n+1, scalar = 2^n + k with len(k) <= n, compute  
-    /// [bits] self = [2^n + k] T
-    ///
-    /// Acc := [3] T
-    /// for i from n-2 down to 0 {
-    ///     Q := k[i+1] ? T : −T
-    ///     Acc := (Acc + Q) + Acc
-    /// }
-    /// return (k[0] = 0) ? (Acc - T) : Acc
+    /// Given a little-endian sequence `bits` of at most `n` Boolean gadgets, computes 
+    /// the scalar multiple of `&self`, assuming the latter is assured to be in the prime order 
+    /// subgroup. Due to incomplete arithmetics, is not satifiable for the scalars from
+    /// {p-2, p-1, p, p+1}.
     /// 
-    /// See https://github.com/zcash/zcash/issues/3924 for a detailed explanation.
-    /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762
+    /// [Hopwood] https://github.com/zcash/zcash/issues/3924 
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
+        // variable base point, must be in the prime order subgroup 
         &self,
         mut cs: CS,
-        bits: impl Iterator<Item = &'a Boolean>,
+        // little endian, of length <= than the scalar field modulus.
+        bits: impl Iterator<Item = &'a Boolean>, 
     ) -> Result<Self, SynthesisError> {
 
         assert!(P::ScalarField::size_in_bits() >= 3);
@@ -257,21 +249,23 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
                     )?;
                     let q = Self::new(t.x.clone(), selected_y, t.infinity);
 
-                    // Acc := (Acc + Q) + Acc using double_and_add_internal
+                    // Acc := (Acc + Q) + Acc using double_and_add_internal at 5 constraints 
                     *acc = acc.double_and_add_internal(cs.ns(|| "double and add"), &q, safe_arithmetics)?;
 
                     Ok(())
                 };
 
         let mut bits = bits.cloned().collect::<Vec<Boolean>>();
-        // If n == P::ScalarField::MODULUS_BITS then the result of this call
-        // is n + 1 bits long
+        // Length normalization by adding the scalar field modulus. 
+        // The result is alway n + 1 bits long, although the leading bit might be zero.
+        // Costs ~ 1*n + O(1) many constraints.
         bits = crate::groups::scalar_bits_to_constant_length::<_, P::ScalarField, _>(
             cs.ns(|| "scalar bits to constant length"),
             bits
         )?;
 
         // Select any random T if self is infinity
+        // TODO: let us overthink whether we serve trivial base points inside `mul_bits()`
         let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
             let mut rng = OsRng::default();
             Ok(loop {
@@ -293,13 +287,13 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             t_copy.add_unsafe(cs.ns(|| "[3] * T"), &t)
         }?;
 
-        /* Separate treatment of the two leading bits
+        /* Separate treatment of the two leading bits. 
+        Assuming that T is in the correct subgroup, no exceptions for affine arithmetic 
+        are met.
         */
 
         // This processes the most significant bit for the case
         // bits[n]=1.
-        // We can use unsafe add here as no exceptions
-        // can be hit (assuming that T is on the curve)
         let mut acc = init.clone();
         let leading_bit = bits.pop().unwrap();
 
@@ -320,15 +314,15 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             &init
         )?;
 
-        /* The next bits bits[n-2],...,bits[2] (i.e. except the least significant)
+        /* The next bits bits[n-2],...,bits[3] (i.e. except the three least significant)
         are treated as in Hopwoods' algorithm.
         */
 
         // No exceptions can be hit here either, so we are allowed to use unsafe add.
         // (For T = 0 we don't care.)
         for (i, bit) in bits.iter().enumerate()
-            // Skip the two least significant bits (we handle them after the loop)
-            .skip(2)
+            // Skip the three least significant bits (we handle them after the loop)
+            .skip(3)
             // Scan over the scalar bits in big-endian order
             .rev()
             {
@@ -341,9 +335,16 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
                 )?;
             }
 
-        /*
-         * The last two bits are treated using secure arithmetics
-         */
+        /* The last three bits are treated using secure arithmetics
+        */
+
+        double_and_add_step(
+            cs.ns(|| "bit 2"),
+            &bits[2],
+            &mut acc,
+            &t,
+            true
+        )?;
 
         double_and_add_step(
             cs.ns(|| "bit 1"),
@@ -354,9 +355,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         )?;
 
         // return (k[0] = 0) ? (Acc - T) : Acc
-        // Note that in this step both Acc and T are non-trivial and Acc != T,
-        // but it might happen that Acc = -T in the single exceptional case of
-        // exponent == scalar field modulus.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
         let acc_minus_t = acc.add(
             cs.ns(|| "Acc - T"),
@@ -734,8 +732,8 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
         safe: bool,
     ) -> Result<Self, SynthesisError>
     {
-        // The double-and-add sum P_4 = P_3 + P_1, where P_3 = P_1 + P_2,
-        // under the above presumptions on P_1 and P_2 is enforced by just 5
+        // Hopwood's optimized double-and-add sum P_4 = P_3 + P_1, where P_3 = P_1 + P_2.
+        // Under the above presumptions on P_1 and P_2 can be enforced by just 5
         // constraints
         //      1. (x2 - x1) * lambda_1 = y2 - y1;
         //      2. lambda_1^2 = x1 +  x2 + x3;
