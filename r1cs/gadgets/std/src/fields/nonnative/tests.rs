@@ -666,31 +666,25 @@ fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng:
             .contains("pack bits/packing bits to limb")
         );
 
-        // Note: After modifying from_bits() using the from_bits() for limb-wise packing, the
-        // following lines are commented out, as the cs.set() below fails with panicking at
-        // 'tried to set path `pack bits/packing bits to limb *` to value, but `Namespace` already exists there.' 
-        
-        /*
-            //Let's change the value of the packed variable and check that the cs is not satisfied anymore
-            
-            //Bringing back the modified bit's value to its original one
-            let prev_value = if prev_value {ConstraintF::one()} else {ConstraintF::zero()};
-            cs.set(format!("alloc val bits/value_{}/boolean", random_bit).as_ref(), prev_value);
-            assert!(cs.is_satisfied()); //Situation should be back to positive case
+        //Let's change the value of the packed variable and check that the cs is not satisfied anymore
 
-            //Modify packed value
-            use crate::fields::nonnative::params::get_params;
-            
-            let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        //Bringing back the modified bit's value to its original one
+        let prev_value = if prev_value {ConstraintF::one()} else {ConstraintF::zero()};
+        cs.set(format!("alloc val bits/value_{}/boolean", random_bit).as_ref(), prev_value);
+        assert!(cs.is_satisfied()); //Situation should be back to positive case
 
-            let random_limb = rng.gen_range(0..params.num_limbs);
-            cs.set(format!("pack bits/packing bits to limb {}", random_limb).as_ref(), ConstraintF::rand(rng));
-            assert!(!cs.is_satisfied());
-            assert_eq!(
-                format!("pack bits/packing bits to limb {}", random_limb).as_str(), 
-                cs.which_is_unsatisfied().unwrap()
-            );
-        */
+        //Modify packed value
+        use crate::fields::nonnative::params::get_params;
+
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        let random_limb = rng.gen_range(0..params.num_limbs);
+        cs.set(format!("pack bits/packing bits to limb {}/variable/alloc", random_limb).as_ref(), ConstraintF::rand(rng));
+        assert!(!cs.is_satisfied());
+        assert_eq!(
+            format!("pack bits/packing bits to limb {}/packing constraint", random_limb).as_str(),
+            cs.which_is_unsatisfied().unwrap()
+        );
     };
 
     for _ in 0..TEST_COUNT {
