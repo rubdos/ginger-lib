@@ -559,9 +559,18 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
 
         // Therefore, we convert it to bits and enforce that it is in the field
         let mut bits = Vec::<Boolean>::new();
-        for (i, limb) in self_normal.limbs.iter().enumerate() {
+
+        // Separate treatment of the first limb, as we want to return
+        // exactly SimulationF::size_in_bits() bits
+        bits.extend_from_slice(&Reducer::<SimulationF, ConstraintF>::limb_to_bits(
+            cs.ns(|| "limb 0 to bits"),
+            &self_normal.limbs[0],
+            SimulationF::size_in_bits() % params.bits_per_limb,
+        )?);
+
+        for (i, limb) in self_normal.limbs.iter().skip(1).enumerate() {
             bits.extend_from_slice(&Reducer::<SimulationF, ConstraintF>::limb_to_bits(
-                cs.ns(|| format!("limb {} to bits", i)),
+                cs.ns(|| format!("limb {} to bits", i + 1)),
                 &limb,
                 params.bits_per_limb,
             )?);
