@@ -470,6 +470,7 @@ mod test {
     };
     use super::*;
     use rand::{thread_rng, Rng};
+    use serial_test::serial;
 
     type TestProofSystem = Gm17<Bls12_377, Bench<Fr>, Fr>;
     type TestVerifierGadget = Gm17VerifierGadget<Bls12_377, Fq, Bls12_377PairingGadget>;
@@ -522,6 +523,7 @@ mod test {
         }
     }
 
+    #[serial]
     #[test]
     fn gm17_verifier_test() {
         let num_inputs = 2;

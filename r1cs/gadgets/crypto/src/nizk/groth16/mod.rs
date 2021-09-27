@@ -575,6 +575,7 @@ mod test {
         boolean::Boolean, test_constraint_system::TestConstraintSystem
     };
     use rand::thread_rng;
+    use serial_test::serial;
 
 
     struct Bench<F: Field> {
@@ -699,6 +700,7 @@ mod test {
         }
     }
 
+    #[serial]
     #[test]
     fn bls12_377_groth16_verifier_test() {
         use algebra::curves::bls12_377::Bls12_377;
@@ -707,6 +709,7 @@ mod test {
         groth16_verifier_test::<Bls12_377, PairingGadget>();
     }
 
+    #[serial]
     #[test]
     fn mnt4_753_groth16_verifier_test() {
         use algebra::curves::mnt4753::MNT4;
@@ -715,7 +718,7 @@ mod test {
         groth16_verifier_test::<MNT4, PairingGadget>();
     }
 
-    #[ignore]
+    #[serial]
     #[test]
     fn mnt6_753_groth16_verifier_test() {
         use algebra::curves::mnt6753::MNT6;
@@ -724,6 +727,7 @@ mod test {
         groth16_verifier_test::<MNT6, PairingGadget>();
     }
 
+    #[serial]
     #[test]
     fn bn_382_groth16_verifier_test() {
         use algebra::curves::bn_382::Bn382;

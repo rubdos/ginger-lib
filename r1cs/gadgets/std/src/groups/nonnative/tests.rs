@@ -21,7 +21,7 @@ use crate::{
     test_constraint_system::TestConstraintSystem,
 };
 use rand::thread_rng;
-
+use serial_test::serial;
 
 #[allow(dead_code)]
 pub(crate) fn mul_bits_test<
@@ -69,6 +69,7 @@ pub(crate) fn mul_bits_test<
 macro_rules! nonnative_test_individual {
     ($test_method:ident, $test_name:ident, $num_samples:expr, $group_params:ty, $test_constraint_field:ty, $test_simulation_field:ty) => {
         paste::item! {
+            #[serial]
             #[test]
             fn [<$test_method _ $test_name:lower>]() {
                 for _ in 0..$num_samples {

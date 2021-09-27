@@ -55,6 +55,7 @@ mod test {
     use std::fs::File;
     use std::collections::HashSet;
     use crate::darlin::data_structures::FinalDarlinProof;
+    use serial_test::serial;
 
     fn get_unique_random_proof_indices<R: RngCore>(pcds_len: usize, rng: &mut R) -> Vec<usize> {
         let num_proofs_to_randomize: usize = rng.gen_range(1..pcds_len/2);
@@ -313,6 +314,7 @@ mod test {
     type TestIPAPCDee = InnerProductArgPC<DeeAffine, Blake2s>;
     type TestIPAPCDum = InnerProductArgPC<DumAffine, Blake2s>;
 
+    #[serial]
     #[test]
     fn test_simple_marlin_proof_aggregator() {
         let rng = &mut XorShiftRng::seed_from_u64(1234567890u64);
@@ -419,6 +421,7 @@ mod test {
         );
     }
 
+    #[serial]
     #[test]
     fn test_final_darlin_proof_aggregator() {
         let rng = &mut XorShiftRng::seed_from_u64(1234567890u64);
@@ -529,6 +532,7 @@ mod test {
         );
     }
 
+    #[serial]
     #[test]
     fn test_mixed_proof_aggregator() {
         let rng = &mut XorShiftRng::seed_from_u64(1234567890u64);

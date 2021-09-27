@@ -918,13 +918,16 @@ mod test {
         dum::Affine as TweedleDum,
     };
     use poly_commit::rng::FiatShamirChaChaRng;
+    use serial_test::serial;
 
+    #[serial]
     #[test]
     fn test_tweedle_accumulate_verify() {
         accumulation_test::<TweedleDee, Blake2s>().unwrap();
         accumulation_test::<TweedleDum, Blake2s>().unwrap();
     }
 
+    #[serial]
     #[test]
     fn test_tweedle_batch_verify() {
         batch_verification_test::<TweedleDee, Blake2s>().unwrap();
