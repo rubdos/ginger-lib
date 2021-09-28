@@ -54,4 +54,4 @@ density-optimized = []
 paste = "1.0"
 rand = { version = "0.8.4" }
 rand_xorshift = { version = "0.3.0" }
-r1cs-std = { path = "../std", features = ["bls12_381", "jubjub", "tweedle", "secp256k1", "bn_382", "nonnative", "density-optimized"] }
+r1cs-std = { path = "../std", features = ["bls12_381", "jubjub", "tweedle", "secp256k1", "bn_382"] }
