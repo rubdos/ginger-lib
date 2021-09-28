@@ -45,7 +45,6 @@ blake2 = { version = "0.8.1", default-features = false }
 
 algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "rc/audit_chain", features = ["full", "parallel", "fft"] }
 r1cs-crypto = { path = "../r1cs/gadgets/crypto", features = ["nizk"] }
-serial_test = "*"
 
 [features]
 print-trace = [ "bench-utils/print-trace" ]

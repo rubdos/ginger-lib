@@ -42,7 +42,6 @@ mod test {
     use algebra::{UniformRand, ToBytes, FromBytes, to_bytes, PairingEngine};
     use rand::thread_rng;
     use std::ops::MulAssign;
-    use serial_test::serial;
 
     fn prove_and_verify<E: PairingEngine>(zk: bool) {
         let rng = &mut thread_rng();
@@ -125,7 +124,6 @@ mod test {
         assert!(verify_proof(&pvk_deserialized, &proof_deserialized, &[c]).unwrap())
     }
 
-    #[serial]
     #[test]
     fn bls12_377_groth16_test() {
         prove_and_verify::<algebra::curves::bls12_377::Bls12_377>(true);
@@ -133,7 +131,6 @@ mod test {
         serialize_deserialize::<algebra::curves::bls12_377::Bls12_377>();
     }
 
-    #[serial]
     #[test]
     fn sw6_groth16_test() {
         prove_and_verify::<algebra::curves::sw6::SW6>(true);
@@ -141,7 +138,6 @@ mod test {
         serialize_deserialize::<algebra::curves::sw6::SW6>();
     }
 
-    #[serial]
     #[test]
     fn mnt4753_groth16_test() {
         prove_and_verify::<algebra::curves::mnt4753::MNT4>(true);
@@ -149,7 +145,6 @@ mod test {
         serialize_deserialize::<algebra::curves::mnt4753::MNT4>();
     }
 
-    #[serial]
     #[test]
     fn mnt6753_groth16_test() {
         prove_and_verify::<algebra::curves::mnt6753::MNT6>(true);
@@ -157,7 +152,6 @@ mod test {
         serialize_deserialize::<algebra::curves::mnt6753::MNT6>();
     }
 
-    #[serial]
     #[test]
     fn bn_382_groth16_test() {
         prove_and_verify::<algebra::curves::bn_382::Bn382>(true);

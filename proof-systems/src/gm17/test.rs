@@ -41,7 +41,6 @@ mod test{
     };
     use rand::thread_rng;
     use std::ops::MulAssign;
-    use serial_test::serial;
 
     fn test_prove_and_verify<E: PairingEngine>() {
         let rng = &mut thread_rng();
@@ -73,7 +72,6 @@ mod test{
         }
     }
 
-    #[serial]
     #[test]
     fn prove_verify() {
         test_prove_and_verify::<Bls12_377>();
