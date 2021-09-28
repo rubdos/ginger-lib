@@ -509,11 +509,12 @@ for AffineGadget<P, ConstraintF, F>
     /// 
     /// Given a little-endian sequence `bits` of at most `n` Boolean gadgets, computes 
     /// the scalar multiple of `&self`, assuming the latter is assured to be in the prime order 
-    /// subgroup. Due to incomplete arithmetics, is not satifiable for the scalars from
-    /// {p-2, p-1, p, p+1}.
+    /// subgroup. Due to incomplete arithmetics, is not satifiable for the scalars from the set
+    /// {0, p-2, p-1, p, p+1}.
     /// 
     /// [Hopwood] https://github.com/zcash/zcash/issues/3924 
     /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762.
+    // TODO: check if the above exceptional set is complete.
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
         // variable base point, must be in the prime order subgroup 
         &self,
@@ -623,9 +624,31 @@ for AffineGadget<P, ConstraintF, F>
             )?;
         }
 
-        /* The last three bits are treated using secure arithmetics
+        /* The last three bits are treated by a careful decision between add()
+        and add_unsafe().
         */
         
+        // Why the step processing bit[2] needs to be treated with a 
+        // secure add: The scalar after adding p consists of n+1 bits
+        //             n-1 bits 
+        //     /-----------------------------\
+        //     (bits[n], ... ,bits[3], bits[2], bits[1], bits[0])
+        //
+        // and the result of `acc` after processing bit[2] is
+        //
+        //                 n bits
+        //     /---------------------------------\
+        //     [bits[n], bits[n-1],..., bits[2], 1] * T.
+        //
+        // This output is equal to 0 (and hence causes an exception in the 
+        // last add when processing bits[2]) iff 
+        //    
+        //     [bit[n], bits[n-1],....,bits[2], 1] = p,
+        //
+        // or equivalently [bit[n],...,bits[2],bits[1]] = {p or p-1}.
+        // This corresponds to
+        //     scalar + p  = 2 * {p or p-1} + bits[0] 
+        // or  scalar being from {p-2, p-1, p, p + 1}.
         double_and_add_step(
             cs.ns(|| "bit 2"),
             &bits[2],
@@ -634,6 +657,24 @@ for AffineGadget<P, ConstraintF, F>
             true
         )?;
 
+        // Why the step processing bit[1] needs to be treated with a 
+        // secure add:
+        // After processing bit[1] `acc` is equal to
+        //
+        //                 n+1 bits
+        //     /---------------------------------------\
+        //     [bits[n], bits[n-1],..., bits[2], bits[1], 1] * T
+        //
+        // which is 0 iff 
+        //   
+        //     [bit[n], bits[n-1],....,bits[2],bits[1], 1] = p,
+        //
+        // or equivalently [bit[n],...,bits[2],bits[1],bits[0]] = {p or p-1}.
+        // These cases corresponds to 
+        //     scalar + p  = {p or p-1} 
+        // or a scalar from  {0 , -1}. The latter cannot be achieved by an
+        // unsigned integer representation. The case scalar = 0 is not 
+        // covered by the secure add from the step of bits[2].
         double_and_add_step(
             cs.ns(|| "bit 1"),
             &bits[1],
@@ -641,10 +682,28 @@ for AffineGadget<P, ConstraintF, F>
             &t,
             true
         )?;
-
-        // return (k[0] = 0) ? (Acc - T) : Acc
+        
+        // The final bit is taken into account by correcting the `1` in
+        //
+        //     [bit[n], bits[n-1],....,bits[2],bits[1], 1] * T,
+        //
+        // via substracting T and a subsequent conditional choice
+        //
+        //      return (k[0] = 0) ? (Acc - T) : Acc.
+        //
+        // The result of the subtraction is
+        //
+        //     [bit[n], bits[n-1],....,bits[2],bits[1], 0] * T
+        //
+        // which is 0 iff 
+        //
+        //     [bit[n], bits[n-1],....,bits[2],bits[1], 0] = 2*p,
+        //
+        // or scalar + p = 2 p, i.e. scalar = p. As this case is already 
+        // covered by the secure of step bit[2], we may use add_unsafe() 
+        // here.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
-        let acc_minus_t = acc.add(
+        let acc_minus_t = acc.add_unsafe(
             cs.ns(|| "Acc - T"),
             &neg_t
         )?;

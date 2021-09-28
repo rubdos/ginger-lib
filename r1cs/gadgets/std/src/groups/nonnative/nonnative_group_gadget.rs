@@ -216,14 +216,8 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     }
 
     /// [Hopwood]'s optimized scalar multiplication, adapted to the general case of no
-    /// leading-one assumption. This is achieved by transforming the scalar to (almost) 
-    /// constant length by adding the scalar field modulus, and applying the Hopwood algorithm
-    /// to a bit sequence of length `n+1`, where `n` is the length of the scalar field modulus.
-    /// 
-    /// Given a little-endian sequence `bits` of at most `n` Boolean gadgets, computes 
-    /// the scalar multiple of `&self`, assuming the latter is assured to be in the prime order 
-    /// subgroup. Due to incomplete arithmetics, is not satifiable for the scalars from
-    /// {p-2, p-1, p, p+1}.
+    /// leading-one assumption.
+    /// For a detailed explanation, see the native implementation.
     /// 
     /// [Hopwood] https://github.com/zcash/zcash/issues/3924 
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
@@ -288,8 +282,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         }?;
 
         /* Separate treatment of the two leading bits. 
-        Assuming that T is in the correct subgroup, no exceptions for affine arithmetic 
-        are met.
         */
 
         // This processes the most significant bit for the case
@@ -318,8 +310,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         are treated as in Hopwoods' algorithm.
         */
 
-        // No exceptions can be hit here either, so we are allowed to use unsafe add.
-        // (For T = 0 we don't care.)
         for (i, bit) in bits.iter().enumerate()
             // Skip the three least significant bits (we handle them after the loop)
             .skip(3)
@@ -354,9 +344,10 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             true
         )?;
 
+        // See native implementation why add_unsafe is fine here
         // return (k[0] = 0) ? (Acc - T) : Acc
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
-        let acc_minus_t = acc.add(
+        let acc_minus_t = acc.add_unsafe(
             cs.ns(|| "Acc - T"),
             &neg_t
         )?;
