@@ -22,15 +22,16 @@ use crate::{
     overhead,
     Assignment,
 };
-use r1cs_core::{ConstraintSystem, LinearCombination, SynthesisError};
+use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::{borrow::Borrow, vec, vec::Vec};
+use crate::fields::nonnative::NonNativeFieldParams;
 
 #[derive(Debug, Eq, PartialEq)]
 #[must_use]
 pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField> {
-    /// The limbs as elements of ConstraintF. 
+    /// The limbs as elements of ConstraintF, big endian ordered. 
     /// Recall that in the course of arithmetic operations bits the bit length of 
     /// a limb exceeds `NonNativeFieldParams::bits_per_limb`. Reduction transforms 
     /// back to normal form, which again has at most `bits_per_limb` many bits (but
@@ -189,11 +190,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     }
 
     /// Obtain the limbs directly from a big int
-    pub fn get_limbs_representations_from_big_integer(
+    pub fn get_limbs_representations_from_big_integer_with_params(
+        params: NonNativeFieldParams,
         elem: &<SimulationF as PrimeField>::BigInt,
     ) -> Result<Vec<ConstraintF>, SynthesisError> {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-
         // push the lower limbs first
         let mut limbs: Vec<ConstraintF> = Vec::new();
         let mut cur = *elem;
@@ -210,6 +210,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         limbs.reverse();
 
         Ok(limbs)
+    }
+
+    /// Obtain the limbs directly from a big int
+    pub fn get_limbs_representations_from_big_integer(
+        elem: &<SimulationF as PrimeField>::BigInt,
+    ) -> Result<Vec<ConstraintF>, SynthesisError> {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        Self::get_limbs_representations_from_big_integer_with_params(params, elem)
     }
 
     /// for advanced use, multiply and output the intermediate representations (without reduction)
@@ -314,6 +322,48 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     ) -> Result<Boolean, SynthesisError> {
         let bits = self.to_bits_strict(cs.ns(|| "to bits strict"))?;
         Ok(bits[bits.len() - 1])
+    }
+
+    // Packs a big endian bit sequence (which does not exceed the length of a normal form) 
+    // into a NonNativeFieldGadget
+    pub fn from_bits_with_params<CS: ConstraintSystem<ConstraintF>>(
+        mut cs: CS,
+        bits: &[Boolean],
+        params: NonNativeFieldParams,
+    ) -> Result<Self, SynthesisError>
+    {
+        let len_normal_form = params.num_limbs * params.bits_per_limb;
+        assert!(bits.len() <= len_normal_form);
+
+        // Pad big endian representation to length of normal form
+        let mut per_nonnative_bits = vec![Boolean::Constant(false); len_normal_form - bits.len()];
+        per_nonnative_bits.extend_from_slice(bits);
+
+        // Pack each chunk of `bits_per_limb` many Booleans into a limb, 
+        // big endian ordered.
+        let limbs = 
+            per_nonnative_bits
+            .chunks_exact(params.bits_per_limb)
+            .enumerate()
+            .map(|(i,chunk)| 
+                {
+                    // from_bits() assumes big endian vector of bits
+                    let limb = FpGadget::<ConstraintF>::from_bits(
+                        cs.ns(|| format!("packing bits to limb {}", i)),
+                        &chunk.to_vec()
+                    )?;
+                    
+                    Ok(limb)   
+                }
+            )
+        .collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
+
+        Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
+            limbs,
+            num_of_additions_over_normal_form: ConstraintF::zero(),
+            is_in_the_normal_form: true,
+            simulation_phantom: PhantomData,
+        })
     }
 }
 
@@ -509,9 +559,18 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
 
         // Therefore, we convert it to bits and enforce that it is in the field
         let mut bits = Vec::<Boolean>::new();
-        for (i, limb) in self_normal.limbs.iter().enumerate() {
+
+        // Separate treatment of the first limb, as we want to return
+        // exactly SimulationF::size_in_bits() bits
+        bits.extend_from_slice(&Reducer::<SimulationF, ConstraintF>::limb_to_bits(
+            cs.ns(|| "limb 0 to bits"),
+            &self_normal.limbs[0],
+            SimulationF::size_in_bits() % params.bits_per_limb,
+        )?);
+
+        for (i, limb) in self_normal.limbs.iter().skip(1).enumerate() {
             bits.extend_from_slice(&Reducer::<SimulationF, ConstraintF>::limb_to_bits(
-                cs.ns(|| format!("limb {} to bits", i)),
+                cs.ns(|| format!("limb {} to bits", i + 1)),
                 &limb,
                 params.bits_per_limb,
             )?);
@@ -535,65 +594,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FromBitsGadget<Constraint
 for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
     // Packs a bit sequence (which does not exceed the length of a normal form) into a NonNativeFieldGadget 
-    fn from_bits<CS: ConstraintSystem<ConstraintF>>(mut cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError> 
+    fn from_bits<CS: ConstraintSystem<ConstraintF>>(cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError>
     {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let len_normal_form = params.num_limbs * params.bits_per_limb;
-        assert!(bits.len() <= len_normal_form);
-
-        // Create a look up table for the `num_limbs` many powers 
-        // of two as ConstraintF elements (in reverse order).
-        // Used as coefficients for the packing constraints.
-        let mut powers_of_two = Vec::<ConstraintF>::new();
-        for i in (0..params.bits_per_limb).rev() {
-            let repr = ConstraintF::read_bits({
-                // 2^i as limb, big endian
-                let mut bits = vec![false; ConstraintF::size_in_bits()];
-                bits[ConstraintF::size_in_bits() - 1 - i] = true;
-                bits
-            })?;
-            powers_of_two.push(repr);
-        }
-
-        // Pad big endian representation to length of normal form
-        let mut per_nonnative_bits = vec![Boolean::Constant(false); len_normal_form - bits.len()];
-        per_nonnative_bits.extend_from_slice(bits);
-
-        // Pack each chunk of `num_bits` into a separate limb
-        let limbs = per_nonnative_bits.chunks_exact(params.bits_per_limb).enumerate().map(|(chunk_i, bits)| {
-            let mut lc = LinearCombination::<ConstraintF>::zero();
-
-            for k in 0..params.bits_per_limb {
-                lc = &lc + bits[k].lc(CS::one(), powers_of_two[k]);
-            }
-
-            let limb = FpGadget::<ConstraintF>::alloc(
-                cs.ns(|| format!("alloc limb {}", chunk_i)),
-                || {
-                    let bits_val = bits.iter().map(|b| b.get_value().unwrap()).collect::<Vec<bool>>();
-                    Ok(ConstraintF::read_bits(bits_val).unwrap())
-                }
-            )?;
-
-            // Packing constraint: we enforce that 
-            // limb lc - limb gadget == 0
-            lc = limb.get_variable() - lc.clone();
-            cs.enforce(
-                || format!("unpacking constraint for limb {}", chunk_i),
-                |lc| lc,
-                |lc| lc,
-                |_| lc.clone()
-            );
-
-            Ok(limb)
-        }).collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
-
-        Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
-            limbs,
-            num_of_additions_over_normal_form: ConstraintF::zero(),
-            is_in_the_normal_form: true,
-            simulation_phantom: PhantomData,
-        })
+        Self::from_bits_with_params(cs, bits, params)
     }
 }
 

@@ -59,7 +59,7 @@ macro_rules! overhead {
 }
 
 /// Parameters for a specific `NonNativeFieldGadget` instantiation
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct NonNativeFieldParams {
     /// The number of limbs (`ConstraintF` elements) used to represent a `SimulationF` element. Highest limb first.
     pub num_limbs: usize,

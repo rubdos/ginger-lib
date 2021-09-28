@@ -3,12 +3,16 @@
 //! as well as the following auxiliary traits:
 //!     - PartialEq, Eq, ToBitsGadget, ToBytesGagdet, EqGadget
 //!     - CondSelectGadget, ConstantGadget, AllocGadget.
-use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, SquareRootField, curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
+use algebra::{
+    AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters,
+    SquareRootField, UniformRand,
+    curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 
 use r1cs_core::{ConstraintSystem, SynthesisError};
 
 use crate::{Assignment, ToBitsGadget, ToBytesGadget, alloc::{AllocGadget, ConstantGadget}, boolean::Boolean, fields::{FieldGadget, nonnative::nonnative_field_gadget::NonNativeFieldGadget}, groups::GroupGadget, prelude::EqGadget, select::{CondSelectGadget, TwoBitLookupGadget}, uint8::UInt8};
 use std::{borrow::Borrow, marker::PhantomData};
+use rand::rngs::OsRng;
 
 #[derive(Derivative)]
 #[derivative(Debug, Clone)]
@@ -211,44 +215,191 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(Self::new(x_3, y_3, Boolean::Constant(false)))
     }
 
-    /// Variable base exponentiation.
-    /// Inputs must be specified in *little-endian* form.
-    /// If the addition law is incomplete for the identity element,
-    /// `result` must not be the identity element.
+    /// [Hopwood]'s optimized scalar multiplication, adapted to the general case of no
+    /// leading-one assumption.
+    /// For a detailed explanation, see the native implementation.
+    /// 
+    /// [Hopwood] https://github.com/zcash/zcash/issues/3924 
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
+        // variable base point, must be in the prime order subgroup 
         &self,
         mut cs: CS,
-        result: &Self,
-        bits: impl Iterator<Item = &'a Boolean>,
+        // little endian, of length <= than the scalar field modulus.
+        bits: impl Iterator<Item = &'a Boolean>, 
     ) -> Result<Self, SynthesisError> {
-        let mut power = self.clone();
-        let mut result = result.clone();
-        for (i, bit) in bits.enumerate() {
-            let new_encoded = result.add(&mut cs.ns(|| format!("Add {}-th power", i)), &power)?;
-            result = Self::conditionally_select(
-                &mut cs.ns(|| format!("Select {}", i)),
-                bit.borrow(),
-                &new_encoded,
-                &result,
-            )?;
-            power.double_in_place(&mut cs.ns(|| format!("{}-th Doubling", i)))?;
-        }
-        Ok(result)
+
+        assert!(P::ScalarField::size_in_bits() >= 3);
+
+        let double_and_add_step =
+            |mut cs: r1cs_core::Namespace<_, _>, bit: &Boolean, acc: &mut Self, t: &Self, safe_arithmetics: bool| -> Result<(), SynthesisError>
+                {
+                    // Q := k[i+1] ? T : −T
+                    let neg_y = t.y.negate(cs.ns(|| "neg y"))?;
+                    let selected_y = NonNativeFieldGadget::conditionally_select(
+                        cs.ns(|| "select y or -y"),
+                        bit,
+                        &t.y,
+                        &neg_y
+                    )?;
+                    let q = Self::new(t.x.clone(), selected_y, t.infinity);
+
+                    // Acc := (Acc + Q) + Acc using double_and_add_internal at 5 constraints 
+                    *acc = acc.double_and_add_internal(cs.ns(|| "double and add"), &q, safe_arithmetics)?;
+
+                    Ok(())
+                };
+
+        let mut bits = bits.cloned().collect::<Vec<Boolean>>();
+        // Length normalization by adding the scalar field modulus. 
+        // The result is alway n + 1 bits long, although the leading bit might be zero.
+        // Costs ~ 1*n + O(1) many constraints.
+        bits = crate::groups::scalar_bits_to_constant_length::<_, P::ScalarField, _>(
+            cs.ns(|| "scalar bits to constant length"),
+            bits
+        )?;
+
+        // Select any random T if self is infinity
+        // TODO: let us overthink whether we serve trivial base points inside `mul_bits()`
+        let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
+            let mut rng = OsRng::default();
+            Ok(loop {
+                let r = SWProjective::<P>::rand(&mut rng);
+                if !r.is_zero() { break(r) }
+            })
+        })?;
+        let t = Self::conditionally_select(
+            cs.ns(|| "select self or random T"),
+            &self.infinity,
+            &random_t,
+            self
+        )?;
+
+        // Acc := [3] T = [2]*T + T
+        let init = {
+            let mut t_copy = t.clone();
+            t_copy.double_in_place(cs.ns(|| "[2] * T"))?;
+            t_copy.add_unsafe(cs.ns(|| "[3] * T"), &t)
+        }?;
+
+        /* Separate treatment of the two leading bits. 
+        */
+
+        // This processes the most significant bit for the case
+        // bits[n]=1.
+        let mut acc = init.clone();
+        let leading_bit = bits.pop().unwrap();
+
+        // Processing bits[n-1] for the case bits[n] = 1
+        double_and_add_step(
+            cs.ns(|| "Processing bits[n-1] for the case bits[n] == 1"),
+            &bits.pop().unwrap(),
+            &mut acc,
+            &t,
+            false
+        )?;
+
+        // If leading_bit is one we reset acc to the case bits[n-1]==1
+        acc = Self::conditionally_select(
+            cs.ns(|| "reset acc if leading_bit == 1"),
+            &leading_bit,
+            &acc,
+            &init
+        )?;
+
+        /* The next bits bits[n-2],...,bits[3] (i.e. except the three least significant)
+        are treated as in Hopwoods' algorithm.
+        */
+
+        for (i, bit) in bits.iter().enumerate()
+            // Skip the three least significant bits (we handle them after the loop)
+            .skip(3)
+            // Scan over the scalar bits in big-endian order
+            .rev()
+            {
+                double_and_add_step(
+                    cs.ns(|| format!("bit {}", i + 2)),
+                    bit,
+                    &mut acc,
+                    &t,
+                    false
+                )?;
+            }
+
+        /* The last three bits are treated using secure arithmetics
+        */
+
+        double_and_add_step(
+            cs.ns(|| "bit 2"),
+            &bits[2],
+            &mut acc,
+            &t,
+            true
+        )?;
+
+        double_and_add_step(
+            cs.ns(|| "bit 1"),
+            &bits[1],
+            &mut acc,
+            &t,
+            true
+        )?;
+
+        // See native implementation why add_unsafe is fine here
+        // return (k[0] = 0) ? (Acc - T) : Acc
+        let neg_t = t.negate(cs.ns(|| "neg T"))?;
+        let acc_minus_t = acc.add_unsafe(
+            cs.ns(|| "Acc - T"),
+            &neg_t
+        )?;
+
+        let result = Self::conditionally_select(
+            cs.ns(|| "select acc or acc - T"),
+            &bits[0],
+            &acc,
+            &acc_minus_t
+        )?;
+
+        // If self was infinity, return 0 instead of result
+        let zero = Self::zero(cs.ns(|| "alloc 0"))?;
+        Self::conditionally_select(
+            cs.ns(|| "result or 0"),
+            &self.infinity,
+            &zero,
+            &result
+        )
     }
 
+    ///This will take [(4 + 1) * ceil(len(bits)/2)] constraints to put the x lookup constraint
+    ///into the addition formula. See coda/src/lib/snarky_curves/snarky_curves.ml "scale_known"
+    // TODO: let us redesign this algorithm with no random shift and explicit use of complete
+    //      arithmetics of the "last" steps of the loop. Such redesign allows even the
+    //      usage of unsafe add for large parts of the loop.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
         mut cs: CS,
-        result: &Self,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError>{
 
+        // Avoid exceptional cases when base = infinity
+        if base.is_zero() {
+            return Err(SynthesisError::Other("Base must not be infinity !".to_owned()));
+        }
         let mut to_sub = SWProjective::<P>::zero();
 
         let mut t = base.clone();
         let sigma = base.clone();
-        let mut result = result.clone();
+
+        // Avoid exceptional cases when acc = base or acc = zero
+        let shift = Self::alloc(cs.ns(|| "alloc random shift"), || {
+            let mut rng = OsRng::default();
+            Ok(loop {
+                let r = SWProjective::<P>::rand(&mut rng);
+                if !r.is_zero() && &r != base { break(r) }
+            })
+        })?;
+
+        let mut acc = shift.clone();
 
         let mut bit_vec = Vec::new();
         bit_vec.extend_from_slice(bits);
@@ -260,7 +411,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
         for (i, bits) in bit_vec.chunks(2).enumerate() {
             let ti = t.clone();
-            let two_ti = SWProjective::<P>::double(&ti);
+            let two_ti = ti.double();
             let mut table = [
                 sigma,
                 sigma + &ti,
@@ -280,12 +431,15 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
             //Perform addition
             let adder: Self = Self::new(x, y, Boolean::constant(false));
-            result = result.add(cs.ns(||format!("Add_{}", i)), &adder)?;
+            // As long as we keep with the random shift strategy we cannot
+            // use unsafe add here.
+            acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
             t = t.double().double();
             to_sub += &sigma;
         }
-        result = result.sub_constant(cs.ns(|| "result - sigma*n_div_2"), &to_sub)?;
-        Ok(result)
+        acc = acc.sub_constant(cs.ns(|| "acc - sigma*n_div_2"), &to_sub)?;
+        acc = acc.sub(cs.ns(|| "subtract shift"), &shift)?;
+        Ok(acc)
     }
 
     fn get_value(&self) -> Option<<Self as GroupGadget<SWProjective<P>, ConstraintF>>::Value> {
@@ -476,7 +630,7 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
 
     #[inline]
     /// Incomplete addition: neither `self` nor `other` can be the neutral
-    /// element.
+    /// element, and other != ±self.
     /// If `safe` is set, enforce in the circuit exceptional cases not occurring.
     fn add_internal<CS: ConstraintSystem<ConstraintF>>(
         &self,
@@ -503,7 +657,7 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
         let lambda = if safe {
             // Check that A.x - B.x != 0, which can be done by
             // enforcing I * (B.x - A.x) = 1
-            // This is done below when we calculate inv (by F::inverse)
+            // This is done below when we calculate inv (by NonNativeFieldGadget::inverse)
             let inv = x2_minus_x1.inverse(cs.ns(|| "compute inv"))?;
             NonNativeFieldGadget::alloc(cs.ns(|| "lambda"), || {
                 Ok(y2_minus_y1.get_value().get()? * &inv.get_value().get()?)
@@ -548,13 +702,168 @@ impl<P, ConstraintF, SimulationF> GroupAffineNonNativeGadget<P, ConstraintF, Sim
 
     #[inline]
     /// Incomplete, unsafe, addition: neither `self` nor `other` can be the neutral
-    /// element.
+    /// element, and other != ±self.
     pub fn add_unsafe<CS: ConstraintSystem<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
         self.add_internal(cs, other, false)
+    }
+
+    #[inline]
+    /// Compute 2 * self + other as (self + other) + self: this requires less constraints
+    /// than computing self.double().add(other).
+    /// Incomplete add: neither `self` nor `other` can be the neutral element, and other != ±self;
+    /// If `safe` is set, enforce in the circuit that exceptional cases not occurring.
+    fn double_and_add_internal<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        other: &Self,
+        safe: bool,
+    ) -> Result<Self, SynthesisError>
+    {
+        // Hopwood's optimized double-and-add sum P_4 = P_3 + P_1, where P_3 = P_1 + P_2.
+        // Under the above presumptions on P_1 and P_2 can be enforced by just 5
+        // constraints
+        //      1. (x2 - x1) * lambda_1 = y2 - y1;
+        //      2. lambda_1^2 = x1 +  x2 + x3;
+        //      3. (x1 - x3) * (lambda1 + lambda_2) = 2·y1
+        //      4. lambda_2^2 =   x1 + x3 + x4;
+        //      5. lambda_2 * (x1 - x4) = y_1 + y_4;
+        // Note that 3. is the result of adding the two equations
+        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3
+        //      3b. (x_1 - x_3) * lambda_2 = y_1 - y_3.
+        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely
+        // determines lambda_1, and thus x3 is determined by 2.
+        // Again, since x_1-x_3 is non-zero equation 3. uniquely determines lambda_2
+        // and hence being of the same unique value as enforced by 3a. and 3b.
+        let x2_minus_x1 = other.x.sub(cs.ns(|| "x2 - x1"), &self.x)?;
+        let y2_minus_y1 = other.y.sub(cs.ns(|| "y2 - y1"), &self.y)?;
+
+        // Allocate lambda_1
+        let lambda_1 = if safe {
+            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget
+            let inv_1 = x2_minus_x1.inverse(cs.ns(|| "enforce inv 1"))?;
+            NonNativeFieldGadget::alloc(cs.ns(|| "lambda_1"), || {
+                Ok(y2_minus_y1.get_value().get()? * &inv_1.get_value().get()?)
+            })
+        } else {
+            // By our presumptions, x_2 - x_1 != 0
+            NonNativeFieldGadget::alloc(cs.ns(|| "lambda_1"), || {
+                Ok(y2_minus_y1.get_value().get()? * &x2_minus_x1.get_value().get()?.inverse().get()?)
+            })
+        }?;
+
+        // Constraint 1.
+        lambda_1.mul_equals(cs.ns(|| "check lambda_1"), &x2_minus_x1, &y2_minus_y1)?;
+
+        let x_3 = NonNativeFieldGadget::alloc(&mut cs.ns(|| "x_3"), || {
+            let lambda_1_val = lambda_1.get_value().get()?;
+            let x1 = self.x.get_value().get()?;
+            let x2 = other.x.get_value().get()?;
+            Ok((lambda_1_val.square() - &x1) - &x2)
+        })?;
+
+        // Constraint 2.
+        let x3_plus_x1_plus_x2 = x_3
+            .add(cs.ns(|| "x3 + x1"), &self.x)?
+            .add(cs.ns(|| "x3 + x1 + x2"), &other.x)?;
+        lambda_1.mul_equals(cs.ns(|| "check x3"), &lambda_1, &x3_plus_x1_plus_x2)?;
+
+        // Allocate lambda_2.
+        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?;
+        let two_y1 = self.y.double(cs.ns(|| "2y1"))?;
+
+        let lambda_2 = if safe {
+            // Set the extra constraint for x_1 - x_3 != 0
+            let inv_2 = x1_minus_x3.inverse(cs.ns(|| "enforce inv 2"))?;
+            NonNativeFieldGadget::alloc(
+                cs.ns(|| "lambda_2"),
+                || {
+                    let lambda_val = lambda_1.get_value().get()?;
+                    let two_y1_val = two_y1.get_value().get()?;
+
+                    let two_y1_div_x1_minus_x3 = two_y1_val * &inv_2.get_value().get()?;
+                    Ok(two_y1_div_x1_minus_x3 - &lambda_val)
+                }
+            )
+        } else {
+            NonNativeFieldGadget::alloc(
+                cs.ns(|| "lambda_2"),
+                || {
+                    let lambda_val = lambda_1.get_value().get()?;
+                    let two_y1_val = two_y1.get_value().get()?;
+
+                    let x1_minus_x3_inv = (x1_minus_x3.get_value().get()?).inverse().get()?;
+                    let two_y1_div_x1_minus_x3 = two_y1_val * &x1_minus_x3_inv;
+                    Ok(two_y1_div_x1_minus_x3 - &lambda_val)
+                }
+            )
+        }?;
+
+        // Constraint 3.
+        let lambda_2_plus_lambda_1 = lambda_2.add(cs.ns(|| "lambda_2 + lambda_1"), &lambda_1)?;
+
+        lambda_2_plus_lambda_1.mul_equals(
+            cs.ns(|| "(lambda_2 + lambda) * (x1 - x3) = 2y1"),
+            &x1_minus_x3,
+            &two_y1
+        )?;
+
+        // Allocate the final x
+        let x_4 = NonNativeFieldGadget::alloc(&mut cs.ns(|| "x_4"), || {
+            let lambda_2_val = lambda_2.get_value().get()?;
+            let x1_val = self.x.get_value().get()?;
+            let x3_val = x_3.get_value().get()?;
+            Ok((lambda_2_val.square() - &x1_val) - &x3_val)
+        })?;
+
+        // Constraint 4.
+        let x4_plus_x1_plus_x3 = x_4
+            .add(cs.ns(|| "x4 + x1"), &self.x)?
+            .add(cs.ns(|| "x3 + x1 + x3"), &x_3)?;
+        lambda_2.mul_equals(cs.ns(|| "check x4"), &lambda_2, &x4_plus_x1_plus_x3)?;
+
+        // alloc the final y
+        let y_4 = NonNativeFieldGadget::alloc(&mut cs.ns(|| "y_4"), || {
+            let lambda_2_val = lambda_2.get_value().get()?;
+            let x_1_val = self.x.get_value().get()?;
+            let y_1_val = self.y.get_value().get()?;
+            let x_4_val = x_4.get_value().get()?;
+            Ok(lambda_2_val * &(x_1_val - &x_4_val) - &y_1_val)
+        })?;
+
+        // Constraint 5.
+        let y4_plus_y1 = y_4.add(cs.ns(|| "y4 + y1"), &self.y)?;
+        let x1_minus_x4 = self.x.sub(cs.ns(|| "x1 - x4"), &x_4)?;
+        lambda_2.mul_equals(cs.ns(|| ""), &x1_minus_x4, &y4_plus_y1)?;
+
+        Ok(Self::new(x_4, y_4, Boolean::Constant(false)))
+    }
+
+    #[inline]
+    /// Compute 2 * self + other.
+    /// Incomplete, safe, addition: neither `self` nor `other` can be the neutral
+    /// element, and other != ±self.
+    pub fn double_and_add<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        cs: CS,
+        other: &Self,
+    ) -> Result<Self, SynthesisError> {
+        self.double_and_add_internal(cs, other, true)
+    }
+
+    #[inline]
+    /// Compute 2 * self + other.
+    /// Incomplete, unsafe, addition: neither `self` nor `other` can be the neutral
+    /// element, and other != ±self.
+    pub fn double_and_add_unsafe<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        cs: CS,
+        other: &Self,
+    ) -> Result<Self, SynthesisError> {
+        self.double_and_add_internal(cs, other, false)
     }
 }
 
@@ -585,8 +894,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             <Boolean as CondSelectGadget<ConstraintF>>::cost()
     }
 }
-
-
 
 impl<P, ConstraintF, SimulationF> ConstantGadget<SWProjective<P>, ConstraintF>
 for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>

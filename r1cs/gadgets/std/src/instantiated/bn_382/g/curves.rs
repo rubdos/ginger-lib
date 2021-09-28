@@ -12,7 +12,7 @@ pub type Bn382GGadget = AffineGadget<Bn382GParameters, Fr, FqGadget>;
 
 #[test]
 fn test() {
-    crate::groups::test::group_test_with_unsafe_add::<
+    crate::groups::test::group_test_with_incomplete_add::<
         _, _, Bn382GGadget
     >();
     crate::groups::test::mul_bits_test::<
