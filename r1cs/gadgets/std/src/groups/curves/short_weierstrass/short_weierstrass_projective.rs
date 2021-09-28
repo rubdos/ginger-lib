@@ -501,7 +501,7 @@ for AffineGadget<P, ConstraintF, F>
         ))
     }
 
-      /// [Hopwood]'s optimized scalar multiplication, adapted to the general case of no
+    /// [Hopwood]'s optimized scalar multiplication, adapted to the general case of no
     /// leading-one assumption. This is achieved by transforming the scalar to (almost) 
     /// constant length by adding the scalar field modulus, and applying the Hopwood algorithm
     /// to a bit sequence of length `n+1`, where `n` is the length of the scalar field modulus.
@@ -514,7 +514,6 @@ for AffineGadget<P, ConstraintF, F>
     /// 
     /// [Hopwood] https://github.com/zcash/zcash/issues/3924 
     /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762.
-    // TODO: check if the above exceptional set is complete.
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
         // variable base point, must be in the prime order subgroup 
         &self,
@@ -648,7 +647,9 @@ for AffineGadget<P, ConstraintF, F>
         // or equivalently [bit[n],...,bits[2],bits[1]] = {p or p-1}.
         // This corresponds to
         //     scalar + p  = 2 * {p or p-1} + bits[0] 
-        // or  scalar being from {p-2, p-1, p, p + 1}.
+        // or  scalar being from {p-2, p-1, p, p + 1}. 
+        // A more detailed exploration shows that this set is the complete set
+        // of exceptions.
         double_and_add_step(
             cs.ns(|| "bit 2"),
             &bits[2],
