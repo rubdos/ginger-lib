@@ -74,6 +74,198 @@ pub trait ConstraintSystem<F: Field>: Sized {
     fn num_constraints(&self) -> usize;
 }
 
+/// Represents the actual implementation of a rank-1 constraint system (R1CS)
+#[derive(Debug, Clone)]
+pub struct ConstraintSystemImpl<F: Field> {
+    /// The mode in which the constraint system is operating. `self` can either
+    /// be in setup mode (i.e., `self.mode == SynthesisMode::Setup`) or in
+    /// proving mode (i.e., `self.mode == SynthesisMode::Prove`). If we are
+    /// in proving mode, then we have the additional option of whether or
+    /// not to construct the A, B, and C matrices of the constraint system
+    /// (see below).
+    pub mode: SynthesisMode,
+    /// The number of variables that are "public inputs" to the constraint
+    /// system.
+    pub num_inputs: usize,
+    /// The number of variables that are "private inputs" to the constraint
+    /// system.
+    pub num_aux: usize,
+    /// The number of constraints in the constraint system.
+    pub num_constraints: usize,
+    /// Assignments to the public input variables. This is empty if `self.mode
+    /// == SynthesisMode::Setup`.
+    pub aux_assignment: Vec<F>,
+    /// Assignments to the private input variables. This is empty if `self.mode
+    /// == SynthesisMode::Setup`.
+    pub input_assignment: Vec<F>,
+    /// `A` matrix of the R1CS.
+    pub at: Vec<Vec<(F, Index)>>,
+    /// `B` matrix of the R1CS.
+    pub bt: Vec<Vec<(F, Index)>>,
+    /// `C` matrix of the R1CS.
+    pub ct: Vec<Vec<(F, Index)>>,
+}
+
+/// Defines the mode of operation of `ConstraintSystemImpl`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum SynthesisMode {
+    /// Indicate to `ConstraintSystemImpl` that it should only generate
+    /// constraint matrices and not populate the variable assignments.
+    Setup,
+    /// Indicate to `ConstraintSystemImpl` that it populate the variable
+    /// assignments. If additionally `construct_matrices == true`, then generate
+    /// the matrices as in the `Setup` case.
+    Prove {
+        /// If `construct_matrices == true`, then generate
+        /// the matrices as in the `Setup` case.
+        construct_matrices: bool,
+    },
+}
+
+impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
+    type Root = ConstraintSystemImpl<F>;
+    #[inline]
+    fn one() -> Variable {
+        Variable::new_unchecked(Index::Input(0))
+    }
+    #[inline]
+    fn alloc<FN, A, AR>(&mut self, _: A, f: FN) -> Result<Variable, SynthesisError>
+        where
+            FN: FnOnce() -> Result<F, SynthesisError>,
+            A: FnOnce() -> AR,
+            AR: Into<String>,
+    {
+        let index = self.num_aux;
+        self.num_aux += 1;
+
+        if !self.is_in_setup_mode() {
+            self.aux_assignment.push(f()?);
+        }
+        Ok(Variable::new_unchecked(Index::Aux(index)))
+    }
+    #[inline]
+    fn alloc_input<FN, A, AR>(&mut self, _: A, f: FN) -> Result<Variable, SynthesisError>
+        where
+            FN: FnOnce() -> Result<F, SynthesisError>,
+            A: FnOnce() -> AR,
+            AR: Into<String>,
+    {
+        let index = self.num_inputs;
+        self.num_inputs += 1;
+
+        if !self.is_in_setup_mode() {
+            self.input_assignment.push(f()?);
+        }
+        Ok(Variable::new_unchecked(Index::Input(index)))
+    }
+    #[inline]
+    fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
+        where
+            A: FnOnce() -> AR,
+            AR: Into<String>,
+            LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+            LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+            LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+    {
+        self.at.push(vec![]);
+        self.bt.push(vec![]);
+        self.ct.push(vec![]);
+
+        Self::push_constraints(
+            a(LinearCombination::zero()),
+            &mut self.at,
+            self.num_constraints,
+        );
+        Self::push_constraints(
+            b(LinearCombination::zero()),
+            &mut self.bt,
+            self.num_constraints,
+        );
+        Self::push_constraints(
+            c(LinearCombination::zero()),
+            &mut self.ct,
+            self.num_constraints,
+        );
+
+        self.num_constraints += 1;
+    }
+    fn push_namespace<NR, N>(&mut self, _name_fn: N)
+        where
+            NR: Into<String>,
+            N: FnOnce() -> NR
+    {
+        // Do nothing
+    }
+    fn pop_namespace(&mut self) {
+        // Do nothing
+    }
+    fn get_root(&mut self) -> &mut Self::Root {
+        self
+    }
+
+    /// Begin a namespace for this constraint system.
+    fn ns<'a, NR, N>(&'a mut self, name_fn: N) -> Namespace<'a, F, Self::Root>
+        where
+            NR: Into<String>,
+            N: FnOnce() -> NR,
+    {
+        self.get_root().push_namespace(name_fn);
+
+        Namespace(self.get_root(), PhantomData)
+    }
+    fn num_constraints(&self) -> usize {
+        self.num_constraints
+    }
+}
+
+impl<F: Field> ConstraintSystemImpl<F> {
+    /// Construct an empty `ConstraintSystem`.
+    pub fn new() -> Self {
+        Self {
+            num_inputs: 1,
+            num_aux: 0,
+            num_constraints: 0,
+            at: Vec::new(),
+            bt: Vec::new(),
+            ct: Vec::new(),
+            input_assignment: vec![F::one()],
+            aux_assignment: Vec::new(),
+            mode: SynthesisMode::Prove {
+                construct_matrices: true,
+            },
+        }
+    }
+    /// Set `self.mode` to `mode`.
+    pub fn set_mode(&mut self, mode: SynthesisMode) {
+        self.mode = mode;
+    }
+
+    /// Check whether `self.mode == SynthesisMode::Setup`.
+    pub fn is_in_setup_mode(&self) -> bool {
+        self.mode == SynthesisMode::Setup
+    }
+
+    /// Check whether or not `self` will construct matrices.
+    pub fn should_construct_matrices(&self) -> bool {
+        match self.mode {
+            SynthesisMode::Setup => true,
+            SynthesisMode::Prove { construct_matrices } => construct_matrices,
+        }
+    }
+    fn push_constraints(
+        l: LinearCombination<F>,
+        constraints: &mut [Vec<(F, Index)>],
+        this_constraint: usize,
+    ) {
+        for (var, coeff) in l.as_ref() {
+            match var.get_unchecked() {
+                Index::Input(i) => constraints[this_constraint].push((*coeff, Index::Input(i))),
+                Index::Aux(i) => constraints[this_constraint].push((*coeff, Index::Aux(i))),
+            }
+        }
+    }
+}
+
 /// This is a "namespaced" constraint system which borrows a constraint system
 /// (pushing a namespace context) and, when dropped, pops out of the namespace
 /// context.
@@ -86,7 +278,6 @@ pub trait ConstraintSynthesizer<F: Field> {
     /// Drives generation of new constraints inside `CS`.
     fn generate_constraints<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError>;
 }
-
 
 impl<F: Field, CS: ConstraintSystem<F>> ConstraintSystem<F> for Namespace<'_, F, CS> {
     type Root = CS::Root;
