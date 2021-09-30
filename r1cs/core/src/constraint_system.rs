@@ -168,10 +168,13 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
             A: FnOnce() -> AR,
             AR: Into<String>,
     {
-        let path = compute_path(&self.current_namespace, annotation().into());
-        self.aux_names.push(path.clone());
         let index = self.num_aux;
         self.num_aux += 1;
+
+        let path = compute_path(&self.current_namespace, annotation().into());
+        self.aux_names.push(path.clone());
+        let var = Variable::new_unchecked(Index::Aux(index));
+        self.set_named_obj(path, NamedObject::Var(var));
 
         if !self.is_in_setup_mode() {
             self.aux_assignment.push(f()?);
@@ -185,10 +188,13 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
             A: FnOnce() -> AR,
             AR: Into<String>,
     {
-        let path = compute_path(&self.current_namespace, annotation().into());
-        self.input_names.push(path.clone());
         let index = self.num_inputs;
         self.num_inputs += 1;
+
+        let path = compute_path(&self.current_namespace, annotation().into());
+        self.input_names.push(path.clone());
+        let var = Variable::new_unchecked(Index::Input(index));
+        self.set_named_obj(path, NamedObject::Var(var));
 
         if !self.is_in_setup_mode() {
             self.input_assignment.push(f()?);
