@@ -363,8 +363,11 @@ impl<F: Field> ConstraintSystemImpl<F> {
         self.which_is_unsatisfied().is_none()
     }
     /// Sets the the variable named `path` to the value `to`.
-    /// Panics if no variable exists at `path` or if `path` does not indicate a variable.
+    /// Panics in setup mode and if `path` does not indicate a variable.
     pub fn set(&mut self, path: &str, to: F) {
+        if self.is_in_setup_mode() {
+            panic!("it is not possible to set the value of variables during setup.")
+        }
         match self.named_objects.get(path) {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
                 Index::Input(index) => self.input_assignment[index] = to,
@@ -378,8 +381,11 @@ impl<F: Field> ConstraintSystemImpl<F> {
         }
     }
     /// Gets the value of the variable named `path`.
-    /// Panics if the variable named `path` does not exist.
+    /// Panics in setup mode and if `path` does not indicate a variable.
     pub fn get(&mut self, path: &str) -> F {
+        if self.is_in_setup_mode() {
+            panic!("it is not possible to get the value of variables during setup.")
+        }
         match self.named_objects.get(path) {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
                 Index::Input(index) => self.input_assignment[index],
