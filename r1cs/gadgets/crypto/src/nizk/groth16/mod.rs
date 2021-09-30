@@ -569,15 +569,13 @@ mod test {
     // tests simultaneously from the cargo test framework, the memory will run out and the
     // tests execution will crash.
     use proof_systems::groth16::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+    use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError, ConstraintSystemImpl};
 
     use super::*;
     use algebra::{
         BitIterator, PrimeField, UniformRand
     };
-    use r1cs_std::{
-        boolean::Boolean, test_constraint_system::TestConstraintSystem
-    };
+    use r1cs_std::boolean::Boolean;
     use rand::thread_rng;
 
 
@@ -658,7 +656,7 @@ mod test {
             };
 
             // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
-            let mut cs = TestConstraintSystem::<E::Fq>::new();
+            let mut cs = ConstraintSystemImpl::<E::Fq>::new();
 
             let inputs: Vec<_> = inputs.into_iter().map(|input| input.unwrap()).collect();
             let mut input_gadgets = Vec::new();

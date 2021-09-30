@@ -515,7 +515,7 @@ mod test {
         crh::{MNT4PoseidonHashGadget, MNT6PoseidonHashGadget},
     };
 
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
     use r1cs_std::alloc::AllocGadget;
 
     use r1cs_std::instantiated::{
@@ -524,7 +524,6 @@ mod test {
     };
 
     use rand::{Rng, thread_rng};
-    use r1cs_std::test_constraint_system::TestConstraintSystem;
 
     type SchnorrMNT4 = FieldBasedSchnorrSignatureScheme<MNT4Fr, MNT6G1Projective, MNT4PoseidonHash>;
     type SchnorrMNT6 = FieldBasedSchnorrSignatureScheme<MNT6Fr, MNT4G1Projective, MNT6PoseidonHash>;
@@ -551,7 +550,7 @@ mod test {
     }
 
     fn mnt4_schnorr_gadget_generate_constraints(message: MNT4Fr, pk: &SchnorrMNT4Pk, sig: SchnorrMNT4Sig) -> bool {
-        let mut cs = TestConstraintSystem::<MNT4Fr>::new();
+        let mut cs = ConstraintSystemImpl::<MNT4Fr>::new();
 
         //Alloc signature, pk and message
         let sig_g = <SchnorrMNT4Gadget as FieldBasedSigGadget<SchnorrMNT4, MNT4Fr>>::SignatureGadget::alloc(
@@ -616,7 +615,7 @@ mod test {
     }
 
     fn mnt6_schnorr_gadget_generate_constraints(message: MNT6Fr, pk: &SchnorrMNT6Pk, sig: SchnorrMNT6Sig) -> bool {
-        let mut cs = TestConstraintSystem::<MNT6Fr>::new();
+        let mut cs = ConstraintSystemImpl::<MNT6Fr>::new();
 
         //Alloc signature, pk and message
         let sig_g = <SchnorrMNT6Gadget as FieldBasedSigGadget<SchnorrMNT6, MNT6Fr>>::SignatureGadget::alloc(
@@ -689,7 +688,7 @@ mod test {
         for _ in 0..samples {
             let message: MNT4Fr = rng.gen();
             let (sig, pk) = sign::<SchnorrMNT4, _>(rng, message);
-            let mut cs = TestConstraintSystem::<MNT4Fr>::new();
+            let mut cs = ConstraintSystemImpl::<MNT4Fr>::new();
 
             //Alloc signature, pk and message
             let sig_g = <SchnorrMNT4Gadget as FieldBasedSigGadget<SchnorrMNT4, MNT4Fr>>::SignatureGadget::alloc(

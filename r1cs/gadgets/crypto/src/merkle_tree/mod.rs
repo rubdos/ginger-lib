@@ -261,14 +261,11 @@ mod test {
         injective_map::{PedersenCRHCompressorGadget, TECompressorGadget},
     };
     use algebra::{curves::jubjub::JubJubAffine as JubJub, fields::jubjub::fq::Fq};
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use super::*;
-    use r1cs_std::{
-        instantiated::jubjub::JubJubGadget,
-        test_constraint_system::TestConstraintSystem,
-    };
+    use r1cs_std::instantiated::jubjub::JubJubGadget;
 
     #[derive(Clone)]
     pub(super) struct Window4x128;
@@ -297,7 +294,7 @@ mod test {
         let root = tree.root().unwrap();
         let mut satisfied = true;
         for (i, leaf) in leaves.iter().enumerate() {
-            let mut cs = TestConstraintSystem::<Fq>::new();
+            let mut cs = ConstraintSystemImpl::<Fq>::new();
             let proof = tree.generate_proof(i, &leaf).unwrap();
             assert!(proof.verify(&crh_parameters, &root, &leaf).unwrap());
 

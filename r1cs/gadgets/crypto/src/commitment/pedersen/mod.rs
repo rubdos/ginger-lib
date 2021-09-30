@@ -201,14 +201,14 @@ mod test {
             CommitmentGadget,
     };
     use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
     use r1cs_std::{
-        instantiated::jubjub::JubJubGadget, prelude::*, test_constraint_system::TestConstraintSystem,
+        instantiated::jubjub::JubJubGadget, prelude::*,
     };
 
     #[test]
     fn commitment_gadget_test() {
-        let mut cs = TestConstraintSystem::<Fq>::new();
+        let mut cs = ConstraintSystemImpl::<Fq>::new();
 
         #[derive(Clone, PartialEq, Eq, Hash)]
         pub(super) struct Window;

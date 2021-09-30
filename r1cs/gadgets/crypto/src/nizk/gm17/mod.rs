@@ -461,7 +461,7 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
 #[cfg(test)]
 mod test {
     use proof_systems::gm17::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+    use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError, ConstraintSystemImpl};
 
     use algebra::{
         curves::bls12_377::Bls12_377,
@@ -469,8 +469,7 @@ mod test {
         BitIterator, PrimeField,
     };
     use r1cs_std::{
-        boolean::Boolean, instantiated::bls12_377::PairingGadget as Bls12_377PairingGadget,
-        test_constraint_system::TestConstraintSystem,
+        boolean::Boolean, instantiated::bls12_377::PairingGadget as Bls12_377PairingGadget
     };
     use super::*;
     use rand::{thread_rng, Rng};
@@ -557,7 +556,7 @@ mod test {
             };
 
             // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
-            let mut cs = TestConstraintSystem::<Fq>::new();
+            let mut cs = ConstraintSystemImpl::<Fq>::new();
 
             let inputs: Vec<_> = inputs.iter().map(|input| input.unwrap()).collect();
             let mut input_gadgets = Vec::new();

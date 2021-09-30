@@ -514,16 +514,16 @@ mod test {
     use primitives::prf::blake2s::Blake2s as B2SPRF;
     use crate::prf::blake2s::blake2s_gadget;
     use blake2::Blake2s;
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
 
     use super::Blake2sGadget;
     use r1cs_std::{
-        boolean::AllocatedBit, prelude::*, test_constraint_system::TestConstraintSystem,
+        boolean::AllocatedBit, prelude::*,
     };
 
     #[test]
     fn test_blake2s_constraints() {
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = ConstraintSystemImpl::<Fr>::new();
         let input_bits: Vec<_> = (0..512)
             .map(|i| {
                 AllocatedBit::alloc(cs.ns(|| format!("input bit_gadget {}", i)), || Ok(true))
@@ -543,7 +543,7 @@ mod test {
         use rand::Rng;
 
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = ConstraintSystemImpl::<Fr>::new();
 
         let mut seed = [0u8; 32];
         rng.fill(&mut seed);
@@ -584,7 +584,7 @@ mod test {
         // Test that 512 fixed leading bits (constants)
         // doesn't result in more constraints.
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = ConstraintSystemImpl::<Fr>::new();
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
         let input_bits: Vec<_> = (0..512)
             .map(|_| Boolean::constant(rng.gen()))
@@ -601,7 +601,7 @@ mod test {
 
     #[test]
     fn test_blake2s_constant_constraints() {
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = ConstraintSystemImpl::<Fr>::new();
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
         let input_bits: Vec<_> = (0..512).map(|_| Boolean::constant(rng.gen())).collect();
         blake2s_gadget(&mut cs, &input_bits).unwrap();
@@ -622,7 +622,7 @@ mod test {
 
             let hash_result = h.fixed_result();
 
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystemImpl::<Fr>::new();
 
             let mut input_bits = vec![];
 

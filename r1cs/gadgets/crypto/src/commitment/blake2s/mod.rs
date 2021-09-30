@@ -121,12 +121,12 @@ mod test {
         },
         *,
     };
-    use r1cs_core::ConstraintSystem;
-    use r1cs_std::{prelude::*, test_constraint_system::TestConstraintSystem};
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_std::prelude::*;
 
     #[test]
     fn commitment_gadget_test() {
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = ConstraintSystemImpl::<Fr>::new();
 
         let input = [1u8; 32];
 

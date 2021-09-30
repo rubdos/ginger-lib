@@ -38,8 +38,6 @@ extern crate algebra;
 #[macro_use]
 extern crate derivative;
 
-pub mod test_constraint_system;
-
 pub mod bits;
 pub use self::bits::*;
 

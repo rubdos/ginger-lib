@@ -64,10 +64,10 @@ mod test {
     use crate::FieldBasedHashGadget;
     use r1cs_std::{
         fields::fp::FpGadget,
-        test_constraint_system::TestConstraintSystem,
+
         alloc::AllocGadget,
     };
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
 
     pub(crate) fn constant_length_field_based_hash_gadget_native_test<
         F: PrimeField,
@@ -75,7 +75,7 @@ mod test {
         HG: FieldBasedHashGadget<H, F, DataGadget = FpGadget<F>>
     >(inputs: Vec<F>)
     {
-        let mut cs = TestConstraintSystem::<F>::new();
+        let mut cs = ConstraintSystemImpl::<F>::new();
 
         let primitive_result = {
             let mut digest = H::init_constant_length(inputs.len(), None);

@@ -67,10 +67,10 @@ pub trait PairingGadget<PairingE: PairingEngine, ConstraintF: Field> {
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::{
-        bits::boolean::Boolean, prelude::*, test_constraint_system::TestConstraintSystem,
+        bits::boolean::Boolean, prelude::*,
     };
     use algebra::{BitIterator, Field, Group, PairingEngine, PrimeField, UniformRand};
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
     use rand;
     use rand::thread_rng;
 
@@ -80,7 +80,7 @@ pub(crate) mod tests {
         ConstraintF: Field,
         P: PairingGadget<E, ConstraintF>,
     >() {
-        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let mut cs = ConstraintSystemImpl::<ConstraintF>::new();
 
         let mut rng = &mut thread_rng();
         let a = E::G1Projective::rand(&mut rng);

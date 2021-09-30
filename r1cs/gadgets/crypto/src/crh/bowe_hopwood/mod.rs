@@ -157,10 +157,9 @@ mod test {
         FixedLengthCRHGadget,
     };
     use algebra::{curves::edwards_sw6::EdwardsProjective as Edwards, ProjectiveCurve};
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
     use r1cs_std::{
-        alloc::AllocGadget, instantiated::edwards_sw6::EdwardsSWGadget,
-        test_constraint_system::TestConstraintSystem, uint8::UInt8,
+        alloc::AllocGadget, instantiated::edwards_sw6::EdwardsSWGadget, uint8::UInt8,
     };
 
     type TestCRH = BoweHopwoodPedersenCRH<Edwards, Window>;
@@ -192,7 +191,7 @@ mod test {
     #[test]
     fn crh_primitive_gadget_test() {
         let rng = &mut thread_rng();
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = ConstraintSystemImpl::<Fr>::new();
 
         let (input, input_bytes) = generate_input(&mut cs, rng);
         println!("number of constraints for input: {}", cs.num_constraints());

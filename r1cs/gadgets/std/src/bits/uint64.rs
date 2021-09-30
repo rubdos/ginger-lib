@@ -363,11 +363,11 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt64 {
 #[cfg(test)]
 mod test {
     use super::UInt64;
-    use crate::{bits::boolean::Boolean, test_constraint_system::TestConstraintSystem};
+    use crate::bits::boolean::Boolean;
     use algebra::fields::{
         bls12_381::Fr, Field
     };
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -408,7 +408,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystemImpl::<Fr>::new();
 
             let a: u64 = rng.gen();
             let b: u64 = rng.gen();
@@ -450,7 +450,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystemImpl::<Fr>::new();
 
             let a: u64 = rng.gen();
             let b: u64 = rng.gen();
@@ -485,7 +485,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystemImpl::<Fr>::new();
 
             let a: u64 = rng.gen();
             let b: u64 = rng.gen();

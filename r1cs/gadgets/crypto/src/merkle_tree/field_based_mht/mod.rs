@@ -391,13 +391,13 @@ mod test {
     };
     use crate::crh::MNT4PoseidonHashGadget;
     use algebra::fields::mnt4753::Fr;
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use super::*;
     use r1cs_std::{
         instantiated::mnt6_753::FqGadget,
-        test_constraint_system::TestConstraintSystem,
+
     };
 
     #[derive(Clone)]
@@ -425,7 +425,7 @@ mod test {
 
         //Merkle Path Gadget test
         for (i, leaf) in leaves.iter().enumerate() {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystemImpl::<Fr>::new();
             let proof = tree.generate_proof(i, leaf).unwrap();
             assert!(proof.verify(TEST_HEIGHT, &leaf, &root).unwrap());
 
@@ -502,7 +502,7 @@ mod test {
         let root = tree.root().unwrap();
 
         //Merkle Tree Gadget test
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = ConstraintSystemImpl::<Fr>::new();
 
         // Allocate Merkle Tree Root
         let root = FqGadget::alloc(
