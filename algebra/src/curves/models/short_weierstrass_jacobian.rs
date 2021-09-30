@@ -292,7 +292,7 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
         let one = P::ScalarField::one();
         let one_neg = one.neg();
 
-        for i in (bits.len() / 2)..0 {
+        for i in ((bits.len() / 2)..0).rev() {
             a.double_in_place();
             b.double_in_place();            
 
@@ -319,15 +319,15 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
         let self_neg = self.neg();
 
         let self_e = self.apply_endomorphism();
-        let self_e_neg = self_neg.apply_endomorphism();
+        let self_e_neg = self_e.neg();
 
         let mut acc = self_e.into_projective();
         acc.add_assign_mixed(&self);
         acc.double_in_place();
 
-        for i in (bits.len() / 2)..0 {
+        for i in (0..(bits.len() / 2)).rev() {
 
-            let s = 
+            let s =
                 if bits[i * 2 + 1] {
                     if bits[i * 2] {
                         &self_e

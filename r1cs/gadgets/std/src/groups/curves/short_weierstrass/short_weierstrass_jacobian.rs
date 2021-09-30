@@ -122,6 +122,79 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     ) -> Result<Self, SynthesisError> {
         self.add_internal(cs, other, false)
     }
+
+    pub fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Self, SynthesisError> {
+        Ok(Self::new(
+            self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
+            self.y.clone(),
+            self.infinity
+        ))
+    }
+
+    /// Performs scalar multiplication of this element with mixed addition.
+    pub fn endo_mul<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        bits: &[Boolean],
+    ) -> Result<Self, SynthesisError> {
+
+        let self_neg = self.negate(cs.ns(|| "negate self"))?;
+
+        let self_e = self.apply_endomorphism(cs.ns(|| "endo self"))?;
+        let self_e_neg = self_e.negate(cs.ns(|| "negate self endo"))?;
+
+        let mut acc = self_e.clone();
+        acc = acc.add(cs.ns(|| "add"), &self)?;
+        acc.double_in_place(cs.ns(|| "double"))?;
+
+        for i in (0..(bits.len() / 2)).rev() {
+
+            acc.double_in_place(cs.ns(|| format!("double {}", i)))?;
+
+            let bit0 = bits[i * 2];
+            let bit1 = bits[i * 2 + 1];
+
+            let bits00 = Boolean::and(cs.ns(|| format!("!b0 and !b1 {}", i)), &bit0.not(), &bit1.not())?;
+            let bits01 = Boolean::and(cs.ns(|| format!("!b0 and b1 {}", i)), &bit0.not(), &bit1)?;
+            let bits10 = Boolean::and(cs.ns(|| format!("b0 and !b1 {}", i)), &bit0, &bit1.not())?;
+            let bits11 = Boolean::and(cs.ns(|| format!("b0 and b1 {}", i)), &bit0, &bit1)?;
+
+            let tmp00 = acc.add(cs.ns(|| format!("add -(self) {}", i)), &self_neg)?;
+            let tmp01 = acc.add(cs.ns(|| format!("add -(endo self) {}", i)), &self_e_neg)?;
+            let tmp10 = acc.add(cs.ns(|| format!("add self {}", i)), &self)?;
+            let tmp11 = acc.add(cs.ns(|| format!("add endo self {}", i)), &self_e)?;
+
+            acc = Self::conditionally_select(
+                cs.ns(|| format!("Conditional Select 00 {}", i)),
+                &bits00,
+                &tmp00,
+                &acc,
+            )?;
+            acc = Self::conditionally_select(
+                cs.ns(|| format!("Conditional Select 01 {}", i)),
+                &bits01,
+                &tmp01,
+                &acc,
+            )?;
+            acc = Self::conditionally_select(
+                cs.ns(|| format!("Conditional Select 10 {}", i)),
+                &bits10,
+                &tmp10,
+                &acc,
+            )?;
+            acc = Self::conditionally_select(
+                cs.ns(|| format!("Conditional Select 11 {}", i)),
+                &bits11,
+                &tmp11,
+                &acc,
+            )?;
+        }
+
+        Ok(acc)
+    }
 }
 
 impl<P, ConstraintF, F> PartialEq for AffineGadget<P, ConstraintF, F>
@@ -516,17 +589,6 @@ for AffineGadget<P, ConstraintF, F>
 
     fn cost_of_double() -> usize {
         3 * F::cost_of_mul() + F::cost_of_mul_equals()
-    }
-
-    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        mut cs: CS,
-    ) -> Result<Self, SynthesisError> {
-        Ok(Self::new(
-            self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
-            self.y.clone(),
-            self.infinity
-        ))
     }
 }
 

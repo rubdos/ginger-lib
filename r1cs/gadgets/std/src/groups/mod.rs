@@ -174,28 +174,6 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_add() -> usize;
 
     fn cost_of_double() -> usize;
-
-    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        _cs: CS,
-    ) -> Result<Self, SynthesisError>
-    {
-        Ok(self.clone())
-    }
-
-    // fn endo_rep_to_scalar<CS: ConstraintSystem<ConstraintF>>(
-    //     &self,
-    //     cs: CS,
-    //     bits: &[Boolean],
-    // ) -> Result<dyn FieldGadget<G::ScalarField, ConstraintF>, SynthesisError>
-    // {
-    //     Ok(
-    //         FieldGadget::<G::ScalarField, ConstraintF>::from_bits(
-    //             cs,
-    //             bits
-    //         ).unwrap()
-    //     )
-    // }
 }
 
 #[cfg(test)]
@@ -320,7 +298,5 @@ pub(crate) mod test {
         let _ = b
             .to_bytes_strict(&mut cs.ns(|| "b ToBytes Strict"))
             .unwrap();
-
-        let _ = b.apply_endomorphism(cs.ns(|| "b endo")).unwrap();
     }
 }
