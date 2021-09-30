@@ -3,7 +3,7 @@ use algebra::{
             tweedle::{Fq as TweedleFq, Fr as TweedleFr},
             bn_382::{Fq as Bn382Fq, Fr as Bn382Fr},
             secp256k1::Fq as secp256k1Fq,
-            Field, PrimeField, FpParameters
+            PrimeField, FpParameters
         },
         BigInteger
 };
@@ -699,6 +699,111 @@ fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng:
     }
 }
 
+fn from_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R) {    
+    for _ in 0..TEST_COUNT {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+        let f = SimulationF::rand(rng);
+
+        let f_var = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_input(
+            cs.ns(|| "alloc input f"),
+            || Ok(f)
+        ).unwrap();
+        let f_var_converted: NonNativeFieldMulResultGadget<SimulationF, ConstraintF> = FromGadget::from(
+            &f_var,
+            cs.ns(|| "convert f")
+        ).unwrap();
+        let f_var_converted_reduced = f_var_converted.reduce(cs.ns(|| "reduce f_var_converted")).unwrap();
+    
+        let f_var_value = f_var.get_value().unwrap();
+        let f_var_converted_reduced_value = f_var_converted_reduced.get_value().unwrap();
+    
+        assert_eq!(f, f_var_value);
+        assert_eq!(f_var_value, f_var_converted_reduced_value);
+    
+        if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
+        assert!(cs.is_satisfied());
+    }
+}
+
+fn to_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R) {
+    for _ in 0..TEST_COUNT {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let f = SimulationF::rand(rng);
+        let f_bits = f.write_bits();
+
+        let f_var = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_input(
+            cs.ns(|| "alloc input f"),
+            || Ok(f)
+        ).unwrap();
+
+        let f_var_bits = f_var
+            .to_bits_strict(cs.ns(|| "f to bits strict"))
+            .unwrap()
+            .into_iter()
+            .map(|b| b.get_value().unwrap())
+            .collect::<Vec<bool>>();
+        
+        assert_eq!(f_bits, f_var_bits);
+        if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
+        assert!(cs.is_satisfied());
+    }
+}
+
+fn to_bytes_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R) {
+    use algebra::CanonicalSerialize;
+
+    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+    let target_test_elem = SimulationF::from(123456u128);
+    let target_test_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
+        cs.ns(|| "alloc target test gadget"),
+        || Ok(target_test_elem)
+    ).unwrap();
+
+    let target_to_bytes: Vec<u8> = target_test_gadget
+        .to_bytes_strict(cs.ns(|| "target_test_gadget to bytes strict"))
+        .unwrap()
+        .iter()
+        .map(|v| v.get_value().unwrap())
+        .collect();
+
+    // 123456 = 65536 + 226 * 256 + 64
+    assert_eq!(target_to_bytes[0], 64);
+    assert_eq!(target_to_bytes[1], 226);
+    assert_eq!(target_to_bytes[2], 1);
+
+    for byte in target_to_bytes.iter().skip(3) {
+        assert_eq!(*byte, 0);
+    }
+
+    if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
+    assert!(cs.is_satisfied());
+
+    for _ in 0..TEST_COUNT {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let f = SimulationF::rand(rng);
+        let mut f_bytes = Vec::with_capacity(f.serialized_size());
+        CanonicalSerialize::serialize(&f, &mut f_bytes).unwrap();
+
+        let f_var = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_input(
+            cs.ns(|| "alloc input f"),
+            || Ok(f)
+        ).unwrap();
+
+        let f_var_bytes = f_var
+            .to_bytes_strict(cs.ns(|| "f to bytes strict"))
+            .unwrap()
+            .into_iter()
+            .map(|b| b.get_value().unwrap())
+            .collect::<Vec<u8>>();
+        
+        assert_eq!(f_bytes, f_var_bytes);
+        if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
+        assert!(cs.is_satisfied());
+    }
+}
+
 // Macros for implementing above tests on non-native arithmetics
 macro_rules! nonnative_test_individual {
     ($test_method:ident, $test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
@@ -813,6 +918,24 @@ macro_rules! nonnative_test {
             $test_simulation_field,
             $test_constraint_field
         );
+        nonnative_test_individual!(
+            from_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            to_bits_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            to_bytes_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
     };
 }
 
@@ -847,83 +970,15 @@ nonnative_test!(
     Bn382Fq,
     secp256k1Fq
 );
-
-
-// TODO: Make all the tests below generic and add them to the macros above
-#[test]
-fn from_test() {
-    use algebra::UniformRand;
-
-    type F = TweedleFr;
-    type CF = TweedleFq;
-
-    let mut rng = thread_rng();
-    let mut cs = TestConstraintSystem::<CF>::new();
-    let f = F::rand(&mut rng);
-
-    let f_var = NonNativeFieldGadget::<F, CF>::alloc_input(
-        cs.ns(|| "alloc input f"),
-        || Ok(f)
-    ).unwrap();
-    let f_var_converted: NonNativeFieldMulResultGadget<F, CF> = FromGadget::from(
-        &f_var,
-        cs.ns(|| "convert f")
-    ).unwrap();
-    let f_var_converted_reduced = f_var_converted.reduce(cs.ns(|| "reduce f_var_converted")).unwrap();
-
-    let f_var_value = f_var.get_value().unwrap();
-    let f_var_converted_reduced_value = f_var_converted_reduced.get_value().unwrap();
-
-    assert_eq!(f_var_value, f_var_converted_reduced_value);
-
-    if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
-    assert!(cs.is_satisfied());
-}
-
-#[test]
-fn to_bytes_test() {
-    type F = TweedleFr;
-    type CF = TweedleFq;
-
-    let mut cs = TestConstraintSystem::<CF>::new();
-
-    let target_test_elem = F::from(123456u128);
-    let target_test_gadget = NonNativeFieldGadget::<F, CF>::alloc(
-        cs.ns(|| "alloc target test gadget"),
-        || Ok(target_test_elem)
-    ).unwrap();
-
-    let target_to_bytes: Vec<u8> = target_test_gadget
-        .to_bytes_strict(cs.ns(|| "target_test_gadget to bytes strict"))
-        .unwrap()
-        .iter()
-        .map(|v| v.get_value().unwrap())
-        .collect();
-
-    // 123456 = 65536 + 226 * 256 + 64
-    assert_eq!(target_to_bytes[0], 64);
-    assert_eq!(target_to_bytes[1], 226);
-    assert_eq!(target_to_bytes[2], 1);
-
-    for byte in target_to_bytes.iter().skip(3) {
-        assert_eq!(*byte, 0);
-    }
-
-    if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
-    assert!(cs.is_satisfied());
-}
-
-#[test]
-fn to_bits_test() {
-    type F = TweedleFr;
-    type CF = TweedleFq;
-
-    let mut cs = TestConstraintSystem::<CF>::new();
-    let f = F::zero();
-
-    let f_var = NonNativeFieldGadget::<F, CF>::alloc_input(cs.ns(|| "alloc input f"), || Ok(f)).unwrap();
-    f_var.to_bits_strict(cs.ns(|| "f to bits strict")).unwrap();
-
-    if !cs.is_satisfied() { println!("{:?}", cs.which_is_unsatisfied()); }
-    assert!(cs.is_satisfied());
-}
+nonnative_test!(
+    Bn382FrTweedleFq,
+    Bn382Fr,
+    TweedleFq
+);
+// TODO: This test, along with some others, seems to cause troubles
+//       with the enforce_in_field gadget. Fix it. 
+/*nonnative_test!(
+    TweedleFqBn382Fr,
+    TweedleFq,
+    Bn382Fr
+);*/
