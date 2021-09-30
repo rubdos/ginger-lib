@@ -216,9 +216,11 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
 
         self.constraint_names.push(path.clone());
 
-        self.at.push(vec![]);
-        self.bt.push(vec![]);
-        self.ct.push(vec![]);
+        if self.should_construct_matrices() {
+            self.at.push(vec![]);
+            self.bt.push(vec![]);
+            self.ct.push(vec![]);
+        }
 
         Self::push_constraints(
             a(LinearCombination::zero()),
