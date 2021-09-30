@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use algebra::Field;
+use radix_trie::Trie;
 
 use crate::{Index, Variable, LinearCombination, SynthesisError};
 
@@ -104,6 +105,11 @@ pub struct ConstraintSystemImpl<F: Field> {
     pub bt: Vec<Vec<(F, Index)>>,
     /// `C` matrix of the R1CS.
     pub ct: Vec<Vec<(F, Index)>>,
+    named_objects: Trie<String, NamedObject>,
+    current_namespace: Vec<String>,
+    constraint_names: Vec<String>,
+    input_names: Vec<String>,
+    aux_names: Vec<String>,
 }
 
 /// Defines the mode of operation of `ConstraintSystemImpl`.
@@ -122,6 +128,33 @@ pub enum SynthesisMode {
     },
 }
 
+#[derive(Debug, Clone)]
+enum NamedObject {
+    Constraint(usize),
+    Var(Variable),
+    Namespace,
+}
+
+fn compute_path(ns: &[String], this: String) -> String {
+    if this.chars().any(|a| a == '/') {
+        panic!("'/' is not allowed in names");
+    }
+
+    let mut name = String::new();
+
+    let mut needs_separation = false;
+    for ns in ns.iter().chain(Some(&this).into_iter()) {
+        if needs_separation {
+            name += "/";
+        }
+
+        name += ns;
+        needs_separation = true;
+    }
+
+    name
+}
+
 impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
     type Root = ConstraintSystemImpl<F>;
     #[inline]
@@ -129,12 +162,14 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
         Variable::new_unchecked(Index::Input(0))
     }
     #[inline]
-    fn alloc<FN, A, AR>(&mut self, _: A, f: FN) -> Result<Variable, SynthesisError>
+    fn alloc<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
         where
             FN: FnOnce() -> Result<F, SynthesisError>,
             A: FnOnce() -> AR,
             AR: Into<String>,
     {
+        let path = compute_path(&self.current_namespace, annotation().into());
+        self.aux_names.push(path.clone());
         let index = self.num_aux;
         self.num_aux += 1;
 
@@ -144,12 +179,14 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
         Ok(Variable::new_unchecked(Index::Aux(index)))
     }
     #[inline]
-    fn alloc_input<FN, A, AR>(&mut self, _: A, f: FN) -> Result<Variable, SynthesisError>
+    fn alloc_input<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
         where
             FN: FnOnce() -> Result<F, SynthesisError>,
             A: FnOnce() -> AR,
             AR: Into<String>,
     {
+        let path = compute_path(&self.current_namespace, annotation().into());
+        self.input_names.push(path.clone());
         let index = self.num_inputs;
         self.num_inputs += 1;
 
@@ -159,7 +196,7 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
         Ok(Variable::new_unchecked(Index::Input(index)))
     }
     #[inline]
-    fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
+    fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
         where
             A: FnOnce() -> AR,
             AR: Into<String>,
@@ -167,6 +204,12 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
             LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
             LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
     {
+        let path = compute_path(&self.current_namespace, annotation().into());
+        let index = self.at.len();
+        self.set_named_obj(path.clone(), NamedObject::Constraint(index));
+
+        self.constraint_names.push(path.clone());
+
         self.at.push(vec![]);
         self.bt.push(vec![]);
         self.ct.push(vec![]);
@@ -189,29 +232,21 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
 
         self.num_constraints += 1;
     }
-    fn push_namespace<NR, N>(&mut self, _name_fn: N)
+    fn push_namespace<NR, N>(&mut self, name_fn: N)
         where
             NR: Into<String>,
             N: FnOnce() -> NR
     {
-        // Do nothing
+        let name = name_fn().into();
+        let path = compute_path(&self.current_namespace, name.clone());
+        self.set_named_obj(path.clone(), NamedObject::Namespace);
+        self.current_namespace.push(name);
     }
     fn pop_namespace(&mut self) {
-        // Do nothing
+        assert!(self.current_namespace.pop().is_some());
     }
     fn get_root(&mut self) -> &mut Self::Root {
         self
-    }
-
-    /// Begin a namespace for this constraint system.
-    fn ns<'a, NR, N>(&'a mut self, name_fn: N) -> Namespace<'a, F, Self::Root>
-        where
-            NR: Into<String>,
-            N: FnOnce() -> NR,
-    {
-        self.get_root().push_namespace(name_fn);
-
-        Namespace(self.get_root(), PhantomData)
     }
     fn num_constraints(&self) -> usize {
         self.num_constraints
@@ -221,6 +256,11 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
 impl<F: Field> ConstraintSystemImpl<F> {
     /// Construct an empty `ConstraintSystem`.
     pub fn new() -> Self {
+        let mut map = Trie::new();
+        map.insert(
+            "ONE".into(),
+            NamedObject::Var(ConstraintSystemImpl::<F>::one()),
+        );
         Self {
             num_inputs: 1,
             num_aux: 0,
@@ -233,6 +273,11 @@ impl<F: Field> ConstraintSystemImpl<F> {
             mode: SynthesisMode::Prove {
                 construct_matrices: true,
             },
+            named_objects: map,
+            current_namespace: vec![],
+            constraint_names: vec![],
+            input_names: vec!["ONE".into()],
+            aux_names: vec![],
         }
     }
     /// Set `self.mode` to `mode`.
@@ -263,6 +308,90 @@ impl<F: Field> ConstraintSystemImpl<F> {
                 Index::Aux(i) => constraints[this_constraint].push((*coeff, Index::Aux(i))),
             }
         }
+    }
+    fn eval_lc(
+        terms: &[(F, Index)],
+        inputs: &[F],
+        aux: &[F],
+    ) -> F {
+        let mut acc = F::zero();
+
+        for &(ref coeff, idx) in terms {
+            let mut tmp = match idx {
+                Index::Input(index) => inputs[index],
+                Index::Aux(index) => aux[index],
+            };
+
+            tmp.mul_assign(coeff);
+            acc.add_assign(tmp);
+        }
+
+        acc
+    }
+
+    /// Prints the list of named object currently registered into the constraint system
+    pub fn print_named_objects(&self) {
+        for name in &self.constraint_names {
+            println!("{}", name);
+        }
+    }
+
+    /// Returns an Option containing the name of the first constraint which is not satisfied
+    /// or None if all the constraints are satisfied.
+    pub fn which_is_unsatisfied(&self) -> Option<&str> {
+        for i in 0..self.num_constraints {
+            let mut a = Self::eval_lc(&self.at[i], &self.input_assignment, &self.aux_assignment);
+            let b = Self::eval_lc(&self.bt[i], &self.input_assignment, &self.aux_assignment);
+            let c = Self::eval_lc(&self.ct[i], &self.input_assignment, &self.aux_assignment);
+            a.mul_assign(&b);
+
+            if a != c {
+                return Some(&self.constraint_names[i]);
+            }
+        }
+        None
+    }
+
+    /// Checks whether all the constraints are satisfied.
+    pub fn is_satisfied(&self) -> bool {
+        self.which_is_unsatisfied().is_none()
+    }
+    /// Sets the the variable named `path` to the value `to`.
+    /// Panics if no variable exists at `path` or if `path` does not indicate a variable.
+    pub fn set(&mut self, path: &str, to: F) {
+        match self.named_objects.get(path) {
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.input_assignment[index] = to,
+                Index::Aux(index) => self.aux_assignment[index] = to,
+            },
+            Some(e) => panic!(
+                "tried to set path `{}` to value, but `{:?}` already exists there.",
+                path, e
+            ),
+            _ => panic!("no variable exists at path: {}", path),
+        }
+    }
+    /// Gets the value of the variable named `path`.
+    /// Panics if the variable named `path` does not exist.
+    pub fn get(&mut self, path: &str) -> F {
+        match self.named_objects.get(path) {
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.input_assignment[index],
+                Index::Aux(index) => self.aux_assignment[index],
+            },
+            Some(e) => panic!(
+                "tried to get value of path `{}`, but `{:?}` exists there (not a variable)",
+                path, e
+            ),
+            _ => panic!("no variable exists at path: {}", path),
+        }
+    }
+    fn set_named_obj(&mut self, path: String, to: NamedObject) {
+        if self.named_objects.get(&path).is_some() {
+            panic!("tried to create object at existing path: {}", path);
+        }
+
+        self.named_objects.insert(path, to);
     }
 }
 
