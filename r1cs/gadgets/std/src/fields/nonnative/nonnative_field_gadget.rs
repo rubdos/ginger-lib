@@ -54,8 +54,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 {
     /// Obtain the non-native value from a vector of not necessarily normalized 
     /// limb elements.
-    // TODO: Find out why the functions limbs_to_bigint and bigint_to_constraint_field 
-    // (applied to `SimulationF`) is not used here instead.
+    // TODO: Can we use the functions limbs_to_bigint and bigint_to_constraint_field ? Logic seems duplicated
     pub fn limbs_to_value(limbs: Vec<ConstraintF>) -> SimulationF {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -476,7 +475,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF> {
         self.sub(cs.ns(|| "subtract constant"), &other_g)
     }
 
-    // TODO: Can be optimized by implementing a mul_by_constant_without_reduce() ?
+    // TODO: Can be optimized by implementing a mul_by_constant_without_reduce()
     fn mul_by_constant<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS, fe: &SimulationF) -> Result<Self, SynthesisError> {
         let other_g = Self::from_value(
             cs.ns(|| "hardcode mul constant"),

@@ -15,7 +15,7 @@ use crate::{
     bits::boolean::Boolean,
     groups::{
         GroupGadget,
-        nonnative::nonnative_group_gadget::GroupAffineNonNativeGadget,
+        nonnative::short_weierstrass_jacobian::GroupAffineNonNativeGadget,
         test::group_test_with_incomplete_add,
     },
     test_constraint_system::TestConstraintSystem,

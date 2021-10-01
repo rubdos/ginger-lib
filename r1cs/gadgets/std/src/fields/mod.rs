@@ -494,6 +494,8 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert_eq!(ab_true.get_value().unwrap(), a_native + &b_native);
+
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]
@@ -514,7 +516,33 @@ pub(crate) mod tests {
             a.frobenius_map(i);
 
             assert_eq!(a_gadget.get_value().unwrap(), a);
+            assert!(cs.is_satisfied());
         }
+    }
+
+    pub(crate) fn even_odd_fp_gadget_test<ConstraintF: PrimeField>(){
+        let rng = &mut thread_rng();
+
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+        let one = FpGadget::<ConstraintF>::one(cs.ns(|| "one")).unwrap();
+        let two = one.double(cs.ns(|| "two")).unwrap();
+
+        assert!(one.is_odd(cs.ns(|| "one is odd")).unwrap().get_value().unwrap());
+        assert!(!two.is_odd(cs.ns(|| "two is not odd")).unwrap().get_value().unwrap());
+
+        for i in 0..100 {
+            let mut iter_cs = cs.ns(|| format!("iter_{}", i));
+
+            let random_native = ConstraintF::rand(rng);
+            let random = FpGadget::<ConstraintF>::alloc(
+                iter_cs.ns(|| "alloc random"),
+                || Ok(random_native)
+            ).unwrap();
+
+            assert_eq!(random_native.is_odd(), random.is_odd(iter_cs.ns(|| "is random odd")).unwrap().get_value().unwrap());
+        }
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]

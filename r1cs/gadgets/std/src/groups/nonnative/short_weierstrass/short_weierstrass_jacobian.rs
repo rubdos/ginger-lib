@@ -86,8 +86,6 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         lambda.mul_equals(cs.ns(|| "check lambda"), &two_y, &three_x_squared_plus_a)?;
 
         // Allocate fresh x and y as a temporary workaround to reduce the R1CS density.
-        // TODO: Let us check if the constraints from non-native arithmetics
-        //       already stop the propagation of LCs
         let x = NonNativeFieldGadget::alloc(
             cs.ns(|| "new x"),
             || {

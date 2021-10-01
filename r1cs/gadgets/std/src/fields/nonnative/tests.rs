@@ -327,14 +327,13 @@ fn distribution_law_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rn
 fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
+    use rand::prelude::SliceRandom;
+
     let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
-    let mut operations: Vec<u32> = Vec::new();
-    // TODO: a random choice of the operation is not appriate for small numbers
-    // of `TEST_COUNT`. Lets do a deterministic selection instead.
-    for _ in 0..TEST_COUNT {
-        operations.push(rng.next_u32() % 3);
-    }
+    // Sample random operations to perform
+    let mut operations = (0..=2).flat_map(|op| vec![op; TEST_COUNT]).collect::<Vec<_>>();
+    operations.shuffle(rng);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
@@ -630,6 +629,31 @@ fn inverse_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
     assert!(cs.is_satisfied());
 }
 
+fn even_odd_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
+    rng: &mut R,
+){
+    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+    let one = NonNativeFieldGadget::<SimulationF, ConstraintF>::one(cs.ns(|| "one")).unwrap();
+    let two = one.double(cs.ns(|| "two")).unwrap();
+
+    assert!(one.is_odd(cs.ns(|| "one is odd")).unwrap().get_value().unwrap());
+    assert!(!two.is_odd(cs.ns(|| "two is not odd")).unwrap().get_value().unwrap());
+
+    for i in 0..TEST_COUNT {
+        let mut iter_cs = cs.ns(|| format!("iter_{}", i));
+
+        let random_native = SimulationF::rand(rng);
+        let random = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
+            iter_cs.ns(|| "alloc random"),
+            || Ok(random_native)
+        ).unwrap();
+
+        assert_eq!(random_native.is_odd(), random.is_odd(iter_cs.ns(|| "is random odd")).unwrap().get_value().unwrap());
+    }
+    assert!(cs.is_satisfied());
+}
+
 /// Test basic correctness of from_bits for NonNativeFieldGadget over TEST_COUNT many random instances.
 fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R)
 {
@@ -908,6 +932,12 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             inverse_stress_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            even_odd_stress_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field

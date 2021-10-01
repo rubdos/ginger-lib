@@ -83,9 +83,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
 
         // we extract the bits from the `num_bits` least significant bits
         let to_skip = ConstraintF::size_in_bits() - num_bits;
-        assert!(to_skip > 0
-            && to_skip <= ConstraintF::Params::CAPACITY as usize
-        );
+        assert!(to_skip <= ConstraintF::size_in_bits());
 
         limb.to_bits_with_length_restriction(cs.ns(|| "limb to bits"), to_skip)
     }
