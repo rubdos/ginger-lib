@@ -292,7 +292,7 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
         let one = P::ScalarField::one();
         let one_neg = one.neg();
 
-        for i in ((bits.len() / 2)..0).rev() {
+        for i in (0..(bits.len() / 2)).rev() {
             a.double_in_place();
             b.double_in_place();            
 
@@ -333,13 +333,13 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
                         &self_e
                     } else {
                         &self_e_neg
-                    }               
+                    }
                 } else {
                     if bits[i * 2] {
                         &self
                     } else {
                         &self_neg
-                    }               
+                    }
                 };
 
             acc.double_in_place();
