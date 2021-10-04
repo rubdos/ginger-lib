@@ -6,7 +6,7 @@ use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
 use rand::rngs::OsRng;
 
-use crate::{prelude::*, Assignment};
+use crate::{prelude::*, Assignment, groups::check_mul_bits_inputs};
 
 #[derive(Derivative)]
 #[derivative(Debug, Clone)]
@@ -544,6 +544,8 @@ for AffineGadget<P, ConstraintF, F>
         };
 
         let mut bits = bits.cloned().collect::<Vec<Boolean>>();
+        check_mul_bits_inputs(self, bits.as_slice())?;
+
         // Length normalization by adding the scalar field modulus. 
         // The result is alway n + 1 bits long, although the leading bit might be zero.
         // Costs ~ 1*n + O(1) many constraints.
@@ -552,21 +554,7 @@ for AffineGadget<P, ConstraintF, F>
             bits
         )?;
      
-        // Select any random T if self is infinity
-        // TODO: let us overthink whether we serve trivial base points inside `mul_bits()`
-        let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
-            let mut rng = OsRng::default();
-            Ok(loop {
-                let r = SWProjective::<P>::rand(&mut rng);
-                if !r.is_zero() { break(r) }
-            })
-        })?;
-        let t = Self::conditionally_select(
-            cs.ns(|| "select self or random T"),
-            &self.infinity,
-            &random_t,
-            self
-        )?;
+        let t = self.clone();
 
         // Acc := [3] T = [2]*T + T
         let init = {
@@ -715,15 +703,7 @@ for AffineGadget<P, ConstraintF, F>
             &acc,
             &acc_minus_t
         )?;
-
-        // If self was infinity, return 0 instead of result
-        let zero = Self::zero(cs.ns(|| "alloc 0"))?;
-        Self::conditionally_select(
-            cs.ns(|| "result or 0"),
-            &self.infinity,
-            &zero,
-            &result
-        )
+        Ok(result)
     }
 
     ///This will take [(4 + 1) * ceil(len(bits)/2)] constraints to put the x lookup constraint

@@ -10,7 +10,13 @@ use algebra::{
 
 use r1cs_core::{ConstraintSystem, SynthesisError};
 
-use crate::{Assignment, ToBitsGadget, ToBytesGadget, alloc::{AllocGadget, ConstantGadget}, boolean::Boolean, fields::{FieldGadget, nonnative::nonnative_field_gadget::NonNativeFieldGadget}, groups::GroupGadget, prelude::EqGadget, select::{CondSelectGadget, TwoBitLookupGadget}, uint8::UInt8};
+use crate::{
+    Assignment, ToBitsGadget, ToBytesGadget,
+    alloc::{AllocGadget, ConstantGadget},
+    boolean::Boolean,
+    fields::{FieldGadget, nonnative::nonnative_field_gadget::NonNativeFieldGadget},
+    groups::{check_mul_bits_inputs, GroupGadget}, prelude::EqGadget, select::{CondSelectGadget, TwoBitLookupGadget}, uint8::UInt8
+};
 use std::{borrow::Borrow, marker::PhantomData};
 use rand::rngs::OsRng;
 
@@ -248,6 +254,8 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
                 };
 
         let mut bits = bits.cloned().collect::<Vec<Boolean>>();
+        check_mul_bits_inputs(self, bits.as_slice())?;
+
         // Length normalization by adding the scalar field modulus. 
         // The result is alway n + 1 bits long, although the leading bit might be zero.
         // Costs ~ 1*n + O(1) many constraints.
@@ -256,21 +264,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             bits
         )?;
 
-        // Select any random T if self is infinity
-        // TODO: let us overthink whether we serve trivial base points inside `mul_bits()`
-        let random_t = Self::alloc(cs.ns(|| "alloc random T"), || {
-            let mut rng = OsRng::default();
-            Ok(loop {
-                let r = SWProjective::<P>::rand(&mut rng);
-                if !r.is_zero() { break(r) }
-            })
-        })?;
-        let t = Self::conditionally_select(
-            cs.ns(|| "select self or random T"),
-            &self.infinity,
-            &random_t,
-            self
-        )?;
+        let t = self.clone();
 
         // Acc := [3] T = [2]*T + T
         let init = {
@@ -357,14 +351,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
             &acc_minus_t
         )?;
 
-        // If self was infinity, return 0 instead of result
-        let zero = Self::zero(cs.ns(|| "alloc 0"))?;
-        Self::conditionally_select(
-            cs.ns(|| "result or 0"),
-            &self.infinity,
-            &zero,
-            &result
-        )
+        Ok(result)
     }
 
     ///This will take [(4 + 1) * ceil(len(bits)/2)] constraints to put the x lookup constraint

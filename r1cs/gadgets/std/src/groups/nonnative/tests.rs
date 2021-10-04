@@ -58,11 +58,6 @@ pub(crate) fn mul_bits_test<
     assert_eq!(a_times_gg_vb.get_value().unwrap(), g.mul(&a));
     assert_eq!(a_times_gg_fb.get_value().unwrap(), g.mul(&a));
 
-    // Test zero case
-    let zero = GG::zero(cs.ns(|| "alloc zero")).unwrap();
-    let zero_times_a = zero.mul_bits(cs.ns(|| "0 ^ a"), a_bits.iter()).unwrap();
-    assert_eq!(zero_times_a.get_value().unwrap(), zero.get_value().unwrap());
-
     assert!(cs.is_satisfied());
 }
 

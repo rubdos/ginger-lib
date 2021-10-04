@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use algebra::{Field, PrimeField, Group};
+use algebra::{BigInteger, Field, PrimeField, FpParameters, Group};
 use r1cs_core::{ConstraintSystem, SynthesisError};
 
 use std::{borrow::Borrow, fmt::Debug};
@@ -176,6 +176,68 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_double() -> usize;
 }
 
+/// Pre-checks for vbSM with incomplete arithmetic using Hopwood algorithm (https://github.com/zcash/zcash/issues/3924) :
+/// - 'self' must be non-trivial and in the prime order subgroup 
+/// - 'bits', in little endian, must be of length <= than the scalar field modulus. 
+///           and must not be equal to {0, p-2, p-1, p, p+1}.
+#[inline]
+pub(crate) fn check_mul_bits_inputs<
+    ConstraintF: Field,
+    G: Group,
+    GG: GroupGadget<G, ConstraintF, Value = G>,
+>(
+    base: &GG,
+    bits: &[Boolean],
+) -> Result<(), SynthesisError>
+{
+    // bits must be smaller than the scalar field modulus
+    if bits.len() > G::ScalarField::size_in_bits() {
+        return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), G::ScalarField::size_in_bits())));
+    }
+
+    // Checks that can be done only at proving time
+    if base.get_value().is_some() && bits.iter().all(|b| b.get_value().is_some()) {
+        
+        // Collect primitive values
+        let base = base.get_value().unwrap();
+        let bits = bits.iter().rev().map(|b| b.get_value().unwrap()).collect::<Vec<bool>>(); // as BE
+        
+        // self must not be trivial
+        if base.is_zero() {
+            return Err(SynthesisError::Other("Base point is trivial".to_owned()));
+        }
+
+        // self must be on curve and in the prime order subgroup
+        if !base.is_valid() {
+            return Err(SynthesisError::Other("Invalid base point".to_owned()));
+        }
+
+        // Read FE from bits, excluding bits_val to be p or p+1 too
+        let bits_val = <G::ScalarField as PrimeField>::BigInt::from_bits(bits.as_slice());
+        
+        // bits_val != 0
+        if bits_val.is_zero() {return Err(SynthesisError::Other("Scalar must not be zero".to_owned()))}
+
+        // bits_val != p
+        let mut to_compare = <G::ScalarField as PrimeField>::Params::MODULUS;
+        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus".to_owned()))}
+
+        // bits_val != p + 1
+        assert!(!to_compare.add_nocarry(&<G::ScalarField as PrimeField>::BigInt::from(1)));
+        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus + 1".to_owned()))}
+
+        // bits_val != p - 1
+        assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(2)));
+        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 1".to_owned()))}
+
+        // bits_val != p - 2
+        assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(1)));
+        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 2".to_owned()))}
+    }
+
+    Ok(())
+}
+
 /// The 'constant' length transformation for scalar multiplication in a group
 /// with scalar field `ScalarF`. 
 /// Implements the non-native big integer addition of the scalar, given as 
@@ -194,13 +256,11 @@ pub(crate) fn scalar_bits_to_constant_length<
     bits: Vec<Boolean>
 ) -> Result<Vec<Boolean>, SynthesisError>
 {
-    use algebra::{BigInteger, FpParameters};
     use crate::fields::fp::FpGadget;
 
-    assert!(
-        bits.len() <= ScalarF::size_in_bits(),
-        "Input bits size: {}, max allowed size: {}", bits.len(), ScalarF::size_in_bits()
-    );
+    if bits.len() > ScalarF::size_in_bits() {
+        Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), ScalarF::size_in_bits())))?
+    }
 
     // bits per limb must not exceed the CAPACITY minus one bit, which is 
     // reserved for the addition.
@@ -555,12 +615,6 @@ pub(crate) mod test {
             a_times_gg_fb
                 .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb).unwrap()
                 .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
-
-            // Test zero case
-            let zero = GG::zero(cs.ns(|| "alloc zero")).unwrap();
-            let zero_times_a = zero.mul_bits(cs.ns(|| "0 ^ a"), a_bits.iter()).unwrap();
-            assert_eq!(zero_times_a, zero);
-            assert!(cs.is_satisfied());
         }
     }
 }
