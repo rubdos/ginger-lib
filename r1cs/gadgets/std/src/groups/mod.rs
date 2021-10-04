@@ -202,12 +202,12 @@ pub(crate) fn check_mul_bits_inputs<
         let base = base.get_value().unwrap();
         let bits = bits.iter().rev().map(|b| b.get_value().unwrap()).collect::<Vec<bool>>(); // as BE
         
-        // self must not be trivial
+        // base must not be trivial
         if base.is_zero() {
             return Err(SynthesisError::Other("Base point is trivial".to_owned()));
         }
 
-        // self must be on curve and in the prime order subgroup
+        // base must be on curve and in the prime order subgroup
         if !base.is_valid() {
             return Err(SynthesisError::Other("Invalid base point".to_owned()));
         }

@@ -1,10 +1,6 @@
-use algebra::{
-    curves::short_weierstrass_projective::{GroupAffine as SWAffine, GroupProjective as SWProjective},
-    SWModelParameters, UniformRand,
-    AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve};
+use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, SemanticallyValid, curves::short_weierstrass_projective::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 use r1cs_core::{ConstraintSystem, SynthesisError};
-use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
-use rand::rngs::OsRng;
+use std::{borrow::Borrow, marker::PhantomData, ops::{Add, Mul, Neg}};
 
 use crate::{prelude::*, Assignment, groups::check_mul_bits_inputs};
 
@@ -707,11 +703,8 @@ for AffineGadget<P, ConstraintF, F>
         Ok(result)
     }
 
-    ///This will take [(4 + 1) * ceil(len(bits)/2)] constraints to put the x lookup constraint
-    ///into the addition formula. See coda/src/lib/snarky_curves/snarky_curves.ml "scale_known"
-    // TODO: let us redesign this algorithm with no random shift and explicit use of complete
-    //      arithmetics of the "last" steps of the loop. Such redesign allows even the
-    //      usage of unsafe add for large parts of the loop.
+    /// [Hopwood]: https://github.com/zcash/zcash/issues/3924 
+    /// fixed base scalar multiplication, taking only 2 constraints per scalar bit.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
@@ -719,42 +712,55 @@ for AffineGadget<P, ConstraintF, F>
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError>{
 
-        // Avoid exceptional cases when base = infinity
+        // Pre-checks
+        
+        // base must not be trivial
         if base.is_zero() {
-            return Err(SynthesisError::Other("Base must not be infinity !".to_owned()));
+            return Err(SynthesisError::Other("Base point is trivial".to_owned()));
         }
+
+        // base must be on curve and in the prime order subgroup
+        if !base.is_valid() {
+            return Err(SynthesisError::Other("Invalid base point".to_owned()));
+        }
+
+        // bits must be smaller than the scalar field modulus
+        if bits.len() > P::ScalarField::size_in_bits() {
+            return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), P::ScalarField::size_in_bits())));
+        }
+
+        // Init 
+
         let mut to_sub = SWProjective::<P>::zero();
 
-        let mut t = base.clone();
-        let sigma = base.clone();
+        // T = 2^{-1} * base
+        let mut t = {
+            let two_inv = P::ScalarField::one().double().inverse().unwrap();
+            base.clone().mul(&two_inv)
+        };
 
-        // Avoid exceptional cases when acc = base or acc = zero
-        let shift = Self::alloc(cs.ns(|| "alloc random shift"), || {
-            let mut rng = OsRng::default();
-            Ok(loop {
-                let r = SWProjective::<P>::rand(&mut rng);
-                if !r.is_zero() && &r != base { break(r) }
-            })
-        })?;
+        // Init to 0 to avoid compilation errors ("usage of possibily uninitialized variable").
+        // The 0 val will never be used and acc will be initialized to proper value in the first
+        // iteration of the loop below.
+        let mut acc = Self::zero(cs.ns(|| "initialize acc"))?;
 
-        let mut acc = shift.clone();
-
-        let mut bit_vec = Vec::new();
-        bit_vec.extend_from_slice(bits);
-        //Simply add padding. This should be safe, since the padding bit will be part of the
-        //circuit. (It is also done elsewhere).
+        // Pad bits with 0s if not even
+        let mut bits = bits.to_vec();
         if bits.len() % 2 != 0 {
-            bit_vec.push(Boolean::constant(false))
+            bits.push(Boolean::constant(false));
         }
+        let num_chunks = bits.len()/2;
 
-        for (i, bits) in bit_vec.chunks(2).enumerate() {
+        for (i, bits) in bits.chunks(2).enumerate() {
+
+            // Compute table for this chunk
             let ti = t.clone();
-            let two_ti = ti.double();
+            let three_ti = ti.double().add(&ti);
             let mut table = [
-                sigma,
-                sigma + &ti,
-                sigma + &two_ti,
-                sigma + &ti + &two_ti,
+                three_ti.neg(),
+                ti.neg(),
+                ti,
+                three_ti,
             ];
 
             //Compute constants
@@ -767,16 +773,29 @@ for AffineGadget<P, ConstraintF, F>
             let x = F::two_bit_lookup_lc(cs.ns(|| format!("Lookup x_{}", i)), &precomp, &[bits[0], bits[1]],  &x_coords)?;
             let y = F::two_bit_lookup_lc(cs.ns(|| format!("Lookup y_{}", i)), &precomp, &[bits[0], bits[1]],  &y_coords)?;
 
-            //Perform addition
-            let adder: Self = Self::new(x, y, Boolean::constant(false));
-            // As long as we keep with the random shift strategy we cannot
-            // use unsafe add here.
-            acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
+            // Add the value computed in this chunk to the accumulator
+            match i {
+                // First chunk -> initialize acc
+                chunk if chunk == 0 => { acc = Self::new(x, y, Boolean::constant(false)); },
+                
+                // We can use unsafe add, no exception occur 
+                chunk if chunk < num_chunks => {
+                    let adder: Self = Self::new(x, y, Boolean::constant(false));
+                    acc = acc.add_unsafe(cs.ns(||format!("Add_{}", i)), &adder)?;
+                },
+
+                // Last chunk we must use safe add
+                _ => {
+                    let adder: Self = Self::new(x, y, Boolean::constant(false));
+                    acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
+                }
+            }
+
+            // Update values for next chunk
             t = t.double().double();
-            to_sub += &sigma;
+            to_sub += &table[0];
         }
-        acc = acc.sub_constant(cs.ns(|| "acc - sigma*n_div_2"), &to_sub)?;
-        acc = acc.sub(cs.ns(|| "subtract shift"), &shift)?;
+        acc = acc.sub_constant(cs.ns(|| "acc - to_sub"), &to_sub)?;
         Ok(acc)
     }
 
