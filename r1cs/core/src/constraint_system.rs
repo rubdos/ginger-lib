@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use algebra::Field;
-use radix_trie::Trie;
+use radix_trie::{Trie, TrieCommon};
 
 use crate::{Index, Variable, LinearCombination, SynthesisError};
 
@@ -220,23 +220,22 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
             self.at.push(vec![]);
             self.bt.push(vec![]);
             self.ct.push(vec![]);
+            Self::push_constraints(
+                a(LinearCombination::zero()),
+                &mut self.at,
+                self.num_constraints,
+            );
+            Self::push_constraints(
+                b(LinearCombination::zero()),
+                &mut self.bt,
+                self.num_constraints,
+            );
+            Self::push_constraints(
+                c(LinearCombination::zero()),
+                &mut self.ct,
+                self.num_constraints,
+            );
         }
-
-        Self::push_constraints(
-            a(LinearCombination::zero()),
-            &mut self.at,
-            self.num_constraints,
-        );
-        Self::push_constraints(
-            b(LinearCombination::zero()),
-            &mut self.bt,
-            self.num_constraints,
-        );
-        Self::push_constraints(
-            c(LinearCombination::zero()),
-            &mut self.ct,
-            self.num_constraints,
-        );
 
         self.num_constraints += 1;
     }
@@ -339,7 +338,7 @@ impl<F: Field> ConstraintSystemImpl<F> {
 
     /// Prints the list of named object currently registered into the constraint system
     pub fn print_named_objects(&self) {
-        for name in &self.constraint_names {
+        for (name, _) in self.named_objects.iter() {
             println!("{}", name);
         }
     }

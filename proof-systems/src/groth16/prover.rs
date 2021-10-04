@@ -57,7 +57,7 @@ where
 {
     let prover_time = start_timer!(|| "Prover");
     let mut prover = ConstraintSystemImpl::<E::Fr>::new();
-    prover.set_mode(SynthesisMode::Prove{construct_matrices: false});
+    prover.set_mode(SynthesisMode::Prove{construct_matrices: true});
 
     // Synthesize the circuit.
     let synthesis_time = start_timer!(|| "Constraint synthesis");
