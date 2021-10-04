@@ -615,6 +615,7 @@ pub(crate) mod test {
             a_times_gg_fb
                 .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb).unwrap()
                 .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
+            assert!(cs.is_satisfied());
         }
     }
 }

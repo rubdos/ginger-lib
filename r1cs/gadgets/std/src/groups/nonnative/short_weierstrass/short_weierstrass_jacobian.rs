@@ -225,11 +225,12 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     /// 
     /// [Hopwood] https://github.com/zcash/zcash/issues/3924 
     fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
-        // variable base point, must be in the prime order subgroup 
+        // variable base point, must be non-trivial and in the prime order subgroup 
         &self,
         mut cs: CS,
-        // little endian, of length <= than the scalar field modulus.
-        bits: impl Iterator<Item = &'a Boolean>, 
+        // little endian, of length <= than the scalar field modulus. 
+        // Should not be equal to {0, p-2, p-1, p, p+1}.
+        bits: impl Iterator<Item = &'a Boolean>,
     ) -> Result<Self, SynthesisError> {
 
         assert!(P::ScalarField::size_in_bits() >= 3);
