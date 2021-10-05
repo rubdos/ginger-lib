@@ -134,7 +134,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         ))
     }
 
-    /// Performs scalar multiplication of this element with mixed addition.
+    /// Performs endomorphism based multiplication
     pub fn endo_mul<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
