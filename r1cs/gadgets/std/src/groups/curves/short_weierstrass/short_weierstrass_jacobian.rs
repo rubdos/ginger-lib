@@ -141,10 +141,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
 
-        // let self_neg = self.negate(cs.ns(|| "negate self"))?;
-
         let self_e = self.apply_endomorphism(cs.ns(|| "endo self"))?;
-        // let self_e_neg = self_e.negate(cs.ns(|| "negate self endo"))?;
 
         let mut acc = self_e.clone();
         acc = acc.add(cs.ns(|| "add"), &self)?;
