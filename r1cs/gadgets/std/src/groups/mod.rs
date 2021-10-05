@@ -182,58 +182,51 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 ///           and must not be equal to {0, p-2, p-1, p, p+1}.
 #[inline]
 pub(crate) fn check_mul_bits_inputs<
-    ConstraintF: Field,
     G: Group,
-    GG: GroupGadget<G, ConstraintF, Value = G>,
 >(
-    base: &GG,
-    bits: &[Boolean],
+    base: &G,
+    mut bits: Vec<bool>,
 ) -> Result<(), SynthesisError>
 {
     // bits must be smaller than the scalar field modulus
     if bits.len() > G::ScalarField::size_in_bits() {
         return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), G::ScalarField::size_in_bits())));
     }
-
-    // Checks that can be done only at proving time
-    if base.get_value().is_some() && bits.iter().all(|b| b.get_value().is_some()) {
         
-        // Collect primitive values
-        let base = base.get_value().unwrap();
-        let bits = bits.iter().rev().map(|b| b.get_value().unwrap()).collect::<Vec<bool>>(); // as BE
-        
-        // self must not be trivial
-        if base.is_zero() {
-            return Err(SynthesisError::Other("Base point is trivial".to_owned()));
-        }
-
-        // self must be on curve and in the prime order subgroup
-        if !base.is_valid() {
-            return Err(SynthesisError::Other("Invalid base point".to_owned()));
-        }
-
-        // Read FE from bits, excluding bits_val to be p or p+1 too
-        let bits_val = <G::ScalarField as PrimeField>::BigInt::from_bits(bits.as_slice());
-        
-        // bits_val != 0
-        if bits_val.is_zero() {return Err(SynthesisError::Other("Scalar must not be zero".to_owned()))}
-
-        // bits_val != p
-        let mut to_compare = <G::ScalarField as PrimeField>::Params::MODULUS;
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus".to_owned()))}
-
-        // bits_val != p + 1
-        assert!(!to_compare.add_nocarry(&<G::ScalarField as PrimeField>::BigInt::from(1)));
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus + 1".to_owned()))}
-
-        // bits_val != p - 1
-        assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(2)));
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 1".to_owned()))}
-
-        // bits_val != p - 2
-        assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(1)));
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 2".to_owned()))}
+    // Reverse bits
+    bits.reverse();
+    
+    // self must not be trivial
+    if base.is_zero() {
+        return Err(SynthesisError::Other("Base point is trivial".to_owned()));
     }
+
+    // self must be on curve and in the prime order subgroup
+    if !base.is_valid() {
+        return Err(SynthesisError::Other("Invalid base point".to_owned()));
+    }
+
+    // Read FE from bits, excluding bits_val to be p or p+1 too
+    let bits_val = <G::ScalarField as PrimeField>::BigInt::from_bits(bits.as_slice());
+    
+    // bits_val != 0
+    if bits_val.is_zero() {return Err(SynthesisError::Other("Scalar must not be zero".to_owned()))}
+
+    // bits_val != p
+    let mut to_compare = <G::ScalarField as PrimeField>::Params::MODULUS;
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus".to_owned()))}
+
+    // bits_val != p + 1
+    assert!(!to_compare.add_nocarry(&<G::ScalarField as PrimeField>::BigInt::from(1)));
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus + 1".to_owned()))}
+
+    // bits_val != p - 1
+    assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(2)));
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 1".to_owned()))}
+
+    // bits_val != p - 2
+    assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(1)));
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 2".to_owned()))}
 
     Ok(())
 }

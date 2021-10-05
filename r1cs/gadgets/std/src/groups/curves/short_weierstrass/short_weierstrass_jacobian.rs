@@ -545,7 +545,12 @@ for AffineGadget<P, ConstraintF, F>
         };
 
         let mut bits = bits.cloned().collect::<Vec<Boolean>>();
-        check_mul_bits_inputs(self, bits.as_slice())?;
+        if self.get_value().is_some() && bits.iter().all(|b| b.get_value().is_some()) {
+            check_mul_bits_inputs(
+                &self.get_value().unwrap(),
+                bits.iter().map(|b| b.get_value().unwrap()).collect()
+            )?;
+        }
 
         // Length normalization by adding the scalar field modulus. 
         // The result is alway n + 1 bits long, although the leading bit might be zero.
