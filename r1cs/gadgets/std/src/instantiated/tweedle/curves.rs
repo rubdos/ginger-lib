@@ -10,49 +10,80 @@ use crate::{
 pub type TweedleDeeGadget = AffineGadget<TweedledeeParameters, Fq, FqGadget>;
 pub type TweedleDumGadget = AffineGadget<TweedledumParameters, Fr, FrGadget>;
 
-#[test]
-fn test_dee() {
-    crate::groups::test::group_test_with_unsafe_add::<
-        _, _, TweedleDeeGadget
-    >();
-}
-
-#[test]
-fn test_dum() {
-    crate::groups::test::group_test_with_unsafe_add::<
-        _, _, TweedleDumGadget
-    >();
-}
-
-#[test]
-fn test_endo_dee()
-{
+#[cfg(test)]
+mod test {
     use r1cs_core::ConstraintSystem;
     use crate::{
         prelude::*,
         test_constraint_system::TestConstraintSystem,
+        instantiated::tweedle::{
+            TweedleDeeGadget,
+            TweedleDumGadget,
+        }
     };
-    use algebra::{
-        UniformRand, BitIterator, AffineCurve, ProjectiveCurve,
-        curves::tweedle::dee::Projective as DeeProjective,
-    };
+    use algebra::{UniformRand, AffineCurve, ProjectiveCurve, fields::tweedle::{
+        Fq, Fr,
+    }, curves::tweedle::{
+        dee::Projective as DeeProjective,
+        dum::Projective as DumProjective,
+    }, PrimeField, BigInteger};
     use rand::thread_rng;
 
-    let mut cs = TestConstraintSystem::<Fq>::new();
+    #[test]
+    fn test_dee() {
+        crate::groups::test::group_test_with_unsafe_add::<
+            _, _, TweedleDeeGadget
+        >();
+    }
 
-    let a = DeeProjective::rand(&mut thread_rng()).into_affine();
-    let aa = TweedleDeeGadget::alloc(&mut cs.ns(|| "generate_a"), || Ok(a.into_projective())).unwrap();
+    #[test]
+    fn test_dum() {
+        crate::groups::test::group_test_with_unsafe_add::<
+            _, _, TweedleDumGadget
+        >();
+    }
 
-    let seed = [0x378237, 0x3298983, 0x90902203, 0x839283782];
-    let b = BitIterator::new(seed)
-        .map(|bit| bit)
-        .collect::<Vec<_>>();
-    let bb = BitIterator::new(seed)
-        .map(|bit| Boolean::constant(bit))
-        .collect::<Vec<_>>();
+    #[test]
+    fn test_endo_dee()
+    {
+        let mut cs = TestConstraintSystem::<Fq>::new();
 
-    let r = a.endo_mul(b).into_affine();
-    let rr = aa.endo_mul(cs.ns(|| "endo mul"), &bb).unwrap().get_value().unwrap().into_affine();
+        let a_native = DeeProjective::rand(&mut thread_rng()).into_affine();
+        let a = TweedleDeeGadget::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native.into_projective())).unwrap();
 
-    assert_eq!(r, rr);
+        let scalar = Fq::rand(&mut thread_rng());
+
+        let b_native = scalar.into_repr().to_bits();
+        let b = b_native
+            .iter()
+            .map(|&bit| Boolean::constant(bit))
+            .collect::<Vec<_>>();
+
+        let r_native = a_native.endo_mul(b_native).into_affine();
+        let r = a.endo_mul(cs.ns(|| "endo mul"), &b).unwrap().get_value().unwrap().into_affine();
+
+        assert_eq!(r_native, r);
+    }
+
+    #[test]
+    fn test_endo_dum()
+    {
+        let mut cs = TestConstraintSystem::<Fr>::new();
+
+        let a_native = DumProjective::rand(&mut thread_rng()).into_affine();
+        let a = TweedleDumGadget::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native.into_projective())).unwrap();
+
+        let scalar = Fq::rand(&mut thread_rng());
+
+        let b_native = scalar.into_repr().to_bits();
+        let b = b_native
+            .iter()
+            .map(|&bit| Boolean::constant(bit))
+            .collect::<Vec<_>>();
+
+        let r_native = a_native.endo_mul(b_native).into_affine();
+        let r = a.endo_mul(cs.ns(|| "endo mul"), &b).unwrap().get_value().unwrap().into_affine();
+
+        assert_eq!(r_native, r);
+    }
 }
