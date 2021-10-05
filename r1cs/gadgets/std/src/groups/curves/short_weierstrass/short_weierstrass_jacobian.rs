@@ -141,10 +141,10 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
 
-        let self_neg = self.negate(cs.ns(|| "negate self"))?;
+        // let self_neg = self.negate(cs.ns(|| "negate self"))?;
 
         let self_e = self.apply_endomorphism(cs.ns(|| "endo self"))?;
-        let self_e_neg = self_e.negate(cs.ns(|| "negate self endo"))?;
+        // let self_e_neg = self_e.negate(cs.ns(|| "negate self endo"))?;
 
         let mut acc = self_e.clone();
         acc = acc.add(cs.ns(|| "add"), &self)?;
@@ -154,43 +154,23 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
 
             acc.double_in_place(cs.ns(|| format!("double {}", i)))?;
 
-            let bit0 = bits[i * 2];
-            let bit1 = bits[i * 2 + 1];
+            let add = Self::conditionally_select(
+                cs.ns(|| format!("Conditional Select bit1 {}", i)),
+                &bits[i * 2 + 1],
+                &self_e,
+                &self,
+            )?;
 
-            let bits00 = Boolean::and(cs.ns(|| format!("!b0 and !b1 {}", i)), &bit0.not(), &bit1.not())?;
-            let bits01 = Boolean::and(cs.ns(|| format!("!b0 and b1 {}", i)), &bit0.not(), &bit1)?;
-            let bits10 = Boolean::and(cs.ns(|| format!("b0 and !b1 {}", i)), &bit0, &bit1.not())?;
-            let bits11 = Boolean::and(cs.ns(|| format!("b0 and b1 {}", i)), &bit0, &bit1)?;
+            let add_neg = add.negate(cs.ns(|| format!("negate {}", i)))?;
 
-            let tmp00 = acc.add(cs.ns(|| format!("add -(self) {}", i)), &self_neg)?;
-            let tmp01 = acc.add(cs.ns(|| format!("add -(endo self) {}", i)), &self_e_neg)?;
-            let tmp10 = acc.add(cs.ns(|| format!("add self {}", i)), &self)?;
-            let tmp11 = acc.add(cs.ns(|| format!("add endo self {}", i)), &self_e)?;
+            let add_final = Self::conditionally_select(
+                cs.ns(|| format!("Conditional Select bit0 {}", i)),
+                &bits[i * 2],
+                &add,
+                &add_neg,
+            )?;
 
-            acc = Self::conditionally_select(
-                cs.ns(|| format!("Conditional Select 00 {}", i)),
-                &bits00,
-                &tmp00,
-                &acc,
-            )?;
-            acc = Self::conditionally_select(
-                cs.ns(|| format!("Conditional Select 01 {}", i)),
-                &bits01,
-                &tmp01,
-                &acc,
-            )?;
-            acc = Self::conditionally_select(
-                cs.ns(|| format!("Conditional Select 10 {}", i)),
-                &bits10,
-                &tmp10,
-                &acc,
-            )?;
-            acc = Self::conditionally_select(
-                cs.ns(|| format!("Conditional Select 11 {}", i)),
-                &bits11,
-                &tmp11,
-                &acc,
-            )?;
+            acc = acc.add(cs.ns(|| format!("add {}", i)), &add_final)?;
         }
 
         Ok(acc)
