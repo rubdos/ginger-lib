@@ -11,6 +11,8 @@ use digest::Digest;
 
 pub mod field_based_schnorr;
 
+// TODO: Can we declare generator as a constant instead of a gadget ? Are there any applications
+//       in which having it as gadget is useful ?
 pub struct SchnorrSigGadgetParameters<G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>>
 {
     generator: GG,
