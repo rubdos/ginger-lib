@@ -710,9 +710,14 @@ for AffineGadget<P, ConstraintF, F>
         Ok(result)
     }
 
+    /// Fixed base scalar multiplication as mentioned by [Hopwood] using a signed 
+    /// digit representation. Takes roughly 2 constraints per scalar bit.
+    /// Bits must be in little endian form, and as most as long as the scalar field 
+    /// modulus.
+    /// CAUTION: Due to the use of incomplete arithemtics, there are few exceptions 
+    /// described in `fn check_mul_bits_fixed_base_inputs()`.
+    ///
     /// [Hopwood]: https://github.com/zcash/zcash/issues/3924 
-    /// fixed base scalar multiplication, taking only 2 constraints per scalar bit.
-    /// bits must be in little endian form.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,

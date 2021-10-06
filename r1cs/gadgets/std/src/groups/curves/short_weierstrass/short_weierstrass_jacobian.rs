@@ -711,9 +711,15 @@ for AffineGadget<P, ConstraintF, F>
         Ok(result)
     }
 
+
+    /// Fixed base scalar multiplication as mentioned by [Hopwood] using a signed 
+    /// digit representation. Takes roughly 2 constraints per scalar bit.
+    /// Bits must be in little endian form, and as most as long as the scalar field 
+    /// modulus.
+    /// CAUTION: Due to the use of incomplete arithemtics, there are few exceptions 
+    /// described in `fn check_mul_bits_fixed_base_inputs()`.
+    ///
     /// [Hopwood]: https://github.com/zcash/zcash/issues/3924 
-    /// fixed base scalar multiplication, taking only 2 constraints per scalar bit.
-    /// bits must be in little endian form.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
@@ -728,6 +734,17 @@ for AffineGadget<P, ConstraintF, F>
                 bits.iter().map(|b| b.get_value().unwrap()).collect()
             )?;
         };
+
+        // After padding to the next multiple of two we compute
+        // 
+        //  acc = sum_{i=0}^{m-1} ((2*b_{2i+1} + b_i) - 3/2) * 4^i * T 
+        //      = sum_{i=0}^{m-1} (2*(2*b_{2i+1} + b_i) - 3) * 4^i * T', 
+        //
+        // with T' = 1/2 T, and then correct the result by substracting 
+        //  - 3* sum_{i=0}^{m-1} * 4^i * T' = -3* (4^m -1) * T'.
+        // This signed representation with digits from the symmetric 
+        // set {-3,-1,+1,+3} allows to use add_unsafe in a controlled
+        // way. 
 
         // Init 
         let mut to_sub = SWProjective::<P>::zero();

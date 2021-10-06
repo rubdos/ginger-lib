@@ -350,9 +350,9 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         Ok(result)
     }
 
-    /// [Hopwood]: https://github.com/zcash/zcash/issues/3924 
-    /// fixed base scalar multiplication, taking only 2 constraints per scalar bit.
-    /// bits must be in little endian form.
+    /// The non-native variant of Hopwoods fixed base scalar mul.
+    /// CAUTION: Due to the use of incomplete arithemtics, there are few exceptions 
+    /// described in `fn check_mul_bits_fixed_base_inputs()`.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
