@@ -835,6 +835,9 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, ConstraintF>
 for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
+    /// Allocates a non-native field element and enforces normal form, which consumes at most `bits_per_limb` many bits per limb, and
+    /// and altogether at most (non-native) modulus many bits.
+    // TODO:  Check why `num_of_additions_over_normal_form` is set to `1` and `is_over_normal_form` is set `false`.
     fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError>
     where
         F: FnOnce() -> Result<T, SynthesisError>,
@@ -861,6 +864,7 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
 
         let num_of_additions_over_normal_form = ConstraintF::one();
 
+        // We constrain all limbs to use at most `bits_per_limb` many bits
         for (i, limb) in limbs.iter().rev().take(params.num_limbs - 1).enumerate() {
             Reducer::<SimulationF, ConstraintF>::limb_to_bits(
                 cs.ns(|| format!("limb {} to bits", i)),
@@ -868,7 +872,8 @@ for NonNativeFieldGadget<SimulationF, ConstraintF>
                 params.bits_per_limb
             )?;
         }
-
+        // The most significant limb is treated differently, to enforce that 
+        // over all at most modulus many bits are used.
         Reducer::<SimulationF, ConstraintF>::limb_to_bits(
             cs.ns(|| "initial limb to bits"),
             &limbs[0],
