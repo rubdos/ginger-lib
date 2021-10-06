@@ -3,17 +3,11 @@
 //! as well as the following auxiliary traits:
 //!     - PartialEq, Eq, ToBitsGadget, ToBytesGagdet, EqGadget
 //!     - CondSelectGadget, ConstantGadget, AllocGadget.
-use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, SemanticallyValid, SquareRootField, curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
+use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, SquareRootField, curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 
 use r1cs_core::{ConstraintSystem, SynthesisError};
 
-use crate::{
-    Assignment, ToBitsGadget, ToBytesGadget,
-    alloc::{AllocGadget, ConstantGadget},
-    boolean::Boolean,
-    fields::{FieldGadget, nonnative::nonnative_field_gadget::NonNativeFieldGadget},
-    groups::{check_mul_bits_inputs, GroupGadget}, prelude::EqGadget, select::{CondSelectGadget, TwoBitLookupGadget}, uint8::UInt8
-};
+use crate::{Assignment, ToBitsGadget, ToBytesGadget, alloc::{AllocGadget, ConstantGadget}, boolean::Boolean, fields::{FieldGadget, nonnative::nonnative_field_gadget::NonNativeFieldGadget}, groups::{GroupGadget, check_mul_bits_fixed_base_inputs, check_mul_bits_inputs}, prelude::EqGadget, select::{CondSelectGadget, TwoBitLookupGadget}, uint8::UInt8};
 use std::{borrow::Borrow, marker::PhantomData, ops::{Add, Mul, Neg}};
 
 #[derive(Derivative)]
@@ -358,6 +352,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
 
     /// [Hopwood]: https://github.com/zcash/zcash/issues/3924 
     /// fixed base scalar multiplication, taking only 2 constraints per scalar bit.
+    /// bits must be in little endian form.
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
@@ -366,24 +361,14 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
     ) -> Result<Self, SynthesisError>{
 
         // Pre-checks
-        
-        // base must not be trivial
-        if base.is_zero() {
-            return Err(SynthesisError::Other("Base point is trivial".to_owned()));
-        }
-
-        // base must be on curve and in the prime order subgroup
-        if !base.is_valid() {
-            return Err(SynthesisError::Other("Invalid base point".to_owned()));
-        }
-
-        // bits must be smaller than the scalar field modulus
-        if bits.len() > P::ScalarField::size_in_bits() {
-            return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), P::ScalarField::size_in_bits())));
-        }
+        if bits.iter().all(|b| b.get_value().is_some()) {
+            check_mul_bits_fixed_base_inputs(
+                base,
+                bits.iter().map(|b| b.get_value().unwrap()).collect()
+            )?;
+        };
 
         // Init 
-
         let mut to_sub = SWProjective::<P>::zero();
 
         // T = 2^{-1} * base
@@ -402,6 +387,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         if bits.len() % 2 != 0 {
             bits.push(Boolean::constant(false));
         }
+
         let num_chunks = bits.len()/2;
 
         for (i, bits) in bits.chunks(2).enumerate() {
