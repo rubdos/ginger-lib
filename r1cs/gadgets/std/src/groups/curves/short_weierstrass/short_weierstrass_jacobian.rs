@@ -542,7 +542,12 @@ for AffineGadget<P, ConstraintF, F>
         };
 
         let mut bits = bits.cloned().collect::<Vec<Boolean>>();
-        check_mul_bits_inputs(self, bits.as_slice())?;
+        if self.get_value().is_some() && bits.iter().all(|b| b.get_value().is_some()) {
+            check_mul_bits_inputs(
+                &self.get_value().unwrap(),
+                bits.iter().map(|b| b.get_value().unwrap()).collect()
+            )?;
+        }
 
         // Length normalization by adding the scalar field modulus. 
         // The result is alway n + 1 bits long, although the leading bit might be zero.
@@ -628,7 +633,7 @@ for AffineGadget<P, ConstraintF, F>
         // This output is equal to 0 (and hence causes an exception in the 
         // last add when processing bits[2]) iff 
         //    
-        //     [bit[n], bits[n-1],....,bits[2], 1] = p,
+        //     [bits[n], bits[n-1],....,bits[2], 1] = p,
         //
         // or equivalently [bit[n],...,bits[2],bits[1]] = {p or p-1}.
         // This corresponds to
@@ -654,7 +659,7 @@ for AffineGadget<P, ConstraintF, F>
         //
         // which is 0 iff 
         //   
-        //     [bit[n], bits[n-1],....,bits[2],bits[1], 1] = p,
+        //     [bits[n], bits[n-1],....,bits[2],bits[1], 1] = p,
         //
         // or equivalently [bit[n],...,bits[2],bits[1],bits[0]] = {p or p-1}.
         // These cases corresponds to 
@@ -672,23 +677,24 @@ for AffineGadget<P, ConstraintF, F>
         
         // The final bit is taken into account by correcting the `1` in
         //
-        //     [bit[n], bits[n-1],....,bits[2],bits[1], 1] * T,
+        //     [bits[n], bits[n-1],....,bits[2],bits[1], 1] * T,
         //
         // via substracting T and a subsequent conditional choice
         //
         //      return (k[0] = 0) ? (Acc - T) : Acc.
         //
-        // The result of the subtraction is
+        // We hit exceptions in this sub if and only if 
         //
-        //     [bit[n], bits[n-1],....,bits[2],bits[1], 0] * T
+        //   [bits[n], bits[n-1],....,bits[2],bits[1], 1]*T = +/- T,
+        // or 
+        //  [bits[n], bits[n-1],....,bits[2],bits[1], 1] = +/- 1  mod p.
+        // Hence 
         //
-        // which is 0 iff 
-        //
-        //     [bit[n], bits[n-1],....,bits[2],bits[1], 0] = 2*p,
-        //
-        // or scalar + p = 2 p, i.e. scalar = p. As this case is already 
-        // covered by the secure of step bit[2], we may use add_unsafe() 
-        // here.
+        //  [bits[n], bits[n-1],....,bits[2],bits[1], 0] = {-2,0} mod p,
+        //  
+        // and [bits[n],...,bits[1],bits[0]] is contained in {-2,-1,0,1} mod p.
+        // As this case is already covered by the secure add of step bit[2], 
+        // we may use add_unsafe() here.
         let neg_t = t.negate(cs.ns(|| "neg T"))?;
         let acc_minus_t = acc.add_unsafe(
             cs.ns(|| "Acc - T"),

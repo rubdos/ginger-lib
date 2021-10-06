@@ -197,7 +197,7 @@ macro_rules! impl_Fp {
 
             impl_field_square_in_place!($limbs);
 
-            /// Guajardo Kumar Paar Pelzl
+            /// [Guajardo Kumar Paar Pelzl]: https://link.springer.com/article/10.1007/s10440-006-9046-1
             /// Efficient Software-Implementation of Finite Fields with Applications to
             /// Cryptography
             /// Algorithm 17 (Montgomery Inversion in Fp).

@@ -182,58 +182,51 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 ///           and must not be equal to {0, p-2, p-1, p, p+1}.
 #[inline]
 pub(crate) fn check_mul_bits_inputs<
-    ConstraintF: Field,
     G: Group,
-    GG: GroupGadget<G, ConstraintF, Value = G>,
 >(
-    base: &GG,
-    bits: &[Boolean],
+    base: &G,
+    mut bits: Vec<bool>,
 ) -> Result<(), SynthesisError>
 {
     // bits must be smaller than the scalar field modulus
     if bits.len() > G::ScalarField::size_in_bits() {
         return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), G::ScalarField::size_in_bits())));
     }
-
-    // Checks that can be done only at proving time
-    if base.get_value().is_some() && bits.iter().all(|b| b.get_value().is_some()) {
         
-        // Collect primitive values
-        let base = base.get_value().unwrap();
-        let bits = bits.iter().rev().map(|b| b.get_value().unwrap()).collect::<Vec<bool>>(); // as BE
-        
-        // base must not be trivial
-        if base.is_zero() {
-            return Err(SynthesisError::Other("Base point is trivial".to_owned()));
-        }
-
-        // base must be on curve and in the prime order subgroup
-        if !base.is_valid() {
-            return Err(SynthesisError::Other("Invalid base point".to_owned()));
-        }
-
-        // Read FE from bits, excluding bits_val to be p or p+1 too
-        let bits_val = <G::ScalarField as PrimeField>::BigInt::from_bits(bits.as_slice());
-        
-        // bits_val != 0
-        if bits_val.is_zero() {return Err(SynthesisError::Other("Scalar must not be zero".to_owned()))}
-
-        // bits_val != p
-        let mut to_compare = <G::ScalarField as PrimeField>::Params::MODULUS;
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus".to_owned()))}
-
-        // bits_val != p + 1
-        assert!(!to_compare.add_nocarry(&<G::ScalarField as PrimeField>::BigInt::from(1)));
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus + 1".to_owned()))}
-
-        // bits_val != p - 1
-        assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(2)));
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 1".to_owned()))}
-
-        // bits_val != p - 2
-        assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(1)));
-        if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 2".to_owned()))}
+    // Reverse bits
+    bits.reverse();
+    
+    // self must not be trivial
+    if base.is_zero() {
+        return Err(SynthesisError::Other("Base point is trivial".to_owned()));
     }
+
+    // self must be on curve and in the prime order subgroup
+    if !base.is_valid() {
+        return Err(SynthesisError::Other("Invalid base point".to_owned()));
+    }
+
+    // Read FE from bits, excluding bits_val to be p or p+1 too
+    let bits_val = <G::ScalarField as PrimeField>::BigInt::from_bits(bits.as_slice());
+    
+    // bits_val != 0
+    if bits_val.is_zero() {return Err(SynthesisError::Other("Scalar must not be zero".to_owned()))}
+
+    // bits_val != p
+    let mut to_compare = <G::ScalarField as PrimeField>::Params::MODULUS;
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus".to_owned()))}
+
+    // bits_val != p + 1
+    assert!(!to_compare.add_nocarry(&<G::ScalarField as PrimeField>::BigInt::from(1)));
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus + 1".to_owned()))}
+
+    // bits_val != p - 1
+    assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(2)));
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 1".to_owned()))}
+
+    // bits_val != p - 2
+    assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(1)));
+    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 2".to_owned()))}
 
     Ok(())
 }
@@ -439,6 +432,9 @@ pub(crate) mod test {
         scalar_bits_to_constant_length_test::<<ConstraintF as Field>::BasePrimeField, G>();
     }
 
+    // To be called by curves with incomplete arithmetics. It is equal to the one above minus
+    // checks that trigger exceptional cases due to incomplete arithmetic
+    // (e.g a + a = a.double(), a + 0 = a, and so on).
     #[allow(dead_code)]
     pub(crate) fn group_test_with_incomplete_add<
         ConstraintF: Field,
@@ -559,6 +555,92 @@ pub(crate) mod test {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn mul_bits_native_test<
+        ConstraintF: Field,
+        G: Group,
+        GG: GroupGadget<G, ConstraintF, Value = G>,
+    >()
+    {
+        let mut cs: TestConstraintSystem<ConstraintF> = TestConstraintSystem::<ConstraintF>::new();
+        let rng = &mut thread_rng();
+    
+        // Sample random base
+        let g: G = UniformRand::rand(rng);
+        let gg = GG::alloc(cs.ns(|| "generate_g"), || Ok(g)).unwrap();
+    
+        // Sample random scalar
+        let a = G::ScalarField::rand(rng);
+    
+        // Alloc its bits on the circuit
+        let mut a_bits = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
+        a_bits.reverse();
+    
+        // Variable base scalar multiplication
+        let x = cs.num_constraints();
+        let a_times_gg_vb = gg.mul_bits(cs.ns(|| "a * G"), a_bits.iter()).unwrap();
+        println!("Variable base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
+    
+        // Fixed base scalar multiplication
+        let x = cs.num_constraints();
+        let a_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
+        println!("Fixed base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
+    
+        // Compare with native results
+        assert_eq!(a_times_gg_vb.get_value().unwrap(), g.mul(&a));
+        assert_eq!(a_times_gg_fb.get_value().unwrap(), g.mul(&a));
+    
+        assert!(cs.is_satisfied());
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn mul_bits_additivity_test<
+        ConstraintF: Field,
+        G: Group,
+        GG: GroupGadget<G, ConstraintF, Value = G>,
+    >()
+    {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let rng = &mut thread_rng();
+
+        let g: G = UniformRand::rand(rng);
+        let gg = GG::alloc(cs.ns(|| "generate_g"), || Ok(g)).unwrap();
+
+        let a = G::ScalarField::rand(rng);
+        let b = G::ScalarField::rand(rng);
+        //let ab = a * &b;
+        let a_plus_b = a + &b;
+
+        let mut a_bits = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
+        a_bits.reverse();
+
+        let mut b_bits = Vec::<Boolean>::alloc(cs.ns(|| "b bits"), || Ok(b.write_bits())).unwrap();
+        b_bits.reverse();
+
+        //let ab_bits = Vec::<Boolean>::alloc(cs.ns(|| "ab bits"), ||Ok(ab.write_bits())).unwrap();
+        let mut a_plus_b_bits = Vec::<Boolean>::alloc(cs.ns(|| "a_plus_b bits"), || Ok(a_plus_b.write_bits())).unwrap();
+        a_plus_b_bits.reverse();
+
+        // Additivity test: a * G + b * G = (a + b) * G
+        let a_times_gg_vb = gg.mul_bits(cs.ns(|| "a * G"), a_bits.iter()).unwrap();
+        let a_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
+
+        let b_times_gg_vb = gg.mul_bits(cs.ns(|| "b * G"), b_bits.iter()).unwrap();
+        let b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb b * G"), b_bits.as_slice()).unwrap();
+
+        let a_plus_b_times_gg_vb = gg.mul_bits(cs.ns(|| "(a + b) * G"), a_plus_b_bits.iter()).unwrap();
+        let a_plus_b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb (a + b) * G"), a_plus_b_bits.as_slice()).unwrap();
+
+        a_times_gg_vb
+            .add(cs.ns(|| "a * G + b * G"), &b_times_gg_vb).unwrap()
+            .enforce_equal(cs.ns(|| "a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_vb).unwrap();
+
+        a_times_gg_fb
+            .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb).unwrap()
+            .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
+        assert!(cs.is_satisfied());
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn mul_bits_test<
         ConstraintF: Field,
         G: Group,
@@ -566,56 +648,8 @@ pub(crate) mod test {
     >()
     {
         for _ in 0..10 {
-            let mut cs = TestConstraintSystem::<ConstraintF>::new();
-            let rng = &mut thread_rng();
-
-            let g: G = UniformRand::rand(rng);
-            let gg = GG::alloc(cs.ns(|| "generate_g"), || Ok(g)).unwrap();
-
-            let a = G::ScalarField::rand(rng);
-            let b = G::ScalarField::rand(rng);
-            //let ab = a * &b;
-            let a_plus_b = a + &b;
-
-            let mut a_bits = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
-            a_bits.reverse();
-
-            let mut b_bits = Vec::<Boolean>::alloc(cs.ns(|| "b bits"), || Ok(b.write_bits())).unwrap();
-            b_bits.reverse();
-
-            //let ab_bits = Vec::<Boolean>::alloc(cs.ns(|| "ab bits"), ||Ok(ab.write_bits())).unwrap();
-            let mut a_plus_b_bits = Vec::<Boolean>::alloc(cs.ns(|| "a_plus_b bits"), || Ok(a_plus_b.write_bits())).unwrap();
-            a_plus_b_bits.reverse();
-
-            // Additivity test: a * G + b * G = (a + b) * G
-            let x = cs.num_constraints();
-            let a_times_gg_vb = gg.mul_bits(cs.ns(|| "a * G"), a_bits.iter()).unwrap();
-            println!("Variable base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
-
-            let x = cs.num_constraints();
-            let a_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
-            println!("Fixed base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
-            assert_eq!(a_times_gg_vb.get_value().unwrap(), g.mul(&a)); // Check native result
-            assert_eq!(a_times_gg_fb.get_value().unwrap(), g.mul(&a)); // Check native result
-
-            let b_times_gg_vb = gg.mul_bits(cs.ns(|| "b * G"), b_bits.iter()).unwrap();
-            let b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb b * G"), b_bits.as_slice()).unwrap();
-            assert_eq!(b_times_gg_vb.get_value().unwrap(), g.mul(&b)); // Check native result
-            assert_eq!(b_times_gg_fb.get_value().unwrap(), g.mul(&b)); // Check native result
-
-            let a_plus_b_times_gg_vb = gg.mul_bits(cs.ns(|| "(a + b) * G"), a_plus_b_bits.iter()).unwrap();
-            let a_plus_b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb (a + b) * G"), a_plus_b_bits.as_slice()).unwrap();
-            assert_eq!(a_plus_b_times_gg_vb.get_value().unwrap(), g.mul(&(a + &b))); // Check native result
-            assert_eq!(a_plus_b_times_gg_fb.get_value().unwrap(), g.mul(&(a + &b))); // Check native result
-
-            a_times_gg_vb
-                .add(cs.ns(|| "a * G + b * G"), &b_times_gg_vb).unwrap()
-                .enforce_equal(cs.ns(|| "a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_vb).unwrap();
-
-            a_times_gg_fb
-                .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb).unwrap()
-                .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
-            assert!(cs.is_satisfied());
+            mul_bits_native_test::<ConstraintF, G, GG>();
+            mul_bits_additivity_test::<ConstraintF, G, GG>();
         }
     }
 }

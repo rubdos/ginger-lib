@@ -2,7 +2,6 @@
 //! using some of the optimizations from [Ozdemir et al.](https://eprint.iacr.org/2019/1494).
 //! Ported from [arkworks/nonnative](https://github.com/arkworks-rs/nonnative).
 //! The following types are defined/supported:
-//!
 //! - `NonNativeFieldParams` specifies the constraint prime field (called `ConstraintF`),
 //!     the simulated prime field (called `SimulationF`), and internal parameters.
 //! - `NonNativeFieldGadget` implements the `FieldGadget` for simulating `SimulationF`

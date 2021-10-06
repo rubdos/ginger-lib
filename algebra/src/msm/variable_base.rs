@@ -205,12 +205,13 @@ impl VariableBaseMSM {
     where
         G::Projective: ProjectiveCurve<Affine = G>
     {
-        let c = Self::get_optimal_window_size::<G>(scalars.len());
+        let c = Self::get_optimal_window_size_for_msm_affine::<G>(scalars.len());
 
         Self::multi_scalar_mul_affine_c(bases, scalars, c)
     }
 
-    fn get_optimal_window_size<G: AffineCurve>(scalars_len: usize) -> usize {
+    /// Hardcoded window sizes below were chosen using results from benches in algebra/benches/criterion_msm/...
+    fn get_optimal_window_size_for_msm_affine<G: AffineCurve>(scalars_len: usize) -> usize {
         let c: usize = if scalars_len < 32 {
             3
         } else {
