@@ -231,10 +231,13 @@ pub(crate) fn check_mul_bits_inputs<
     Ok(())
 }
 
-/// Pre-checks for vbSM with incomplete arithmetic using Hopwood algorithm (https://github.com/zcash/zcash/issues/3924) :
-/// - 'self' must be non-trivial and in the prime order subgroup 
-/// - 'bits', in little endian, must be of length <= than the scalar field modulus. 
-///           and must not be equal to {0, p-2, p-1, p, p+1}.
+/// Pre-checks for vbSM due to incomplete arithmetic as in our implementation.
+/// If [b_{n-1},...,b_0] are big endian scalar bits, padded with zeros to 
+/// length `n = 2* Ceil(len(p)/2)`, then 
+///     1. [b_n-1, ..., b_1, b_0] != 0 mod p 
+///     2. [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
+///     3. 2 * [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
+///     4. 2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3 mod p
 #[inline]
 pub(crate) fn check_mul_bits_fixed_base_inputs<
     G: Group,
