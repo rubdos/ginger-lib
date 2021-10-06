@@ -233,9 +233,10 @@ pub(crate) fn check_mul_bits_inputs<
 
 /// Pre-checks for vbSM due to incomplete arithmetic as in our implementation.
 /// [b_{n-1},...,b_0] are big endian scalar bits, padded with zeros to 
-/// the next multiple of two bits. If n >= len(scalar field modulus), then
+/// the next multiple of two bits. 
 ///     1. [b_n-1, ..., b_1, b_0] != 0 mod p 
 ///     2. [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
+/// If n >= len(scalar field modulus), then we must check additionally
 ///     3. 2 * [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
 ///     4. 2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3 mod p.
 #[inline]
