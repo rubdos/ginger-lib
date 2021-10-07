@@ -727,13 +727,10 @@ for AffineGadget<P, ConstraintF, F>
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError>{ 
 
-        // Pre-checks
-        if bits.iter().all(|b| b.get_value().is_some()) {
-            check_mul_bits_fixed_base_inputs(
-                base,
-                bits.iter().map(|b| b.get_value().unwrap()).collect()
-            )?;
-        };
+        // bits must be smaller than the scalar field modulus
+        if bits.len() > P::ScalarField::size_in_bits() {
+            return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), P::ScalarField::size_in_bits())));
+        }
 
         // After padding to the next multiple of two we compute
         // 
@@ -765,6 +762,14 @@ for AffineGadget<P, ConstraintF, F>
         if bits.len() % 2 != 0 {
             bits.push(Boolean::constant(false));
         }
+
+        // Pre-checks
+        if bits.iter().all(|b| b.get_value().is_some()) {
+            check_mul_bits_fixed_base_inputs(
+                base,
+                bits.iter().rev().map(|b| b.get_value().unwrap()).collect()
+            )?;
+        };
         
         let num_chunks = bits.len()/2;
 

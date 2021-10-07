@@ -725,13 +725,21 @@ for AffineGadget<P, ConstraintF, F>
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError>{
         
-        // Pre-checks
-        if bits.iter().all(|b| b.get_value().is_some()) {
-            check_mul_bits_fixed_base_inputs(
-                base,
-                bits.iter().map(|b| b.get_value().unwrap()).collect()
-            )?;
-        };
+        // bits must be smaller than the scalar field modulus
+        if bits.len() > P::ScalarField::size_in_bits() {
+            return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), P::ScalarField::size_in_bits())));
+        }
+
+        // After padding to the next multiple of two we compute
+        // 
+        //  acc = sum_{i=0}^{m-1} ((2*b_{2i+1} + b_i) - 3/2) * 4^i * T 
+        //      = sum_{i=0}^{m-1} (2*(2*b_{2i+1} + b_i) - 3) * 4^i * T', 
+        //
+        // with T' = 1/2 T, and then correct the result by substracting 
+        //  - 3* sum_{i=0}^{m-1} * 4^i * T' = -3* (4^m -1) * T'.
+        // This signed representation with digits from the symmetric 
+        // set {-3,-1,+1,+3} allows to use add_unsafe in a controlled
+        // way. 
 
         // Init 
         let mut to_sub = SWProjective::<P>::zero();
@@ -752,6 +760,14 @@ for AffineGadget<P, ConstraintF, F>
         if bits.len() % 2 != 0 {
             bits.push(Boolean::constant(false));
         }
+
+        // Pre-checks
+        if bits.iter().all(|b| b.get_value().is_some()) {
+            check_mul_bits_fixed_base_inputs(
+                base,
+                bits.iter().rev().map(|b| b.get_value().unwrap()).collect()
+            )?;
+        };
 
         let num_chunks = bits.len()/2;
 
