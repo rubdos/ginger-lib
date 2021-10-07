@@ -360,7 +360,7 @@ for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError>{
 
-        // bits must be smaller than the scalar field modulus
+        // bits must not exceed the length the scalar field modulus
         if bits.len() > P::ScalarField::size_in_bits() {
             return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), P::ScalarField::size_in_bits())));
         }
