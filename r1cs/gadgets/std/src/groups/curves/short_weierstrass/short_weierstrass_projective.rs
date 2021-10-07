@@ -1,12 +1,8 @@
-use algebra::{
-    curves::short_weierstrass_projective::{GroupAffine as SWAffine, GroupProjective as SWProjective},
-    SWModelParameters, UniformRand,
-    AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve};
+use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, curves::short_weierstrass_projective::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 use r1cs_core::{ConstraintSystem, SynthesisError};
-use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
-use rand::rngs::OsRng;
+use std::{borrow::Borrow, marker::PhantomData, ops::{Add, Mul, Neg}};
 
-use crate::{prelude::*, Assignment, groups::check_mul_bits_inputs};
+use crate::{Assignment, groups::{check_mul_bits_fixed_base_inputs, check_mul_bits_inputs}, prelude::*};
 
 #[derive(Derivative)]
 #[derivative(Debug, Clone)]
@@ -714,54 +710,77 @@ for AffineGadget<P, ConstraintF, F>
         Ok(result)
     }
 
-    ///This will take [(4 + 1) * ceil(len(bits)/2)] constraints to put the x lookup constraint
-    ///into the addition formula. See coda/src/lib/snarky_curves/snarky_curves.ml "scale_known"
-    // TODO: let us redesign this algorithm with no random shift and explicit use of complete
-    //      arithmetics of the "last" steps of the loop. Such redesign allows even the
-    //      usage of unsafe add for large parts of the loop.
+    /// Fixed base scalar multiplication as mentioned by [Hopwood] using a signed 
+    /// digit representation. Takes roughly 2 constraints per scalar bit.
+    /// Bits must be in little endian form, and as most as long as the scalar field 
+    /// modulus.
+    /// CAUTION: Due to the use of incomplete arithemtics, there are few exceptions 
+    /// described in `fn check_mul_bits_fixed_base_inputs()`.
+    ///
+    /// [Hopwood]: https://github.com/zcash/zcash/issues/3924 
     #[inline]
     fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
         base: &'a SWProjective<P>,
         mut cs: CS,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError>{
-
-        // Avoid exceptional cases when base = infinity
-        if base.is_zero() {
-            return Err(SynthesisError::Other("Base must not be infinity !".to_owned()));
+        
+        // bits must not exceed the length the scalar field modulus
+        if bits.len() > P::ScalarField::size_in_bits() {
+            return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), P::ScalarField::size_in_bits())));
         }
+
+        // After padding to the next multiple of two we compute
+        // 
+        //  acc = sum_{i=0}^{m-1} ((2*b_{2i+1} + b_i) - 3/2) * 4^i * T 
+        //      = sum_{i=0}^{m-1} (2*(2*b_{2i+1} + b_i) - 3) * 4^i * T', 
+        //
+        // with T' = 1/2 T, and then correct the result by substracting 
+        //  - 3* sum_{i=0}^{m-1} * 4^i * T' = -3* (4^m -1) * T'.
+        // This signed representation with digits from the symmetric 
+        // set {-3,-1,+1,+3} allows to use add_unsafe in a controlled
+        // way. 
+
+        // Init 
         let mut to_sub = SWProjective::<P>::zero();
 
-        let mut t = base.clone();
-        let sigma = base.clone();
+        // T = 2^{-1} * base
+        let mut t = {
+            let two_inv = P::ScalarField::one().double().inverse().unwrap();
+            base.clone().mul(&two_inv)
+        };
 
-        // Avoid exceptional cases when acc = base or acc = zero
-        let shift = Self::alloc(cs.ns(|| "alloc random shift"), || {
-            let mut rng = OsRng::default();
-            Ok(loop {
-                let r = SWProjective::<P>::rand(&mut rng);
-                if !r.is_zero() && &r != base { break(r) }
-            })
-        })?;
+        // Init to 0 to avoid compilation errors ("usage of possibily uninitialized variable").
+        // The 0 val will never be used and acc will be initialized to proper value in the first
+        // iteration of the loop below.
+        let mut acc = Self::zero(cs.ns(|| "initialize acc"))?;
 
-        let mut acc = shift.clone();
-
-        let mut bit_vec = Vec::new();
-        bit_vec.extend_from_slice(bits);
-        //Simply add padding. This should be safe, since the padding bit will be part of the
-        //circuit. (It is also done elsewhere).
+        // Pad bits with 0s if not even
+        let mut bits = bits.to_vec();
         if bits.len() % 2 != 0 {
-            bit_vec.push(Boolean::constant(false))
+            bits.push(Boolean::constant(false));
         }
 
-        for (i, bits) in bit_vec.chunks(2).enumerate() {
+        // Pre-checks
+        if bits.iter().all(|b| b.get_value().is_some()) {
+            check_mul_bits_fixed_base_inputs(
+                base,
+                bits.iter().rev().map(|b| b.get_value().unwrap()).collect()
+            )?;
+        };
+
+        let num_chunks = bits.len()/2;
+
+        for (i, bits) in bits.chunks(2).enumerate() {
+
+            // Compute table for this chunk
             let ti = t.clone();
-            let two_ti = ti.double();
+            let three_ti = ti.double().add(&ti);
             let mut table = [
-                sigma,
-                sigma + &ti,
-                sigma + &two_ti,
-                sigma + &ti + &two_ti,
+                three_ti.neg(),
+                ti.neg(),
+                ti,
+                three_ti,
             ];
 
             //Compute constants
@@ -774,16 +793,29 @@ for AffineGadget<P, ConstraintF, F>
             let x = F::two_bit_lookup_lc(cs.ns(|| format!("Lookup x_{}", i)), &precomp, &[bits[0], bits[1]],  &x_coords)?;
             let y = F::two_bit_lookup_lc(cs.ns(|| format!("Lookup y_{}", i)), &precomp, &[bits[0], bits[1]],  &y_coords)?;
 
-            //Perform addition
-            let adder: Self = Self::new(x, y, Boolean::constant(false));
-            // As long as we keep with the random shift strategy we cannot
-            // use unsafe add here.
-            acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
+            // Add the value computed in this chunk to the accumulator
+            match i {
+                // First chunk -> initialize acc
+                chunk if chunk == 0 => { acc = Self::new(x, y, Boolean::constant(false)); },
+                
+                // We can use unsafe add, no exception occur 
+                chunk if chunk < num_chunks => {
+                    let adder: Self = Self::new(x, y, Boolean::constant(false));
+                    acc = acc.add_unsafe(cs.ns(||format!("Add_{}", i)), &adder)?;
+                },
+
+                // Last chunk we must use safe add
+                _ => {
+                    let adder: Self = Self::new(x, y, Boolean::constant(false));
+                    acc = acc.add(cs.ns(||format!("Add_{}", i)), &adder)?;
+                }
+            }
+
+            // Update values for next chunk
             t = t.double().double();
-            to_sub += &sigma;
+            to_sub += &table[0];
         }
-        acc = acc.sub_constant(cs.ns(|| "acc - sigma*n_div_2"), &to_sub)?;
-        acc = acc.sub(cs.ns(|| "subtract shift"), &shift)?;
+        acc = acc.sub_constant(cs.ns(|| "acc - to_sub"), &to_sub)?;
         Ok(acc)
     }
 

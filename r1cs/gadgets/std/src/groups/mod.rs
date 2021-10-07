@@ -206,7 +206,7 @@ pub(crate) fn check_mul_bits_inputs<
         return Err(SynthesisError::Other("Invalid base point".to_owned()));
     }
 
-    // Read FE from bits, excluding bits_val to be p or p+1 too
+    // Read Bigint from bits
     let bits_val = <G::ScalarField as PrimeField>::BigInt::from_bits(bits.as_slice());
     
     // bits_val != 0
@@ -228,6 +228,71 @@ pub(crate) fn check_mul_bits_inputs<
     assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(1)));
     if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 2".to_owned()))}
 
+    Ok(())
+}
+
+/// Pre-checks for fbSM due to incomplete arithmetic as in our implementation.
+/// [b_{n-1},...,b_0] are big endian scalar bits, padded with zeros to 
+/// the next multiple of two bits. 
+///     1. [b_n-1, ..., b_1, b_0] != 0 mod p 
+///     2. [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
+/// If n >= len(scalar field modulus), then we must check additionally
+///     3. 2 * [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
+///     4. 2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3 mod p.
+#[inline]
+pub(crate) fn check_mul_bits_fixed_base_inputs<
+    G: Group,
+>(
+    base: &G,
+    bits: Vec<bool>,
+) -> Result<(), SynthesisError>
+{
+    use algebra::FromBits;
+
+    // base must not be trivial
+    if base.is_zero() {
+        return Err(SynthesisError::Other("Base point is trivial".to_owned()));
+    }
+
+    // base must be on curve and in the prime order subgroup
+    if !base.is_valid() {
+        return Err(SynthesisError::Other("Invalid base point".to_owned()));
+    }
+
+    // Read FE from bits (read_bits() will remove leading zeros)
+    let bits_val = G::ScalarField::read_bits(bits.clone())
+        .map_err(|e| SynthesisError::Other(e.to_string()))?;
+
+    let one = G::ScalarField::one();
+    let two = one.double();
+    let two_to_n = two.pow(&[bits.len() as u64]);
+    let three = two + &one;
+    let three_times_two_to_n_minus_one = three * &(two_to_n - &one);
+
+    // [b_n-1, ..., b_1, b_0] != 0
+    if bits_val == G::ScalarField::zero() {
+        return Err(SynthesisError::Other("[b_n-1, ..., b_1, b_0] != 0".to_owned()))
+    }
+
+    // [b_n-1, ..., b_1, b_0] != 3*(2^n - 1)
+    if bits_val == three_times_two_to_n_minus_one {
+        return Err(SynthesisError::Other("[b_n-1, ..., b_1, b_0] != 3*(2^n - 1)".to_owned()))
+    }
+
+    if bits.len() >= G::ScalarField::size_in_bits() {
+        // 2 *  [b_n-1, ..., b_1, b_0] != 3*(2^n - 1)
+        if bits_val.double() == three_times_two_to_n_minus_one {
+            return Err(SynthesisError::Other("2 *  [b_n-1, ..., b_1, b_0] != 3*(2^n - 1)".to_owned()))
+        }
+
+        // 2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3
+        let msb_val = G::ScalarField::read_bits((&bits[..2]).to_vec()).unwrap();
+        let rhs = (msb_val * &two_to_n) - &three;
+        if bits_val.double() == rhs {
+            return Err(SynthesisError::Other("2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3".to_owned()))
+        }
+    }
+    
     Ok(())
 }
 
