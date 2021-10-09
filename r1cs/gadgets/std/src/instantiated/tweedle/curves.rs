@@ -31,14 +31,20 @@ mod test {
 
     #[test]
     fn test_dee() {
-        crate::groups::test::group_test_with_unsafe_add::<
+        crate::groups::test::group_test_with_incomplete_add::<
+            _, _, TweedleDeeGadget
+        >();
+        crate::groups::test::mul_bits_test::<
             _, _, TweedleDeeGadget
         >();
     }
 
     #[test]
     fn test_dum() {
-        crate::groups::test::group_test_with_unsafe_add::<
+        crate::groups::test::group_test_with_incomplete_add::<
+            _, _, TweedleDumGadget
+        >();
+        crate::groups::test::mul_bits_test::<
             _, _, TweedleDumGadget
         >();
     }

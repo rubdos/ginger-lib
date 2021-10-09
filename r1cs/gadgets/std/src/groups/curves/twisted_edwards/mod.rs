@@ -463,6 +463,18 @@ mod affine_impl {
             ))
         }
 
+        fn conditionally_negate<CS: ConstraintSystem<ConstraintF>>(
+            &self,
+            mut cs: CS,
+            cond: &Boolean,
+        ) -> Result<Self, SynthesisError> {
+            let x_neg = self.x.negate(cs.ns(|| "negate y"))?;
+            Ok(Self::new(
+                F::conditionally_select(&mut cs.ns(|| "x"), cond, &self.x, &x_neg)?,
+                self.y.clone(),
+            ))
+        }
+
         fn cost_of_add() -> usize {
             4 * F::cost_of_mul() + 2 * F::cost_of_mul_equals()
         }
@@ -938,6 +950,18 @@ mod projective_impl {
         ) -> Result<Self, SynthesisError> {
             Ok(Self::new(
                 self.x.negate(cs.ns(|| "negate x"))?,
+                self.y.clone(),
+            ))
+        }
+
+        fn conditionally_negate<CS: ConstraintSystem<ConstraintF>>(
+            &self,
+            mut cs: CS,
+            cond: &Boolean,
+        ) -> Result<Self, SynthesisError> {
+            let x_neg = self.x.negate(cs.ns(|| "negate y"))?;
+            Ok(Self::new(
+                F::conditionally_select(&mut cs.ns(|| "x"), cond, &self.x, &x_neg)?,
                 self.y.clone(),
             ))
         }
@@ -1525,9 +1549,8 @@ pub(crate) fn test<ConstraintF, P, GG>()
     // Get the scalar bits into little-endian form.
     scalar.reverse();
     let input = Vec::<Boolean>::alloc(cs.ns(|| "Input"), || Ok(scalar)).unwrap();
-    let zero = GG::zero(cs.ns(|| "zero")).unwrap();
     let result = gadget_a
-        .mul_bits(cs.ns(|| "mul_bits"), &zero, input.iter())
+        .mul_bits(cs.ns(|| "mul_bits"), input.iter())
         .unwrap();
     let gadget_value = result.get_value().expect("Gadget_result failed");
     assert_eq!(native_result, gadget_value);

@@ -9,8 +9,8 @@ use crate::fields::fp::FpGadget;
 /// to be either zero or one.
 #[derive(Copy, Clone, Debug)]
 pub struct AllocatedBit {
-    variable: Variable,
-    value:    Option<bool>,
+    pub variable: Variable,
+    pub value:    Option<bool>,
 }
 
 impl AllocatedBit {
@@ -376,6 +376,12 @@ pub enum Boolean {
 }
 
 impl Boolean {
+    pub fn is_constant(&self) -> bool {
+        match *self {
+            Boolean::Constant(_) => true,
+            _ => false,
+        }
+    }
     pub fn get_value(&self) -> Option<bool> {
         match *self {
             Boolean::Constant(c) => Some(c),
@@ -384,6 +390,9 @@ impl Boolean {
         }
     }
 
+    /// Return a LinearCombination built starting from `self` and `coeff`,
+    /// taking explicitly into account that `self` is a constant/variable
+    /// Boolean.
     pub fn lc<ConstraintF: Field>(
         &self,
         one: Variable,

@@ -46,11 +46,13 @@ pub fn get_best_evaluation_domain<F: PrimeField>(num_coeffs: usize) -> Option<Bo
 
 #[cfg(test)]
 mod test {
-    use crate::fields::mnt6753::fr::Fr;
-    use crate::domain::*;
 
+    #[cfg(feature = "mnt6_753")]
     #[test]
     fn test_mnt6753_best_evaluation_domain() {
+
+        use crate::fields::mnt6753::fr::Fr;
+        use crate::domain::*;
         //The basic domain size increases with 2^k, with k <= 15, while
         //the mixed domain increases with 2^k * 5^s, with k <= 15 and s <= 2
 

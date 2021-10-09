@@ -20,12 +20,12 @@ pub use self::poseidon::*;
 
 pub trait FixedLengthCRHGadget<H: FixedLengthCRH, ConstraintF: Field>: Sized {
     type OutputGadget: EqGadget<ConstraintF>
-        + ToBytesGadget<ConstraintF>
-        + CondSelectGadget<ConstraintF>
-        + AllocGadget<H::Output, ConstraintF>
-        + Debug
-        + Clone
-        + Sized;
+    + ToBytesGadget<ConstraintF>
+    + CondSelectGadget<ConstraintF>
+    + AllocGadget<H::Output, ConstraintF>
+    + Debug
+    + Clone
+    + Sized;
     type ParametersGadget: AllocGadget<H::Parameters, ConstraintF> + Clone;
 
     fn check_evaluation_gadget<CS: ConstraintSystem<ConstraintF>>(
