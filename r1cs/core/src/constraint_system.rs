@@ -73,6 +73,26 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
 
     /// Output the number of constraints in the system.
     fn num_constraints(&self) -> usize;
+
+    /// Prints the list of named object currently registered into the constraint system.
+    fn print_named_objects(&self);
+
+    /// Returns an Option containing the name of the first constraint which is not satisfied
+    /// or None if all the constraints are satisfied.
+    fn which_is_unsatisfied(&self) -> Option<&str>;
+
+    /// Checks whether all the constraints are satisfied.
+    fn is_satisfied(&self) -> bool {
+        self.which_is_unsatisfied().is_none()
+    }
+
+    /// Sets the the variable named `path` to the value `to`.
+    /// Panics in setup mode and if `path` does not indicate a variable.
+    fn set(&mut self, path: &str, to: F);
+
+    /// Gets the value of the variable named `path`.
+    /// Panics in setup mode and if `path` does not indicate a variable.
+    fn get(&mut self, path: &str) -> F;
 }
 
 /// Represents the actual implementation of a rank-1 constraint system (R1CS)
@@ -108,8 +128,6 @@ pub struct ConstraintSystem<F: Field> {
     named_objects: Trie<String, NamedObject>,
     current_namespace: Vec<String>,
     constraint_names: Vec<String>,
-    input_names: Vec<String>,
-    aux_names: Vec<String>,
 }
 
 /// Defines the mode of operation of `ConstraintSystem`.
@@ -172,7 +190,6 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         self.num_aux += 1;
 
         let path = compute_path(&self.current_namespace, annotation().into());
-        self.aux_names.push(path.clone());
         let var = Variable::new_unchecked(Index::Aux(index));
         self.set_named_obj(path, NamedObject::Var(var));
 
@@ -192,7 +209,6 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         self.num_inputs += 1;
 
         let path = compute_path(&self.current_namespace, annotation().into());
-        self.input_names.push(path.clone());
         let var = Variable::new_unchecked(Index::Input(index));
         self.set_named_obj(path, NamedObject::Var(var));
 
@@ -211,7 +227,7 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
             LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
     {
         let path = compute_path(&self.current_namespace, annotation().into());
-        let index = self.at.len();
+        let index = self.num_constraints;
         self.set_named_obj(path.clone(), NamedObject::Constraint(index));
 
         self.constraint_names.push(path.clone());
@@ -258,6 +274,60 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     fn num_constraints(&self) -> usize {
         self.num_constraints
     }
+    fn print_named_objects(&self) {
+        for (name, _) in self.named_objects.iter() {
+            println!("{}", name);
+        }
+    }
+    fn which_is_unsatisfied(&self) -> Option<&str> {
+        for i in 0..self.num_constraints {
+            let mut a = Self::eval_lc(&self.at[i], &self.input_assignment, &self.aux_assignment);
+            let b = Self::eval_lc(&self.bt[i], &self.input_assignment, &self.aux_assignment);
+            let c = Self::eval_lc(&self.ct[i], &self.input_assignment, &self.aux_assignment);
+            a.mul_assign(&b);
+
+            if a != c {
+                return Some(&self.constraint_names[i]);
+            }
+        }
+        None
+    }
+
+    fn is_satisfied(&self) -> bool {
+        self.which_is_unsatisfied().is_none()
+    }
+    fn set(&mut self, path: &str, to: F) {
+        if self.is_in_setup_mode() {
+            panic!("it is not possible to set the value of variables during setup.")
+        }
+        match self.named_objects.get(path) {
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.input_assignment[index] = to,
+                Index::Aux(index) => self.aux_assignment[index] = to,
+            },
+            Some(e) => panic!(
+                "tried to set path `{}` to value, but `{:?}` already exists there.",
+                path, e
+            ),
+            _ => panic!("no variable exists at path: {}", path),
+        }
+    }
+    fn get(&mut self, path: &str) -> F {
+        if self.is_in_setup_mode() {
+            panic!("it is not possible to get the value of variables during setup.")
+        }
+        match self.named_objects.get(path) {
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.input_assignment[index],
+                Index::Aux(index) => self.aux_assignment[index],
+            },
+            Some(e) => panic!(
+                "tried to get value of path `{}`, but `{:?}` exists there (not a variable)",
+                path, e
+            ),
+            _ => panic!("no variable exists at path: {}", path),
+        }
+    }
 }
 
 impl<F: Field> ConstraintSystem<F> {
@@ -283,8 +353,6 @@ impl<F: Field> ConstraintSystem<F> {
             named_objects: map,
             current_namespace: vec![],
             constraint_names: vec![],
-            input_names: vec!["ONE".into()],
-            aux_names: vec![],
         }
     }
     /// Set `self.mode` to `mode`.
@@ -336,69 +404,7 @@ impl<F: Field> ConstraintSystem<F> {
         acc
     }
 
-    /// Prints the list of named object currently registered into the constraint system
-    pub fn print_named_objects(&self) {
-        for (name, _) in self.named_objects.iter() {
-            println!("{}", name);
-        }
-    }
 
-    /// Returns an Option containing the name of the first constraint which is not satisfied
-    /// or None if all the constraints are satisfied.
-    pub fn which_is_unsatisfied(&self) -> Option<&str> {
-        for i in 0..self.num_constraints {
-            let mut a = Self::eval_lc(&self.at[i], &self.input_assignment, &self.aux_assignment);
-            let b = Self::eval_lc(&self.bt[i], &self.input_assignment, &self.aux_assignment);
-            let c = Self::eval_lc(&self.ct[i], &self.input_assignment, &self.aux_assignment);
-            a.mul_assign(&b);
-
-            if a != c {
-                return Some(&self.constraint_names[i]);
-            }
-        }
-        None
-    }
-
-    /// Checks whether all the constraints are satisfied.
-    pub fn is_satisfied(&self) -> bool {
-        self.which_is_unsatisfied().is_none()
-    }
-    /// Sets the the variable named `path` to the value `to`.
-    /// Panics in setup mode and if `path` does not indicate a variable.
-    pub fn set(&mut self, path: &str, to: F) {
-        if self.is_in_setup_mode() {
-            panic!("it is not possible to set the value of variables during setup.")
-        }
-        match self.named_objects.get(path) {
-            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
-                Index::Input(index) => self.input_assignment[index] = to,
-                Index::Aux(index) => self.aux_assignment[index] = to,
-            },
-            Some(e) => panic!(
-                "tried to set path `{}` to value, but `{:?}` already exists there.",
-                path, e
-            ),
-            _ => panic!("no variable exists at path: {}", path),
-        }
-    }
-    /// Gets the value of the variable named `path`.
-    /// Panics in setup mode and if `path` does not indicate a variable.
-    pub fn get(&mut self, path: &str) -> F {
-        if self.is_in_setup_mode() {
-            panic!("it is not possible to get the value of variables during setup.")
-        }
-        match self.named_objects.get(path) {
-            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
-                Index::Input(index) => self.input_assignment[index],
-                Index::Aux(index) => self.aux_assignment[index],
-            },
-            Some(e) => panic!(
-                "tried to get value of path `{}`, but `{:?}` exists there (not a variable)",
-                path, e
-            ),
-            _ => panic!("no variable exists at path: {}", path),
-        }
-    }
     fn set_named_obj(&mut self, path: String, to: NamedObject) {
         if self.named_objects.get(&path).is_some() {
             panic!("tried to create object at existing path: {}", path);
@@ -488,6 +494,18 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     fn num_constraints(&self) -> usize {
         self.0.num_constraints()
     }
+
+    #[inline]
+    fn print_named_objects(&self) { self.0.print_named_objects(); }
+
+    #[inline]
+    fn which_is_unsatisfied(&self) -> Option<&str> { self.0.which_is_unsatisfied() }
+
+    #[inline]
+    fn set(&mut self, path: &str, to: F) { self.0.set(path, to); }
+
+    #[inline]
+    fn get(&mut self, path: &str) -> F { self.0.get(path) }
 }
 
 impl<F: Field, CS: ConstraintSystemAbstract<F>> Drop for Namespace<'_, F, CS> {
@@ -562,4 +580,16 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     fn num_constraints(&self) -> usize {
         (**self).num_constraints()
     }
+
+    #[inline]
+    fn print_named_objects(&self) { (**self).print_named_objects(); }
+
+    #[inline]
+    fn which_is_unsatisfied(&self) -> Option<&str> { (**self).which_is_unsatisfied() }
+
+    #[inline]
+    fn set(&mut self, path: &str, to: F) { (**self).set(path, to); }
+
+    #[inline]
+    fn get(&mut self, path: &str) -> F { (**self).get(path) }
 }
