@@ -20,15 +20,18 @@ pub trait SWModelParameters: ModelParameters {
     const COFACTOR_INV: Self::ScalarField;
     const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField);
 
-    /// Parameter for an efficiently computable endomorphism of the form
-    /// (x, y) |=> (ENDO_COEFF * x, y).
-    /// According to the SW formula, this is a cubic root of unity.
+    /// Parameters for endomorphism-based scalar multiplication [Halo](https://eprint.iacr.org/2019/1021).
+    /// A non-trivial cubic root of unity `ENDO_COEFF` for a curve endomorphism of the form
+    ///     (x, y) -> (ENDO_COEFF * x, y). 
     const ENDO_COEFF: Self::BaseField;
 
-    /// Scalar corresponding to the endomorphism with respect to the exponential
-    /// representation of the curve; e.g. given a scalar s and a generator G:
-    /// G ^ { s } |=> G^ { ENDO_SCALAR * s }
-    /// As ENDO_COEFF is a cubic root of unity this is too.
+    /// The scalar representation `zeta_r` of `ENDO_COEFF`.
+    /// NOTE : If one wants to use the endo mul circuit with `lambda` many bits, 
+    /// then `zeta_r` MUST satisfy the minimal distance property
+    ///     D = min { d(n*zeta_r, m*zeta_r) : n,m in [0, T] } >= R + 1,
+    /// where `T = 2^{lambda/2 + 1} + 2^{lambda/2} - 1` is the output 
+    /// bound for the coefficients a, b of the equivalent scalar 
+    /// representation `a*zeta_r + b`.   
     const ENDO_SCALAR: Self::ScalarField;
 
     #[inline(always)]

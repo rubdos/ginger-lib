@@ -50,6 +50,8 @@ mod test {
     }
 
     #[test]
+    /// Tests equality of the result enforced by `endo_mul()` 
+    /// with the corresponding scalar multiple. 
     fn test_endo_dee()
     {
         let mut cs = TestConstraintSystem::<Fq>::new();
@@ -72,6 +74,8 @@ mod test {
     }
 
     #[test]
+    /// Tests equality of the result enforced by `endo_mul()` 
+    /// with the corresponding scalar multiple. 
     fn test_endo_dum()
     {
         let mut cs = TestConstraintSystem::<Fr>::new();
