@@ -5,7 +5,7 @@ use algebra::fft::domain::{
 };
 
 use r1cs_core::{
-    ConstraintSynthesizer, ConstraintSystemImpl, SynthesisError, SynthesisMode,
+    ConstraintSynthesizer, ConstraintSystem, SynthesisError, SynthesisMode,
 };
 use rand::Rng;
 use rayon::prelude::*;
@@ -48,7 +48,7 @@ pub fn generate_parameters<E, C, R>(
         C: ConstraintSynthesizer<E::Fr>,
         R: Rng,
 {
-    let mut assembly = ConstraintSystemImpl::<E::Fr>::new();
+    let mut assembly = ConstraintSystem::<E::Fr>::new();
     assembly.set_mode(SynthesisMode::Setup);
 
     // Synthesize the circuit.

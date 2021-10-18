@@ -6,10 +6,10 @@ use crate::{Index, Variable, LinearCombination, SynthesisError};
 
 /// Represents a constraint system which can have new variables
 /// allocated and constrains between them formed.
-pub trait ConstraintSystem<F: Field>: Sized {
+pub trait ConstraintSystemAbstract<F: Field>: Sized {
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
-    type Root: ConstraintSystem<F>;
+    type Root: ConstraintSystemAbstract<F>;
 
     /// Return the "one" input variable
     fn one() -> Variable {
@@ -77,7 +77,7 @@ pub trait ConstraintSystem<F: Field>: Sized {
 
 /// Represents the actual implementation of a rank-1 constraint system (R1CS)
 #[derive(Debug, Clone)]
-pub struct ConstraintSystemImpl<F: Field> {
+pub struct ConstraintSystem<F: Field> {
     /// The mode in which the constraint system is operating. `self` can either
     /// be in setup mode (i.e., `self.mode == SynthesisMode::Setup`) or in
     /// proving mode (i.e., `self.mode == SynthesisMode::Prove`). If we are
@@ -112,13 +112,13 @@ pub struct ConstraintSystemImpl<F: Field> {
     aux_names: Vec<String>,
 }
 
-/// Defines the mode of operation of `ConstraintSystemImpl`.
+/// Defines the mode of operation of `ConstraintSystem`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SynthesisMode {
-    /// Indicate to `ConstraintSystemImpl` that it should only generate
+    /// Indicate to `ConstraintSystem` that it should only generate
     /// constraint matrices and not populate the variable assignments.
     Setup,
-    /// Indicate to `ConstraintSystemImpl` that it populate the variable
+    /// Indicate to `ConstraintSystem` that it populate the variable
     /// assignments. If additionally `construct_matrices == true`, then generate
     /// the matrices as in the `Setup` case.
     Prove {
@@ -155,8 +155,8 @@ fn compute_path(ns: &[String], this: String) -> String {
     name
 }
 
-impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
-    type Root = ConstraintSystemImpl<F>;
+impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
+    type Root = ConstraintSystem<F>;
     #[inline]
     fn one() -> Variable {
         Variable::new_unchecked(Index::Input(0))
@@ -260,13 +260,13 @@ impl<F: Field> ConstraintSystem<F> for ConstraintSystemImpl<F> {
     }
 }
 
-impl<F: Field> ConstraintSystemImpl<F> {
-    /// Construct an empty `ConstraintSystem`.
+impl<F: Field> ConstraintSystem<F> {
+    /// Construct an empty `ConstraintSystemAbstract`.
     pub fn new() -> Self {
         let mut map = Trie::new();
         map.insert(
             "ONE".into(),
-            NamedObject::Var(ConstraintSystemImpl::<F>::one()),
+            NamedObject::Var(ConstraintSystem::<F>::one()),
         );
         Self {
             num_inputs: 1,
@@ -411,17 +411,17 @@ impl<F: Field> ConstraintSystemImpl<F> {
 /// This is a "namespaced" constraint system which borrows a constraint system
 /// (pushing a namespace context) and, when dropped, pops out of the namespace
 /// context.
-pub struct Namespace<'a, F: Field, CS: ConstraintSystem<F>>(&'a mut CS, PhantomData<F>);
+pub struct Namespace<'a, F: Field, CS: ConstraintSystemAbstract<F>>(&'a mut CS, PhantomData<F>);
 
 /// Computations are expressed in terms of rank-1 constraint systems (R1CS).
 /// The `generate_constraints` method is called to generate constraints for
 /// both CRS generation and for proving.
 pub trait ConstraintSynthesizer<F: Field> {
     /// Drives generation of new constraints inside `CS`.
-    fn generate_constraints<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError>;
+    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(self, cs: &mut CS) -> Result<(), SynthesisError>;
 }
 
-impl<F: Field, CS: ConstraintSystem<F>> ConstraintSystem<F> for Namespace<'_, F, CS> {
+impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for Namespace<'_, F, CS> {
     type Root = CS::Root;
 
     #[inline]
@@ -490,16 +490,16 @@ impl<F: Field, CS: ConstraintSystem<F>> ConstraintSystem<F> for Namespace<'_, F,
     }
 }
 
-impl<F: Field, CS: ConstraintSystem<F>> Drop for Namespace<'_, F, CS> {
+impl<F: Field, CS: ConstraintSystemAbstract<F>> Drop for Namespace<'_, F, CS> {
     #[inline]
     fn drop(&mut self) {
         self.get_root().pop_namespace()
     }
 }
 
-/// Convenience implementation of ConstraintSystem<F> for mutable references to
+/// Convenience implementation of ConstraintSystemAbstract<F> for mutable references to
 /// constraint systems.
-impl<F: Field, CS: ConstraintSystem<F>> ConstraintSystem<F> for &mut CS {
+impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for &mut CS {
     type Root = CS::Root;
 
     #[inline]

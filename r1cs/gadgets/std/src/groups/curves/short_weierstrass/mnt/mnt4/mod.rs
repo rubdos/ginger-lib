@@ -8,7 +8,7 @@ use crate::{fields::{
     ToBytesGadget,
 };
 
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use algebra::curves::models::mnt4::MNT4Parameters;
 use std::fmt::Debug;
 use std::ops::Mul;
@@ -41,7 +41,7 @@ pub struct G1PreparedGadget<P: MNT4Parameters> {
 }
 
 impl<P: MNT4Parameters> G1PreparedGadget<P> {
-    pub fn from_affine<CS: ConstraintSystem<P::Fp>>(
+    pub fn from_affine<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         value: &G1Gadget<P>,
     ) -> Result<Self, SynthesisError> {
@@ -57,13 +57,13 @@ impl<P: MNT4Parameters> G1PreparedGadget<P> {
 
 impl<P: MNT4Parameters> ToBytesGadget<P::Fp> for G1PreparedGadget<P> {
     #[inline]
-    fn to_bytes<CS: ConstraintSystem<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
+    fn to_bytes<CS: ConstraintSystemAbstract<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
         let mut p = self.p.to_bytes(&mut cs.ns(|| "p to bytes"))?;
         p.extend_from_slice(&self.p_y_twist_squared.to_bytes(&mut cs.ns(|| "p_y_twist_squared to bytes"))?);
         Ok(p)
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
         let mut p = self.p.to_bytes_strict(&mut cs.ns(|| "p to bytes"))?;
         p.extend_from_slice(&self.p_y_twist_squared.to_bytes_strict(&mut cs.ns(|| "p_y_twist_squared to bytes"))?);
         Ok(p)
@@ -83,14 +83,14 @@ pub struct G2CoefficientsGadget<P: MNT4Parameters> {
 
 impl<P: MNT4Parameters> ToBytesGadget<P::Fp> for G2CoefficientsGadget<P> {
     #[inline]
-    fn to_bytes<CS: ConstraintSystem<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
+    fn to_bytes<CS: ConstraintSystemAbstract<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
         let mut x = self.r_y.to_bytes(&mut cs.ns(|| "r_y to bytes"))?;
         x.extend_from_slice(&self.gamma.to_bytes(&mut cs.ns(|| "gamma to bytes"))?);
         x.extend_from_slice(&self.gamma_x.to_bytes(&mut cs.ns(|| "gamma_x to bytes"))?);
         Ok(x)
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
         let mut x = self.r_y.to_bytes_strict(&mut cs.ns(|| "r_y to bytes"))?;
         x.extend_from_slice(&self.gamma.to_bytes_strict(&mut cs.ns(|| "gamma to bytes"))?);
         x.extend_from_slice(&self.gamma_x.to_bytes_strict(&mut cs.ns(|| "gamma_x to bytes"))?);
@@ -109,7 +109,7 @@ pub struct G2PreparedGadget<P: MNT4Parameters>{
 }
 
 impl<P: MNT4Parameters>G2PreparedGadget<P> {
-    pub fn from_affine<CS: ConstraintSystem<P::Fp>>(
+    pub fn from_affine<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         value: &G2Gadget<P>,
     ) -> Result<Self, SynthesisError> {
@@ -137,7 +137,7 @@ impl<P: MNT4Parameters>G2PreparedGadget<P> {
         Ok(g2p)
     }
 
-    fn doubling_step_for_flipped_miller_loop<CS: ConstraintSystem<P::Fp>>(
+    fn doubling_step_for_flipped_miller_loop<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         s: &G2Gadget<P>,
     ) -> Result<(G2Gadget<P>, G2CoefficientsGadget<P>), SynthesisError>
@@ -178,7 +178,7 @@ impl<P: MNT4Parameters>G2PreparedGadget<P> {
         Ok((s2, c))
     }
 
-    fn mixed_addition_step_for_flipped_miller_loop<CS: ConstraintSystem<P::Fp>>(
+    fn mixed_addition_step_for_flipped_miller_loop<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         x: &Fp2G<P>,
         y: &Fp2G<P>,
@@ -226,7 +226,7 @@ impl<P: MNT4Parameters>G2PreparedGadget<P> {
 impl<P: MNT4Parameters> ToBytesGadget<P::Fp> for G2PreparedGadget<P>
 {
     #[inline]
-    fn to_bytes<CS: ConstraintSystem<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError>
+    fn to_bytes<CS: ConstraintSystemAbstract<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError>
     {
         let mut x = self.q.to_bytes(&mut cs.ns(|| "q to bytes"))?;
 
@@ -237,7 +237,7 @@ impl<P: MNT4Parameters> ToBytesGadget<P::Fp> for G2PreparedGadget<P>
         Ok(x)
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<P::Fp>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
         let mut x = self.q.to_bytes_strict(&mut cs.ns(|| "q to bytes"))?;
 
         for (i, c) in self.coeffs.iter().enumerate() {

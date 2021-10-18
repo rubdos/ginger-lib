@@ -9,7 +9,7 @@ use algebra::{
 
 use rand::Rng;
 use rayon::prelude::*;
-use r1cs_core::{ConstraintSynthesizer, SynthesisError, ConstraintSystemImpl, SynthesisMode};
+use r1cs_core::{ConstraintSynthesizer, SynthesisError, ConstraintSystem, SynthesisMode};
 
 use crate::gm17::{Parameters, VerifyingKey, r1cs_to_sap::R1CStoSAP};
 
@@ -49,7 +49,7 @@ where
     C: ConstraintSynthesizer<E::Fr>,
     R: Rng,
 {
-    let mut assembly = ConstraintSystemImpl::<E::Fr>::new();
+    let mut assembly = ConstraintSystem::<E::Fr>::new();
     assembly.set_mode(SynthesisMode::Setup);
 
     // Synthesize the circuit.

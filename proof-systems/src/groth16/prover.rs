@@ -10,7 +10,7 @@ use algebra::msm::VariableBaseMSM;
 use crate::groth16::{r1cs_to_qap::R1CStoQAP, Parameters, Proof};
 
 use r1cs_core::{
-    ConstraintSynthesizer, ConstraintSystemImpl, SynthesisError, SynthesisMode,
+    ConstraintSynthesizer, ConstraintSystem, SynthesisError, SynthesisMode,
 };
 
 use std::{
@@ -56,7 +56,7 @@ where
     C: ConstraintSynthesizer<E::Fr>,
 {
     let prover_time = start_timer!(|| "Prover");
-    let mut prover = ConstraintSystemImpl::<E::Fr>::new();
+    let mut prover = ConstraintSystem::<E::Fr>::new();
     prover.set_mode(SynthesisMode::Prove{construct_matrices: true});
 
     // Synthesize the circuit.

@@ -9,7 +9,7 @@ use algebra::msm::VariableBaseMSM;
 use crate::gm17::{Parameters, Proof};
 use crate::gm17::r1cs_to_sap::R1CStoSAP;
 
-use r1cs_core::{ConstraintSynthesizer, SynthesisError, ConstraintSystemImpl, SynthesisMode};
+use r1cs_core::{ConstraintSynthesizer, SynthesisError, ConstraintSystem, SynthesisMode};
 
 // use smallvec::SmallVec;
 
@@ -84,7 +84,7 @@ where
     C: ConstraintSynthesizer<E::Fr>,
 {
     let prover_time = start_timer!(|| "Prover");
-    let mut prover = ConstraintSystemImpl::<E::Fr>::new();
+    let mut prover = ConstraintSystem::<E::Fr>::new();
     prover.set_mode(SynthesisMode::Prove{construct_matrices: true});
 
     // Synthesize the circuit.

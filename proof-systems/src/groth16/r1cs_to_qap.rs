@@ -1,7 +1,7 @@
 use algebra::{Field, PairingEngine};
 use algebra::fft::domain::get_best_evaluation_domain;
 
-use r1cs_core::{ConstraintSystem, ConstraintSystemImpl, Index, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, Index, SynthesisError};
 
 use rayon::prelude::*;
 use std::ops::Mul;
@@ -63,7 +63,7 @@ impl R1CStoQAP {
     ///     - the number qap_num_ variables = m of QAP variables, as well as 
     ///     - the domain size |H|. 
     pub(crate) fn instance_map_with_evaluation<E: PairingEngine>(
-        assembly: &ConstraintSystemImpl<E::Fr>,
+        assembly: &ConstraintSystem<E::Fr>,
         t: &E::Fr,
     ) -> Result<(Vec<E::Fr>, Vec<E::Fr>, Vec<E::Fr>, E::Fr, usize, usize), SynthesisError> {
         let domain_size = assembly.num_constraints + (assembly.num_inputs - 1) + 1;
@@ -131,7 +131,7 @@ impl R1CStoQAP {
     //  = |H|-2.
     #[inline]
     pub(crate) fn witness_map<E: PairingEngine>(
-        prover: &ConstraintSystemImpl<E::Fr>,
+        prover: &ConstraintSystem<E::Fr>,
     ) -> Result<Vec<E::Fr>, SynthesisError> {
 
         let zero = E::Fr::zero();

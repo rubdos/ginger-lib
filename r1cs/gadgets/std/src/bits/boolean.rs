@@ -1,7 +1,7 @@
 use algebra::{BitIterator, Field, FpParameters, PrimeField, ToConstraintField};
 
 use crate::{prelude::*, Assignment};
-use r1cs_core::{ConstraintSystem, LinearCombination, SynthesisError, Variable, ConstraintVar};
+use r1cs_core::{ConstraintSystemAbstract, LinearCombination, SynthesisError, Variable, ConstraintVar};
 use std::borrow::Borrow;
 use crate::fields::fp::FpGadget;
 
@@ -27,7 +27,7 @@ impl AllocatedBit {
     pub fn xor<ConstraintF, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let mut result_value = None;
 
@@ -79,7 +79,7 @@ impl AllocatedBit {
     pub fn and<ConstraintF, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let mut result_value = None;
 
@@ -118,7 +118,7 @@ impl AllocatedBit {
     pub fn or<ConstraintF, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let mut result_value = None;
 
@@ -154,7 +154,7 @@ impl AllocatedBit {
     pub fn and_not<ConstraintF, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let mut result_value = None;
 
@@ -192,7 +192,7 @@ impl AllocatedBit {
     pub fn nor<ConstraintF, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let mut result_value = None;
 
@@ -236,7 +236,7 @@ impl PartialEq for AllocatedBit {
 impl Eq for AllocatedBit {}
 
 impl<ConstraintF: Field> AllocGadget<bool, ConstraintF> for AllocatedBit {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -272,7 +272,7 @@ impl<ConstraintF: Field> AllocGadget<bool, ConstraintF> for AllocatedBit {
         })
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -310,7 +310,7 @@ impl<ConstraintF: Field> AllocGadget<bool, ConstraintF> for AllocatedBit {
 }
 
 impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for AllocatedBit {
-    fn conditionally_select<CS: ConstraintSystem<ConstraintF>>(
+    fn conditionally_select<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         cond: &Boolean,
         first: &Self,
@@ -329,7 +329,7 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for AllocatedBit {
     }
 }
 
-fn cond_select_helper<F: Field, CS: ConstraintSystem<F>>(
+fn cond_select_helper<F: Field, CS: ConstraintSystemAbstract<F>>(
     mut cs: CS,
     cond: &Boolean,
     first: (Option<bool>, impl Into<ConstraintVar<F>>),
@@ -405,7 +405,7 @@ impl Boolean {
     }
 
     /// Construct a boolean vector from a vector of u8
-    pub fn constant_u8_vec<ConstraintF: Field, CS: ConstraintSystem<ConstraintF>>(
+    pub fn constant_u8_vec<ConstraintF: Field, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: &mut CS,
         values: &[u8],
     ) -> Vec<Self> {
@@ -433,7 +433,7 @@ impl Boolean {
     ) -> Result<Vec<Self>, SynthesisError>
         where
             ConstraintF: PrimeField,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let field_elements: Vec<ConstraintF> =
             ToConstraintField::<ConstraintF>::to_field_elements(values).unwrap();
@@ -490,7 +490,7 @@ impl Boolean {
     ) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         match (a, b) {
             (&Boolean::Constant(false), x) | (x, &Boolean::Constant(false)) => Ok(*x),
@@ -512,7 +512,7 @@ impl Boolean {
     pub fn or<'a, ConstraintF, CS>(cs: CS, a: &'a Self, b: &'a Self) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         match (a, b) {
             (&Boolean::Constant(false), x) | (x, &Boolean::Constant(false)) => Ok(*x),
@@ -539,7 +539,7 @@ impl Boolean {
     ) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         match (a, b) {
             // false AND x is always false
@@ -567,7 +567,7 @@ impl Boolean {
     pub fn kary_and<ConstraintF, CS>(mut cs: CS, bits: &[Self]) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         assert!(!bits.is_empty());
         let mut bits = bits.iter();
@@ -584,7 +584,7 @@ impl Boolean {
     pub fn enforce_nand<ConstraintF, CS>(mut cs: CS, bits: &[Self]) -> Result<(), SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let res = Self::kary_and(&mut cs, bits)?;
 
@@ -622,7 +622,7 @@ impl Boolean {
     ) -> Result<(), SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let mut bits_iter = bits.iter();
 
@@ -724,7 +724,7 @@ impl From<AllocatedBit> for Boolean {
 }
 
 impl<ConstraintF: Field> AllocGadget<bool, ConstraintF> for Boolean {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -735,7 +735,7 @@ impl<ConstraintF: Field> AllocGadget<bool, ConstraintF> for Boolean {
         AllocatedBit::alloc(cs, value_gen).map(Boolean::from)
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -748,7 +748,7 @@ impl<ConstraintF: Field> AllocGadget<bool, ConstraintF> for Boolean {
 }
 
 impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
         // self | other | XNOR(self, other) | self == other
         // -----|-------|-------------------|--------------
         //   0  |   0   |         1         |      1
@@ -758,7 +758,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
         Ok(Boolean::xor(cs.ns(|| "self XOR other"), &other, &self)?.not())
     }
 
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -810,7 +810,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
         }
     }
 
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -861,7 +861,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
 }
 
 impl<ConstraintF: Field> ToBytesGadget<ConstraintF> for Boolean {
-    fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         _cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -874,7 +874,7 @@ impl<ConstraintF: Field> ToBytesGadget<ConstraintF> for Boolean {
     }
 
     /// Additionally checks if the produced list of booleans is 'valid'.
-    fn to_bytes_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -889,7 +889,7 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for Boolean {
         second: &Self,
     ) -> Result<Self, SynthesisError>
         where
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         match cond {
             Boolean::Constant(true) => Ok(first.clone()),
@@ -935,7 +935,7 @@ mod test {
     use super::{AllocatedBit, Boolean};
     use crate::prelude::*;
     use algebra::{fields::bls12_381::Fr, BitIterator, Field, PrimeField, UniformRand, ToBits};
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
     use rand::{SeedableRng, Rng};
     use rand_xorshift::XorShiftRng;
     use std::str::FromStr;
@@ -943,7 +943,7 @@ mod test {
     #[test]
     fn test_boolean_to_byte() {
         for val in [true, false].iter() {
-            let mut cs = ConstraintSystemImpl::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new();
             let a: Boolean = AllocatedBit::alloc(&mut cs, || Ok(*val)).unwrap().into();
             let bytes = a.to_bytes(&mut cs.ns(|| "ToBytes")).unwrap();
             assert_eq!(bytes.len(), 1);
@@ -961,7 +961,7 @@ mod test {
 
     #[test]
     fn test_allocated_bit() {
-        let mut cs = ConstraintSystemImpl::<Fr>::new();
+        let mut cs = ConstraintSystem::<Fr>::new();
 
         AllocatedBit::alloc(&mut cs, || Ok(true)).unwrap();
         assert!(cs.get("boolean") == Fr::one());
@@ -977,7 +977,7 @@ mod test {
     fn test_boolean_alloc_input_vec() {
         use rand::thread_rng;
 
-        let mut cs = ConstraintSystemImpl::<Fr>::new();
+        let mut cs = ConstraintSystem::<Fr>::new();
         let rng = &mut thread_rng();
 
         //Random test
@@ -1029,7 +1029,7 @@ mod test {
     fn test_xor() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::xor(&mut cs, &a, &b).unwrap();
@@ -1044,7 +1044,7 @@ mod test {
     fn test_or() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::or(&mut cs, &a, &b).unwrap();
@@ -1061,7 +1061,7 @@ mod test {
     fn test_and() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::and(&mut cs, &a, &b).unwrap();
@@ -1097,7 +1097,7 @@ mod test {
     fn test_and_not() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::and_not(&mut cs, &a, &b).unwrap();
@@ -1133,7 +1133,7 @@ mod test {
     fn test_nor() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::nor(&mut cs, &a, &b).unwrap();
@@ -1171,7 +1171,7 @@ mod test {
             for b_bool in [false, true].iter().cloned() {
                 for a_neg in [false, true].iter().cloned() {
                     for b_neg in [false, true].iter().cloned() {
-                        let mut cs = ConstraintSystemImpl::<Fr>::new();
+                        let mut cs = ConstraintSystem::<Fr>::new();
 
                         let mut a: Boolean = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(a_bool))
                             .unwrap()
@@ -1202,7 +1202,7 @@ mod test {
             for b_bool in [false, true].iter().cloned() {
                 for a_neg in [false, true].iter().cloned() {
                     for b_neg in [false, true].iter().cloned() {
-                        let mut cs = ConstraintSystemImpl::<Fr>::new();
+                        let mut cs = ConstraintSystem::<Fr>::new();
 
                         // First test if constraint system is satisfied
                         // when we do want to enforce the condition.
@@ -1227,7 +1227,7 @@ mod test {
 
                         // Now test if constraint system is satisfied even
                         // when we don't want to enforce the condition.
-                        let mut cs = ConstraintSystemImpl::<Fr>::new();
+                        let mut cs = ConstraintSystem::<Fr>::new();
 
                         let mut a: Boolean = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(a_bool))
                             .unwrap()
@@ -1258,7 +1258,7 @@ mod test {
 
     #[test]
     fn test_boolean_negation() {
-        let mut cs = ConstraintSystemImpl::<Fr>::new();
+        let mut cs = ConstraintSystem::<Fr>::new();
 
         let mut b = Boolean::from(AllocatedBit::alloc(&mut cs, || Ok(true)).unwrap());
 
@@ -1326,7 +1326,7 @@ mod test {
 
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
 
                 let a;
                 let b;
@@ -1536,7 +1536,7 @@ mod test {
         for condition in variants.iter().cloned() {
             for first_operand in variants.iter().cloned() {
                 for second_operand in variants.iter().cloned() {
-                    let mut cs = ConstraintSystemImpl::<Fr>::new();
+                    let mut cs = ConstraintSystem::<Fr>::new();
 
                     let cond;
                     let a;
@@ -1600,7 +1600,7 @@ mod test {
 
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
 
                 let a;
                 let b;
@@ -1812,7 +1812,7 @@ mod test {
 
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
 
                 let a;
                 let b;
@@ -2036,7 +2036,7 @@ mod test {
     #[test]
     fn test_enforce_in_field() {
         {
-            let mut cs = ConstraintSystemImpl::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new();
 
             let mut bits = vec![];
             for (i, b) in BitIterator::new(Fr::characteristic()).skip(1).enumerate() {
@@ -2054,7 +2054,7 @@ mod test {
 
         for _ in 0..1000 {
             let r = Fr::rand(&mut rng);
-            let mut cs = ConstraintSystemImpl::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new();
 
             let mut bits = vec![];
             for (i, b) in BitIterator::new(r.into_repr()).skip(1).enumerate() {
@@ -2082,7 +2082,7 @@ mod test {
         //         }
         //     };
 
-        //     let mut cs = ConstraintSystemImpl::<Fr>::new();
+        //     let mut cs = ConstraintSystem::<Fr>::new();
 
         //     let mut bits = vec![];
         //     for (i, b) in BitIterator::new(r).skip(1).enumerate() {
@@ -2101,7 +2101,7 @@ mod test {
     #[test]
     fn test_enforce_nand() {
         {
-            let mut cs = ConstraintSystemImpl::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new();
 
             assert!(Boolean::enforce_nand(&mut cs, &[Boolean::constant(false)]).is_ok());
             assert!(Boolean::enforce_nand(&mut cs, &[Boolean::constant(true)]).is_err());
@@ -2112,7 +2112,7 @@ mod test {
             for mut b in 0..(1 << i) {
                 // with every possible negation
                 for mut n in 0..(1 << i) {
-                    let mut cs = ConstraintSystemImpl::<Fr>::new();
+                    let mut cs = ConstraintSystem::<Fr>::new();
 
                     let mut expected = true;
 
@@ -2164,7 +2164,7 @@ mod test {
         for i in 1..15 {
             // with every possible assignment for them
             for mut b in 0..(1 << i) {
-                let mut cs = ConstraintSystemImpl::<Fr>::new();
+                let mut cs = ConstraintSystem::<Fr>::new();
 
                 let mut expected = true;
 

@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use algebra::{Field, Group};
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 
 use std::{borrow::Borrow, fmt::Debug};
 
@@ -26,17 +26,17 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 
     fn get_variable(&self) -> Self::Variable;
 
-    fn zero<CS: ConstraintSystem<ConstraintF>>(cs: CS) -> Result<Self, SynthesisError>;
+    fn zero<CS: ConstraintSystemAbstract<ConstraintF>>(cs: CS) -> Result<Self, SynthesisError>;
 
-    fn is_zero<CS: ConstraintSystem<ConstraintF>>(&self, cs: CS) -> Result<Boolean, SynthesisError>;
+    fn is_zero<CS: ConstraintSystemAbstract<ConstraintF>>(&self, cs: CS) -> Result<Boolean, SynthesisError>;
 
-    fn add<CS: ConstraintSystem<ConstraintF>>(
+    fn add<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError>;
 
-    fn sub<CS: ConstraintSystem<ConstraintF>>(
+    fn sub<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -45,13 +45,13 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
         self.add(cs.ns(|| "Self - other"), &neg_other)
     }
 
-    fn add_constant<CS: ConstraintSystem<ConstraintF>>(
+    fn add_constant<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &G,
     ) -> Result<Self, SynthesisError>;
 
-    fn sub_constant<CS: ConstraintSystem<ConstraintF>>(
+    fn sub_constant<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &G,
@@ -60,18 +60,18 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
         self.add_constant(cs.ns(|| "Self - other"), &neg_other)
     }
 
-    fn double_in_place<CS: ConstraintSystem<ConstraintF>>(
+    fn double_in_place<CS: ConstraintSystemAbstract<ConstraintF>>(
         &mut self,
         cs: CS,
     ) -> Result<(), SynthesisError>;
 
-    fn negate<CS: ConstraintSystem<ConstraintF>>(&self, cs: CS) -> Result<Self, SynthesisError>;
+    fn negate<CS: ConstraintSystemAbstract<ConstraintF>>(&self, cs: CS) -> Result<Self, SynthesisError>;
 
     /// Variable base exponentiation.
     /// Inputs must be specified in *little-endian* form.
     /// If the addition law is incomplete for the identity element,
     /// `result` must not be the identity element.
-    fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
+    fn mul_bits<'a, CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         result: &Self,
@@ -98,7 +98,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
         scalar_bits_with_base_powers: I,
     ) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
         I: Iterator<Item = (B, &'a G)>,
         B: Borrow<Boolean>,
         G: 'a,
@@ -122,7 +122,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     /// `precomputed_base_scalar_mul`. Inputs must be specified in
     /// *little-endian* form. If the addition law is incomplete for
     /// the identity element, `result` must not be the identity element.
-    fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
+    fn mul_bits_fixed_base<'a, CS: ConstraintSystemAbstract<ConstraintF>>(
         base: &'a G,
         mut cs: CS,
         result: &Self,
@@ -138,7 +138,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
         _: &[J],
     ) -> Result<Self, SynthesisError>
     where
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
         I: Borrow<[Boolean]>,
         J: Borrow<[I]>,
         B: Borrow<[G]>,
@@ -152,7 +152,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
         scalars: I,
     ) -> Result<Self, SynthesisError>
     where
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
         T: 'a + ToBitsGadget<ConstraintF> + ?Sized,
         I: Iterator<Item = &'a T>,
         B: Borrow<[G]>,
@@ -178,7 +178,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 #[cfg(test)]
 pub(crate) mod test {
     use algebra::{Field, UniformRand};
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
 
     use crate::prelude::*;
     use algebra::groups::Group;
@@ -191,7 +191,7 @@ pub(crate) mod test {
         GG: GroupGadget<G, ConstraintF>,
     >()
     {
-        let mut cs = ConstraintSystemImpl::<ConstraintF>::new();
+        let mut cs = ConstraintSystem::<ConstraintF>::new();
 
         let a: G = UniformRand::rand(&mut thread_rng());
         let b: G = UniformRand::rand(&mut thread_rng());
@@ -248,7 +248,7 @@ pub(crate) mod test {
         GG: GroupGadget<G, ConstraintF>,
     >()
     {
-        let mut cs = ConstraintSystemImpl::<ConstraintF>::new();
+        let mut cs = ConstraintSystem::<ConstraintF>::new();
 
         let a: G = UniformRand::rand(&mut thread_rng());
         let b: G = UniformRand::rand(&mut thread_rng());

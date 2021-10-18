@@ -2,7 +2,7 @@ use algebra::{
     curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective},
     SWModelParameters,
     AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve};
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
 
 use crate::{prelude::*, Assignment};
@@ -44,7 +44,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     /// Incomplete addition: neither `self` nor `other` can be the neutral
     /// element.
     /// If `safe` is set, enforce in the circuit exceptional cases not occurring.
-    fn add_internal<CS: ConstraintSystem<ConstraintF>>(
+    fn add_internal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -115,7 +115,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     #[inline]
     /// Incomplete, unsafe, addition: neither `self` nor `other` can be the neutral
     /// element.
-    pub fn add_unsafe<CS: ConstraintSystem<ConstraintF>>(
+    pub fn add_unsafe<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -170,7 +170,7 @@ for AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-    fn zero<CS: ConstraintSystem<ConstraintF>>(mut cs: CS) -> Result<Self, SynthesisError> {
+    fn zero<CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS) -> Result<Self, SynthesisError> {
         Ok(Self::new(
             F::zero(cs.ns(|| "zero"))?,
             F::one(cs.ns(|| "one"))?,
@@ -179,14 +179,14 @@ for AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-    fn is_zero<CS: ConstraintSystem<ConstraintF>>(&self, _: CS) -> Result<Boolean, SynthesisError>{
+    fn is_zero<CS: ConstraintSystemAbstract<ConstraintF>>(&self, _: CS) -> Result<Boolean, SynthesisError>{
         Ok(self.infinity)
     }
 
     #[inline]
     /// Incomplete, safe, addition: neither `self` nor `other` can be the neutral
     /// element.
-    fn add<CS: ConstraintSystem<ConstraintF>>(
+    fn add<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -196,7 +196,7 @@ for AffineGadget<P, ConstraintF, F>
 
     /// Incomplete addition: neither `self` nor `other` can be the neutral
     /// element.
-    fn add_constant<CS: ConstraintSystem<ConstraintF>>(
+    fn add_constant<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &SWProjective<P>,
@@ -272,7 +272,7 @@ for AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-    fn double_in_place<CS: ConstraintSystem<ConstraintF>>(
+    fn double_in_place<CS: ConstraintSystemAbstract<ConstraintF>>(
         &mut self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
@@ -334,7 +334,7 @@ for AffineGadget<P, ConstraintF, F>
         Ok(())
     }
 
-    fn negate<CS: ConstraintSystem<ConstraintF>>(
+    fn negate<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Self, SynthesisError> {
@@ -349,7 +349,7 @@ for AffineGadget<P, ConstraintF, F>
     ///into the addition formula. See coda/src/lib/snarky_curves/snarky_curves.ml "scale_known"
     ///Note: `self` must be different from `result` due to SW incomplete addition.
     #[inline]
-    fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
+    fn mul_bits_fixed_base<'a, CS: ConstraintSystemAbstract<ConstraintF>>(
         base: &'a SWProjective<P>,
         mut cs: CS,
         result: &Self,
@@ -411,7 +411,7 @@ for AffineGadget<P, ConstraintF, F>
         scalars: &[J],
     ) -> Result<Self, SynthesisError>
         where
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
             I: Borrow<[Boolean]>,
             J: Borrow<[I]>,
             B: Borrow<[SWProjective<P>]>,
@@ -526,7 +526,7 @@ impl<P, ConstraintF, F> CondSelectGadget<ConstraintF> for AffineGadget<P, Constr
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     #[inline]
-    fn conditionally_select<CS: ConstraintSystem<ConstraintF>>(
+    fn conditionally_select<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         cond: &Boolean,
         first: &Self,
@@ -551,7 +551,7 @@ impl<P, ConstraintF, F> EqGadget<ConstraintF> for AffineGadget<P, ConstraintF, F
         ConstraintF: Field,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self
@@ -569,7 +569,7 @@ impl<P, ConstraintF, F> EqGadget<ConstraintF> for AffineGadget<P, ConstraintF, F
     }
 
     #[inline]
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -585,7 +585,7 @@ impl<P, ConstraintF, F> EqGadget<ConstraintF> for AffineGadget<P, ConstraintF, F
     }
 
     #[inline]
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -605,7 +605,7 @@ for AffineGadget<P, ConstraintF, F>
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
     #[inline]
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -647,7 +647,7 @@ for AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-    fn alloc_without_check<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_without_check<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -675,7 +675,7 @@ for AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-    fn alloc_checked<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_checked<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -759,7 +759,7 @@ for AffineGadget<P, ConstraintF, F>
     }
 
     #[inline]
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -806,7 +806,7 @@ impl<P, ConstraintF, F> ConstantGadget<SWProjective<P>, ConstraintF> for AffineG
         ConstraintF: Field,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn from_value<CS: ConstraintSystem<ConstraintF>>(
+    fn from_value<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value: &SWProjective<P>,
     ) -> Self
@@ -838,7 +838,7 @@ impl<P, ConstraintF, F> ToBitsGadget<ConstraintF> for AffineGadget<P, Constraint
         ConstraintF: Field,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn to_bits<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -849,7 +849,7 @@ impl<P, ConstraintF, F> ToBitsGadget<ConstraintF> for AffineGadget<P, Constraint
         Ok(x_bits)
     }
 
-    fn to_bits_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -872,7 +872,7 @@ impl<P, ConstraintF, F> ToBytesGadget<ConstraintF> for AffineGadget<P, Constrain
         ConstraintF: Field,
         F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -884,7 +884,7 @@ impl<P, ConstraintF, F> ToBytesGadget<ConstraintF> for AffineGadget<P, Constrain
         Ok(x_bytes)
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -936,7 +936,7 @@ impl<ConstraintF> ToCompressedBitsGadget<ConstraintF> for CompressAffinePointGad
 {
     /// Enforce compression of a point through serialization of the x coordinate and storing
     /// a sign bit for the y coordinate.
-    fn to_compressed<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS)
+    fn to_compressed<CS: ConstraintSystemAbstract<ConstraintF>>(&self, mut cs: CS)
                                                         -> Result<Vec<Boolean>, SynthesisError> {
         //Enforce x_coordinate to bytes
         let mut compressed_bits = self.x.to_bits_strict(cs.ns(|| "x_to_bits_strict"))?;

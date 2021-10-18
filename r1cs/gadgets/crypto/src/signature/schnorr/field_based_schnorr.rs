@@ -18,7 +18,7 @@ use r1cs_std::{
     groups::GroupGadget,
     bits::boolean::Boolean,
 };
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::{
     borrow::Borrow,
     marker::PhantomData,
@@ -51,7 +51,7 @@ for FieldBasedSchnorrSigGadget<ConstraintF, G>
         ConstraintF: PrimeField,
         G: Group,
 {
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(mut cs: CS, f: FN) -> Result<Self, SynthesisError>
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, f: FN) -> Result<Self, SynthesisError>
         where
             FN: FnOnce() -> Result<T, SynthesisError>,
             T: Borrow<FieldBasedSchnorrSignature<ConstraintF, G>>,
@@ -72,7 +72,7 @@ for FieldBasedSchnorrSigGadget<ConstraintF, G>
         Ok(Self{e, s, _field: PhantomData, _group: PhantomData})
     }
 
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(mut cs: CS, f: FN) -> Result<Self, SynthesisError>
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, f: FN) -> Result<Self, SynthesisError>
         where
             FN: FnOnce() -> Result<T, SynthesisError>,
             T: Borrow<FieldBasedSchnorrSignature<ConstraintF, G>>,
@@ -100,7 +100,7 @@ for FieldBasedSchnorrSigGadget<ConstraintF, G>
         ConstraintF: PrimeField,
         G: Group,
 {
-    fn from_value<CS: ConstraintSystem<ConstraintF>>(
+    fn from_value<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value: &FieldBasedSchnorrSignature<ConstraintF, G>
     ) -> Self {
@@ -122,13 +122,13 @@ impl<ConstraintF, G> EqGadget<ConstraintF> for FieldBasedSchnorrSigGadget<Constr
         ConstraintF: PrimeField,
         G: Group,
 {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
         let b1 = self.e.is_eq(cs.ns(|| "b1"), &other.e)?;
         let b2 = self.s.is_eq(cs.ns(|| "b2"), &other.s)?;
         Boolean::and(cs.ns(|| "b1 && b2"), &b1, &b2)
     }
 
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -139,7 +139,7 @@ impl<ConstraintF, G> EqGadget<ConstraintF> for FieldBasedSchnorrSigGadget<Constr
         Ok(())
     }
 
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -158,7 +158,7 @@ impl<ConstraintF, G> ToConstraintFieldGadget<ConstraintF> for FieldBasedSchnorrS
 {
     type FieldGadget = FpGadget<ConstraintF>;
 
-    fn to_field_gadget_elements<CS: ConstraintSystem<ConstraintF>>(
+    fn to_field_gadget_elements<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         _cs: CS
     ) -> Result<Vec<Self::FieldGadget>, SynthesisError>
@@ -186,7 +186,7 @@ for FieldBasedSchnorrPkGadget<ConstraintF, G, GG>
         G: Group,
         GG: GroupGadget<G, ConstraintF>,
 {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
         F: FnOnce() -> Result<T, SynthesisError>,
         T: Borrow<FieldBasedSchnorrPk<G>>
     {
@@ -203,7 +203,7 @@ for FieldBasedSchnorrPkGadget<ConstraintF, G, GG>
         Ok( Self{ pk, _field: PhantomData, _group: PhantomData } )
     }
 
-    fn alloc_without_check<F, T, CS: ConstraintSystem<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
+    fn alloc_without_check<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
         F: FnOnce() -> Result<T, SynthesisError>,
         T: Borrow<FieldBasedSchnorrPk<G>>,
     {
@@ -211,7 +211,7 @@ for FieldBasedSchnorrPkGadget<ConstraintF, G, GG>
         Ok( Self{ pk, _field: PhantomData, _group: PhantomData } )
     }
 
-    fn alloc_checked<F, T, CS: ConstraintSystem<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
+    fn alloc_checked<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
         F: FnOnce() -> Result<T, SynthesisError>,
         T: Borrow<FieldBasedSchnorrPk<G>>,
     {
@@ -228,7 +228,7 @@ for FieldBasedSchnorrPkGadget<ConstraintF, G, GG>
         Ok( Self{ pk, _field: PhantomData, _group: PhantomData } )
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, f: F) -> Result<Self, SynthesisError> where
         F: FnOnce() -> Result<T, SynthesisError>,
         T: Borrow<FieldBasedSchnorrPk<G>>
     {
@@ -244,7 +244,7 @@ for FieldBasedSchnorrPkGadget<ConstraintF, G, GG>
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
 {
-    fn from_value<CS: ConstraintSystem<ConstraintF>>(mut cs: CS, value: &FieldBasedSchnorrPk<G>) -> Self {
+    fn from_value<CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, value: &FieldBasedSchnorrPk<G>) -> Self {
         let pk = GG::from_value(cs.ns(|| "hardcode pk"), &value.0);
         Self{ pk, _field: PhantomData, _group: PhantomData }
     }
@@ -260,7 +260,7 @@ impl<ConstraintF, G, GG> EqGadget<ConstraintF> for FieldBasedSchnorrPkGadget<Con
     G: Group,
     GG: GroupGadget<G, ConstraintF, Value = G>,
 {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self
@@ -268,7 +268,7 @@ impl<ConstraintF, G, GG> EqGadget<ConstraintF> for FieldBasedSchnorrPkGadget<Con
         self.pk.is_eq(cs, &other.pk)
     }
 
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -281,7 +281,7 @@ impl<ConstraintF, G, GG> EqGadget<ConstraintF> for FieldBasedSchnorrPkGadget<Con
          )
     }
 
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -303,7 +303,7 @@ impl<ConstraintF, G, GG> ToConstraintFieldGadget<ConstraintF> for FieldBasedSchn
 {
     type FieldGadget = FpGadget<ConstraintF>;
 
-    fn to_field_gadget_elements<CS: ConstraintSystem<ConstraintF>>(
+    fn to_field_gadget_elements<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS
     ) -> Result<Vec<Self::FieldGadget>, SynthesisError> {
@@ -343,7 +343,7 @@ impl<ConstraintF, G, GG, H, HG> FieldBasedSchnorrSigVerificationGadget<Constrain
         H:           FieldBasedHash<Data = ConstraintF>,
         HG:          FieldBasedHashGadget<H, ConstraintF, DataGadget = FpGadget<ConstraintF>>,
 {
-    fn enforce_signature_computation<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_signature_computation<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         public_key: &GG,
         signature: &FieldBasedSchnorrSigGadget<ConstraintF, G>,
@@ -446,7 +446,7 @@ for FieldBasedSchnorrSigVerificationGadget<ConstraintF, G, GG, H, HG>
     type SignatureGadget = FieldBasedSchnorrSigGadget<ConstraintF, G>;
     type PublicKeyGadget = FieldBasedSchnorrPkGadget<ConstraintF, G, GG>;
 
-    fn enforce_signature_verdict<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_signature_verdict<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         public_key: &Self::PublicKeyGadget,
         signature: &Self::SignatureGadget,
@@ -466,7 +466,7 @@ for FieldBasedSchnorrSigVerificationGadget<ConstraintF, G, GG, H, HG>
         Ok(is_verified)
     }
 
-    fn conditionally_enforce_signature_verification<CS: ConstraintSystem<ConstraintF>>(
+    fn conditionally_enforce_signature_verification<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         public_key: &Self::PublicKeyGadget,
         signature: &Self::SignatureGadget,
@@ -515,7 +515,7 @@ mod test {
         crh::{MNT4PoseidonHashGadget, MNT6PoseidonHashGadget},
     };
 
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
     use r1cs_std::alloc::AllocGadget;
 
     use r1cs_std::instantiated::{
@@ -550,7 +550,7 @@ mod test {
     }
 
     fn mnt4_schnorr_gadget_generate_constraints(message: MNT4Fr, pk: &SchnorrMNT4Pk, sig: SchnorrMNT4Sig) -> bool {
-        let mut cs = ConstraintSystemImpl::<MNT4Fr>::new();
+        let mut cs = ConstraintSystem::<MNT4Fr>::new();
 
         //Alloc signature, pk and message
         let sig_g = <SchnorrMNT4Gadget as FieldBasedSigGadget<SchnorrMNT4, MNT4Fr>>::SignatureGadget::alloc(
@@ -615,7 +615,7 @@ mod test {
     }
 
     fn mnt6_schnorr_gadget_generate_constraints(message: MNT6Fr, pk: &SchnorrMNT6Pk, sig: SchnorrMNT6Sig) -> bool {
-        let mut cs = ConstraintSystemImpl::<MNT6Fr>::new();
+        let mut cs = ConstraintSystem::<MNT6Fr>::new();
 
         //Alloc signature, pk and message
         let sig_g = <SchnorrMNT6Gadget as FieldBasedSigGadget<SchnorrMNT6, MNT6Fr>>::SignatureGadget::alloc(
@@ -688,7 +688,7 @@ mod test {
         for _ in 0..samples {
             let message: MNT4Fr = rng.gen();
             let (sig, pk) = sign::<SchnorrMNT4, _>(rng, message);
-            let mut cs = ConstraintSystemImpl::<MNT4Fr>::new();
+            let mut cs = ConstraintSystem::<MNT4Fr>::new();
 
             //Alloc signature, pk and message
             let sig_g = <SchnorrMNT4Gadget as FieldBasedSigGadget<SchnorrMNT4, MNT4Fr>>::SignatureGadget::alloc(

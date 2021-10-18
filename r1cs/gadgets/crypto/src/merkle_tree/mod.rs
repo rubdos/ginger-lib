@@ -1,5 +1,5 @@
 use algebra::{Field, PrimeField};
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::prelude::*;
 
 use primitives::{crh::FixedLengthCRH, merkle_tree::*, FieldBasedHash};
@@ -23,7 +23,7 @@ where
 
     /// Enforce that the root reconstructed from `self` and `leaf` is equal to
     /// `expected_root`.
-    fn check_membership<CS: ConstraintSystem<ConstraintF>>(
+    fn check_membership<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         expected_root: &HGadget::DataGadget,
@@ -34,7 +34,7 @@ where
 
     /// Enforce that the root reconstructed from `self` and `leaf` is equal to
     /// `expected_root` if `should_enforce` is True, otherwise enforce nothing.
-    fn conditionally_check_membership<CS: ConstraintSystem<ConstraintF>>(
+    fn conditionally_check_membership<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         expected_root: &HGadget::DataGadget,
@@ -56,7 +56,7 @@ where
 
     /// Enforce correct reconstruction of the root of the Merkle Tree
     /// from `self` path and `leaf`.
-    fn enforce_root_from_leaf<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_root_from_leaf<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         leaf: &HGadget::DataGadget,
@@ -65,7 +65,7 @@ where
     /// Given a field element `leaf_index` representing the position of a leaf in a
     /// Merkle Tree, enforce that the leaf index corresponding to `self` path is the
     /// same of `leaf_index`.
-    fn enforce_leaf_index<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_leaf_index<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         leaf_index: &FpGadget<ConstraintF>,
@@ -78,7 +78,7 @@ where
     /// Given a field element `leaf_index` representing the position of a leaf in a
     /// Merkle Tree, enforce that the leaf index corresponding to `self` path is the
     /// same of `leaf_index` if `should_enforce` is True, otherwise enforce nothing.
-    fn conditionally_enforce_leaf_index<CS: ConstraintSystem<ConstraintF>>(
+    fn conditionally_enforce_leaf_index<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         leaf_index: &FpGadget<ConstraintF>,
@@ -101,7 +101,7 @@ where
     ConstraintF: Field,
     CRHGadget: FixedLengthCRHGadget<P::H, ConstraintF>,
 {
-    pub fn check_membership<CS: ConstraintSystem<ConstraintF>>(
+    pub fn check_membership<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         parameters: &CRHGadget::ParametersGadget,
@@ -111,7 +111,7 @@ where
         self.conditionally_check_membership(cs, parameters, root, leaf, &Boolean::Constant(true))
     }
 
-    pub fn conditionally_check_membership<CS: ConstraintSystem<ConstraintF>>(
+    pub fn conditionally_check_membership<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         parameters: &CRHGadget::ParametersGadget,
@@ -178,7 +178,7 @@ pub(crate) fn hash_inner_node_gadget<H, HG, ConstraintF, CS>(
 ) -> Result<HG::OutputGadget, SynthesisError>
 where
     ConstraintF: Field,
-    CS: ConstraintSystem<ConstraintF>,
+    CS: ConstraintSystemAbstract<ConstraintF>,
     H: FixedLengthCRH,
     HG: FixedLengthCRHGadget<H, ConstraintF>,
 {
@@ -197,7 +197,7 @@ where
     HGadget: FixedLengthCRHGadget<P::H, ConstraintF>,
     ConstraintF: Field,
 {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -220,7 +220,7 @@ where
         Ok(MerkleTreePathGadget { path })
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -261,7 +261,7 @@ mod test {
         injective_map::{PedersenCRHCompressorGadget, TECompressorGadget},
     };
     use algebra::{curves::jubjub::JubJubAffine as JubJub, fields::jubjub::fq::Fq};
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use super::*;
@@ -294,7 +294,7 @@ mod test {
         let root = tree.root().unwrap();
         let mut satisfied = true;
         for (i, leaf) in leaves.iter().enumerate() {
-            let mut cs = ConstraintSystemImpl::<Fq>::new();
+            let mut cs = ConstraintSystem::<Fq>::new();
             let proof = tree.generate_proof(i, &leaf).unwrap();
             assert!(proof.verify(&crh_parameters, &root, &leaf).unwrap());
 

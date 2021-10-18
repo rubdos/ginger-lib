@@ -1,6 +1,6 @@
 use algebra::{Field, FpParameters, PrimeField, ToConstraintField};
 
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 
 use crate::{boolean::AllocatedBit, fields::fp::FpGadget, prelude::*, Assignment};
 use std::borrow::Borrow;
@@ -56,7 +56,7 @@ impl UInt8 {
     ) -> Result<Vec<Self>, SynthesisError>
     where
         ConstraintF: Field,
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
         T: Into<Option<u8>> + Copy,
     {
         let mut output_vec = Vec::with_capacity(values.len());
@@ -78,7 +78,7 @@ impl UInt8 {
     ) -> Result<Vec<Self>, SynthesisError>
     where
         ConstraintF: PrimeField,
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let values_len = values.len();
         let field_elements: Vec<ConstraintF> =
@@ -172,7 +172,7 @@ impl UInt8 {
     pub fn xor<ConstraintF, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
     where
         ConstraintF: Field,
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let new_value = match (self.value, other.value) {
             (Some(a), Some(b)) => Some(a ^ b),
@@ -197,7 +197,7 @@ impl UInt8 {
     pub fn or<ConstraintF, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
         where
             ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let new_value = match (self.value, other.value) {
             (Some(a), Some(b)) => Some(a | b),
@@ -228,11 +228,11 @@ impl PartialEq for UInt8 {
 impl Eq for UInt8 {}
 
 impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt8 {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(&self, cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(&self, cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
         self.bits.as_slice().is_eq(cs, &other.bits)
     }
 
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -241,7 +241,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt8 {
         self.bits.conditional_enforce_equal(cs, &other.bits, condition)
     }
 
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -253,7 +253,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt8 {
 }
 
 impl<ConstraintF: Field> AllocGadget<u8, ConstraintF> for UInt8 {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -293,7 +293,7 @@ impl<ConstraintF: Field> AllocGadget<u8, ConstraintF> for UInt8 {
         })
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -338,13 +338,13 @@ mod test {
     use super::UInt8;
     use crate::prelude::*;
     use algebra::fields::bls12_381::Fr;
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
     use rand::{Rng, SeedableRng, RngCore};
     use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_uint8_from_bits_to_bits() {
-        let mut cs = ConstraintSystemImpl::<Fr>::new();
+        let mut cs = ConstraintSystem::<Fr>::new();
         let byte_val = 0b01110001;
         let byte = UInt8::alloc(cs.ns(|| "alloc value"), || Ok(byte_val)).unwrap();
         let bits = byte.into_bits_le();
@@ -358,7 +358,7 @@ mod test {
         use algebra::{to_bytes, ToBytes, Field, PrimeField, FpParameters, UniformRand};
         use rand::thread_rng;
 
-        let mut cs = ConstraintSystemImpl::<Fr>::new();
+        let mut cs = ConstraintSystem::<Fr>::new();
         let rng = &mut thread_rng();
 
         //Random test
@@ -445,7 +445,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = ConstraintSystemImpl::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new();
 
             let a: u8 = rng.gen();
             let b: u8 = rng.gen();

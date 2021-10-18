@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use primitives::crh::{
     FieldBasedHash, FixedLengthCRH
 };
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 
 use r1cs_std::prelude::*;
 
@@ -28,7 +28,7 @@ pub trait FixedLengthCRHGadget<H: FixedLengthCRH, ConstraintF: Field>: Sized {
         + Sized;
     type ParametersGadget: AllocGadget<H::Parameters, ConstraintF> + Clone;
 
-    fn check_evaluation_gadget<CS: ConstraintSystem<ConstraintF>>(
+    fn check_evaluation_gadget<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         parameters: &Self::ParametersGadget,
         input: &[UInt8],
@@ -38,7 +38,7 @@ pub trait FixedLengthCRHGadget<H: FixedLengthCRH, ConstraintF: Field>: Sized {
 pub trait FieldBasedHashGadget<H: FieldBasedHash<Data = ConstraintF>, ConstraintF: Field>: Sized {
     type DataGadget: FieldGadget<ConstraintF, ConstraintF>;
 
-    fn enforce_hash_constant_length<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_hash_constant_length<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         input: &[Self::DataGadget],
     ) -> Result<Self::DataGadget, SynthesisError>;
@@ -50,7 +50,7 @@ pub trait FieldHasherGadget<
     HG: FieldBasedHashGadget<H, ConstraintF>
 >
 {
-    fn enforce_hash<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_hash<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         personalization: Option<&[HG::DataGadget]>
@@ -67,7 +67,7 @@ mod test {
 
         alloc::AllocGadget,
     };
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
 
     pub(crate) fn constant_length_field_based_hash_gadget_native_test<
         F: PrimeField,
@@ -75,7 +75,7 @@ mod test {
         HG: FieldBasedHashGadget<H, F, DataGadget = FpGadget<F>>
     >(inputs: Vec<F>)
     {
-        let mut cs = ConstraintSystemImpl::<F>::new();
+        let mut cs = ConstraintSystem::<F>::new();
 
         let primitive_result = {
             let mut digest = H::init_constant_length(inputs.len(), None);

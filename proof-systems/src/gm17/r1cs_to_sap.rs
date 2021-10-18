@@ -1,7 +1,7 @@
 use algebra::fft::domain::get_best_evaluation_domain;
 use algebra::{Field, PairingEngine};
 
-use r1cs_core::{Index, SynthesisError, ConstraintSystemImpl};
+use r1cs_core::{Index, SynthesisError, ConstraintSystem};
 
 use rayon::prelude::*;
 use std::ops::{AddAssign, SubAssign};
@@ -11,7 +11,7 @@ pub(crate) struct R1CStoSAP;
 impl R1CStoSAP {
     #[inline]
     pub(crate) fn instance_map_with_evaluation<E: PairingEngine>(
-        assembly: &ConstraintSystemImpl<E::Fr>,
+        assembly: &ConstraintSystem<E::Fr>,
         t: &E::Fr,
     ) -> Result<(Vec<E::Fr>, Vec<E::Fr>, E::Fr, usize, usize), SynthesisError> {
         let domain_size = 2 * assembly.num_constraints + 2 * (assembly.num_inputs - 1) + 1;
@@ -97,7 +97,7 @@ impl R1CStoSAP {
 
     #[inline]
     pub(crate) fn witness_map<E: PairingEngine>(
-        prover: &ConstraintSystemImpl<E::Fr>,
+        prover: &ConstraintSystem<E::Fr>,
         d1: &E::Fr,
         d2: &E::Fr,
     ) -> Result<(Vec<E::Fr>, Vec<E::Fr>, usize), SynthesisError> {

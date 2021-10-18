@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use algebra::{Field, PairingEngine};
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::fmt::Debug;
 
 pub mod bls12;
@@ -22,18 +22,18 @@ pub trait PairingGadget<PairingE: PairingEngine, ConstraintF: Field> {
 
     type GTGadget: FieldGadget<PairingE::Fqk, ConstraintF> + Clone;
 
-    fn miller_loop<CS: ConstraintSystem<ConstraintF>>(
+    fn miller_loop<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         p: &[Self::G1PreparedGadget],
         q: &[Self::G2PreparedGadget],
     ) -> Result<Self::GTGadget, SynthesisError>;
 
-    fn final_exponentiation<CS: ConstraintSystem<ConstraintF>>(
+    fn final_exponentiation<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         p: &Self::GTGadget,
     ) -> Result<Self::GTGadget, SynthesisError>;
 
-    fn pairing<CS: ConstraintSystem<ConstraintF>>(
+    fn pairing<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         p: Self::G1PreparedGadget,
         q: Self::G2PreparedGadget,
@@ -44,7 +44,7 @@ pub trait PairingGadget<PairingE: PairingEngine, ConstraintF: Field> {
 
     /// Computes a product of pairings.
     #[must_use]
-    fn product_of_pairings<CS: ConstraintSystem<ConstraintF>>(
+    fn product_of_pairings<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         p: &[Self::G1PreparedGadget],
         q: &[Self::G2PreparedGadget],
@@ -53,12 +53,12 @@ pub trait PairingGadget<PairingE: PairingEngine, ConstraintF: Field> {
         Self::final_exponentiation(&mut cs.ns(|| "Final Exp"), &miller_result)
     }
 
-    fn prepare_g1<CS: ConstraintSystem<ConstraintF>>(
+    fn prepare_g1<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         q: &Self::G1Gadget,
     ) -> Result<Self::G1PreparedGadget, SynthesisError>;
 
-    fn prepare_g2<CS: ConstraintSystem<ConstraintF>>(
+    fn prepare_g2<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         q: &Self::G2Gadget,
     ) -> Result<Self::G2PreparedGadget, SynthesisError>;
@@ -70,7 +70,7 @@ pub(crate) mod tests {
         bits::boolean::Boolean, prelude::*,
     };
     use algebra::{BitIterator, Field, Group, PairingEngine, PrimeField, UniformRand};
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
     use rand;
     use rand::thread_rng;
 
@@ -80,7 +80,7 @@ pub(crate) mod tests {
         ConstraintF: Field,
         P: PairingGadget<E, ConstraintF>,
     >() {
-        let mut cs = ConstraintSystemImpl::<ConstraintF>::new();
+        let mut cs = ConstraintSystem::<ConstraintF>::new();
 
         let mut rng = &mut thread_rng();
         let a = E::G1Projective::rand(&mut rng);

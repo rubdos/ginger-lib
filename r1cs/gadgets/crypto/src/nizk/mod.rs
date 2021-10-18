@@ -1,7 +1,7 @@
 use algebra::{
     Field, bytes::ToBytes
 };
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::prelude::*;
 
 pub mod gm17;
@@ -31,7 +31,7 @@ pub trait NIZKVerifierGadget<N: NIZK, ConstraintF: Field> {
         proof: &Self::ProofGadget,
     ) -> Result<(), SynthesisError>
         where
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
             I: Iterator<Item = &'a T>,
             T: 'a + ToBitsGadget<ConstraintF> + ?Sized;
 }

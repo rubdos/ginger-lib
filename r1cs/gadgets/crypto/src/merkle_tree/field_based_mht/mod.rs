@@ -1,5 +1,5 @@
 use algebra::{Field, PrimeField, FpParameters};
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::{
     prelude::*,
     fields::fp::FpGadget,
@@ -36,7 +36,7 @@ impl<P, HGadget, ConstraintF> FieldBasedBinaryMerkleTreePathGadget<P, HGadget, C
         HGadget: FieldBasedHashGadget<P::H, ConstraintF>,
         ConstraintF: PrimeField,
 {
-    pub fn enforce_leaf_index_bits<CS: ConstraintSystem<ConstraintF>>(
+    pub fn enforce_leaf_index_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         leaf_index_bits: &[Boolean],
@@ -45,7 +45,7 @@ impl<P, HGadget, ConstraintF> FieldBasedBinaryMerkleTreePathGadget<P, HGadget, C
         self.conditionally_enforce_leaf_index_bits(cs, leaf_index_bits, &Boolean::Constant(true))
     }
 
-    pub fn conditionally_enforce_leaf_index_bits<CS: ConstraintSystem<ConstraintF>>(
+    pub fn conditionally_enforce_leaf_index_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         leaf_index_bits: &[Boolean],
@@ -79,7 +79,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
 
     /// Enforces correct reconstruction of the root of the Merkle Tree
     /// from `self` and `leaf`.
-    fn enforce_root_from_leaf<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_root_from_leaf<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         leaf: &HGadget::DataGadget,
@@ -115,7 +115,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
     /// Given a field element `leaf_index` representing the position of a leaf in a
     /// Merkle Tree, enforce that the leaf index corresponding to `self` path is the
     /// same of `leaf_index`.
-    fn conditionally_enforce_leaf_index<CS: ConstraintSystem<ConstraintF>>(
+    fn conditionally_enforce_leaf_index<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         leaf_index: &FpGadget<ConstraintF>,
@@ -154,7 +154,7 @@ impl<P, HGadget, ConstraintF> FieldBasedMerkleTreeGadget<P, HGadget, ConstraintF
         HGadget: FieldBasedHashGadget<P::H, ConstraintF>,
         ConstraintF: PrimeField,
 {
-    pub fn check_leaves<CS: ConstraintSystem<ConstraintF>>
+    pub fn check_leaves<CS: ConstraintSystemAbstract<ConstraintF>>
     (
         cs: CS,
         leaves: &[HGadget::DataGadget],
@@ -167,7 +167,7 @@ impl<P, HGadget, ConstraintF> FieldBasedMerkleTreeGadget<P, HGadget, ConstraintF
     /// Starting from all the leaves in the Merkle Tree, reconstructs and enforces
     /// the Merkle Root. NOTE: This works iff Merkle Tree has been created by passing
     /// all leaves (i.e. padding_tree = null).
-    pub fn conditionally_check_leaves<CS: ConstraintSystem<ConstraintF>>
+    pub fn conditionally_check_leaves<CS: ConstraintSystemAbstract<ConstraintF>>
     (
         mut cs: CS,
         leaves: &[HGadget::DataGadget],
@@ -222,7 +222,7 @@ pub(crate) fn hash_inner_node_gadget<H, HG, ConstraintF, CS>(
 ) -> Result<HG::DataGadget, SynthesisError>
     where
         ConstraintF: Field,
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
         H: FieldBasedHash<Data = ConstraintF>,
         HG: FieldBasedHashGadget<H, ConstraintF>,
 {
@@ -236,7 +236,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
         HGadget: FieldBasedHashGadget<P::H, ConstraintF>,
         ConstraintF: Field,
 {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -259,7 +259,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
         Ok(FieldBasedBinaryMerkleTreePathGadget { path })
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: F,
     ) -> Result<Self, SynthesisError>
@@ -290,7 +290,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
         HGadget: FieldBasedHashGadget<P::H, ConstraintF>,
         ConstraintF: Field,
 {
-    fn from_value<CS: ConstraintSystem<ConstraintF>>(mut cs: CS, value: &FieldBasedBinaryMHTPath<P>) -> Self {
+    fn from_value<CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, value: &FieldBasedBinaryMHTPath<P>) -> Self {
         let mut path = Vec::new();
         for (i, (sibling, d)) in value.get_raw_path().iter().enumerate() {
             let sibling_hash = HGadget::DataGadget::from_value(
@@ -321,7 +321,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
         HGadget: FieldBasedHashGadget<P::H, ConstraintF>,
         ConstraintF: Field,
 {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
         let mut v = Vec::new();
         let len = self.path.len();
         if self.path.len() != other.path.len() {
@@ -340,7 +340,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
         Boolean::kary_and(cs.ns(|| "is eq final"), v.as_slice())
     }
 
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -361,7 +361,7 @@ for FieldBasedBinaryMerkleTreePathGadget<P, HGadget, ConstraintF>
         Ok(())
     }
 
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -391,7 +391,7 @@ mod test {
     };
     use crate::crh::MNT4PoseidonHashGadget;
     use algebra::fields::mnt4753::Fr;
-    use r1cs_core::{ConstraintSystem, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use super::*;
@@ -425,7 +425,7 @@ mod test {
 
         //Merkle Path Gadget test
         for (i, leaf) in leaves.iter().enumerate() {
-            let mut cs = ConstraintSystemImpl::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new();
             let proof = tree.generate_proof(i, leaf).unwrap();
             assert!(proof.verify(TEST_HEIGHT, &leaf, &root).unwrap());
 
@@ -502,7 +502,7 @@ mod test {
         let root = tree.root().unwrap();
 
         //Merkle Tree Gadget test
-        let mut cs = ConstraintSystemImpl::<Fr>::new();
+        let mut cs = ConstraintSystem::<Fr>::new();
 
         // Allocate Merkle Tree Root
         let root = FqGadget::alloc(

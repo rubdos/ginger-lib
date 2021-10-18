@@ -1,4 +1,4 @@
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 
 use super::PairingGadget as PG;
 
@@ -20,7 +20,7 @@ type Fp2G<P> = Fp2Gadget<<P as BnParameters>::Fp2Params, <P as BnParameters>::Fp
 
 impl<P: BnParameters> PairingGadget<P> {
     // Evaluate the line function at point p.
-    fn ell<CS: ConstraintSystem<P::Fp>>(
+    fn ell<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         f: &mut Fp12Gadget<P::Fp12Params, P::Fp>,
         coeffs: &(Fp2G<P>, Fp2G<P>),
@@ -52,7 +52,7 @@ impl<P: BnParameters> PairingGadget<P> {
         }
     }
 
-    fn exp_by_neg_x<CS: ConstraintSystem<P::Fp>>(
+    fn exp_by_neg_x<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         f: &Fp12Gadget<P::Fp12Params, P::Fp>,
     ) -> Result<Fp12Gadget<P::Fp12Params, P::Fp>, SynthesisError> {
@@ -72,7 +72,7 @@ impl<P: BnParameters> PG<Bn<P>, P::Fp> for PairingGadget<P>
     type G2PreparedGadget = G2PreparedGadget<P>;
     type GTGadget = Fp12Gadget<P::Fp12Params, P::Fp>;
 
-    fn miller_loop<CS: ConstraintSystem<P::Fp>>(
+    fn miller_loop<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         ps: &[Self::G1PreparedGadget],
         qs: &[Self::G2PreparedGadget],
@@ -128,7 +128,7 @@ impl<P: BnParameters> PG<Bn<P>, P::Fp> for PairingGadget<P>
         Ok(f)
     }
 
-    fn final_exponentiation<CS: ConstraintSystem<P::Fp>>(
+    fn final_exponentiation<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         f: &Self::GTGadget,
     ) -> Result<Self::GTGadget, SynthesisError> {
@@ -194,14 +194,14 @@ impl<P: BnParameters> PG<Bn<P>, P::Fp> for PairingGadget<P>
         })
     }
 
-    fn prepare_g1<CS: ConstraintSystem<P::Fp>>(
+    fn prepare_g1<CS: ConstraintSystemAbstract<P::Fp>>(
         cs: CS,
         p: &Self::G1Gadget,
     ) -> Result<Self::G1PreparedGadget, SynthesisError> {
         Self::G1PreparedGadget::from_affine(cs, p)
     }
 
-    fn prepare_g2<CS: ConstraintSystem<P::Fp>>(
+    fn prepare_g2<CS: ConstraintSystemAbstract<P::Fp>>(
         cs: CS,
         q: &Self::G2Gadget,
     ) -> Result<Self::G2PreparedGadget, SynthesisError> {

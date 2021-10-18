@@ -2,7 +2,7 @@ use algebra::{fields::{
     fp4::{Fp4Parameters, Fp4ParamsWrapper},
     Field, Fp2Parameters,
 }, PrimeField, Fp2, SquareRootField, Fp2ParamsWrapper};
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 
 use crate::{
     prelude::*, fields::fp2::Fp2Gadget,
@@ -15,7 +15,7 @@ impl<P, ConstraintF: PrimeField + SquareRootField> QuadExtParametersGadget<Const
 {
     type BaseFieldGadget = Fp2Gadget<P::Fp2Params, ConstraintF>;
 
-    fn mul_base_field_gadget_by_nonresidue<CS: ConstraintSystem<ConstraintF>>(
+    fn mul_base_field_gadget_by_nonresidue<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         fe: &Self::BaseFieldGadget
     ) -> Result<Self::BaseFieldGadget, SynthesisError> {
@@ -24,7 +24,7 @@ impl<P, ConstraintF: PrimeField + SquareRootField> QuadExtParametersGadget<Const
         Ok(Self::BaseFieldGadget::new(new_c0, new_c1))
     }
 
-    fn mul_base_field_gadget_by_frobenius_coeff<CS: ConstraintSystem<ConstraintF>>(
+    fn mul_base_field_gadget_by_frobenius_coeff<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         c1: &mut Self::BaseFieldGadget,
         power: usize
@@ -41,7 +41,7 @@ impl<P, ConstraintF: PrimeField + SquareRootField> QuadExtParametersGadget<Const
         Ok(())
     }
 
-    fn cyclotomic_square_gadget<CS: ConstraintSystem<ConstraintF>>(
+    fn cyclotomic_square_gadget<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         fe: &QuadExtFieldGadget<Self, ConstraintF>
     ) -> Result<QuadExtFieldGadget<Self, ConstraintF>, SynthesisError>
@@ -76,7 +76,7 @@ impl<P, ConstraintF: PrimeField + SquareRootField> Fp4Gadget<P, ConstraintF>
 {
     #[inline]
     //Mul by an element of the form c0: (a, 0) c1:(c, d)
-    pub fn mul_by_023<CS: ConstraintSystem<ConstraintF>>(
+    pub fn mul_by_023<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,

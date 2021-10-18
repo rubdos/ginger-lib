@@ -2,7 +2,7 @@ use algebra::{AffineCurve, Field, PairingEngine, ToConstraintField};
 use proof_systems::gm17::{
     Parameters, PreparedVerifyingKey, Proof, VerifyingKey,
 };
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::prelude::*;
 use std::{borrow::Borrow, marker::PhantomData};
 
@@ -68,7 +68,7 @@ pub struct VerifyingKeyGadget<
 impl<PairingE: PairingEngine, ConstraintF: Field, P: PairingGadget<PairingE, ConstraintF>>
 VerifyingKeyGadget<PairingE, ConstraintF, P>
 {
-    pub fn prepare<CS: ConstraintSystem<ConstraintF>>(
+    pub fn prepare<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<PreparedVerifyingKeyGadget<PairingE, ConstraintF, P>, SynthesisError> {
@@ -141,7 +141,7 @@ for Gm17VerifierGadget<PairingE, ConstraintF, P>
         proof: &Self::ProofGadget,
     ) -> Result<(), SynthesisError>
         where
-            CS: ConstraintSystem<ConstraintF>,
+            CS: ConstraintSystemAbstract<ConstraintF>,
             I: Iterator<Item = &'a T>,
             T: 'a + ToBitsGadget<ConstraintF> + ?Sized,
     {
@@ -235,7 +235,7 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
         P: PairingGadget<PairingE, ConstraintF>,
 {
     #[inline]
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -285,7 +285,7 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
     }
 
     #[inline]
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -345,7 +345,7 @@ for ProofGadget<PairingE, ConstraintF, P>
         P: PairingGadget<PairingE, ConstraintF>,
 {
     #[inline]
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -363,7 +363,7 @@ for ProofGadget<PairingE, ConstraintF, P>
     }
 
     #[inline]
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -391,7 +391,7 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
         P: PairingGadget<PairingE, ConstraintF>,
 {
     #[inline]
-    fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -424,7 +424,7 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
         Ok(bytes)
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -461,7 +461,7 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
 #[cfg(test)]
 mod test {
     use proof_systems::gm17::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError, ConstraintSystemImpl};
+    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError, ConstraintSystem};
 
     use algebra::{
         curves::bls12_377::Bls12_377,
@@ -485,7 +485,7 @@ mod test {
     }
 
     impl<F: Field> ConstraintSynthesizer<F> for Bench<F> {
-        fn generate_constraints<CS: ConstraintSystem<F>>(
+        fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
             self,
             cs: &mut CS,
         ) -> Result<(), SynthesisError> {
@@ -556,7 +556,7 @@ mod test {
             };
 
             // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
-            let mut cs = ConstraintSystemImpl::<Fq>::new();
+            let mut cs = ConstraintSystem::<Fq>::new();
 
             let inputs: Vec<_> = inputs.iter().map(|input| input.unwrap()).collect();
             let mut input_gadgets = Vec::new();

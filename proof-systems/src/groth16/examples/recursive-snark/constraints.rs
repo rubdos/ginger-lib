@@ -10,7 +10,7 @@ use r1cs_crypto::nizk::{
     },
 };
 use proof_systems::groth16::{Parameters, Proof};
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::{
     alloc::AllocGadget, bits::ToBitsGadget, boolean::Boolean, fields::fp::FpGadget,
     pairing::PairingGadget as PG,
@@ -110,7 +110,7 @@ impl<F: Field> InnerCircuit<F> {
 // witnesses are non-zero too, hence the computation of the proof elements A,B,C involve full 
 // length MSMs. 
 impl<F: Field> ConstraintSynthesizer<F> for InnerCircuit<F> {
-    fn generate_constraints<CS: ConstraintSystem<F>>(
+    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
@@ -186,7 +186,7 @@ impl<C: CurvePair> MiddleCircuit<C> {
 impl<C: CurvePair> ConstraintSynthesizer<<C::PairingEngineTock as PairingEngine>::Fr>
     for MiddleCircuit<C>
 {
-    fn generate_constraints<CS: ConstraintSystem<<C::PairingEngineTock as PairingEngine>::Fr>>(
+    fn generate_constraints<CS: ConstraintSystemAbstract<<C::PairingEngineTock as PairingEngine>::Fr>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
@@ -273,7 +273,7 @@ impl<C: CurvePair> OuterCircuit<C> {
 impl<C: CurvePair> ConstraintSynthesizer<<C::PairingEngineTick as PairingEngine>::Fr>
     for OuterCircuit<C>
 {
-    fn generate_constraints<CS: ConstraintSystem<<C::PairingEngineTick as PairingEngine>::Fr>>(
+    fn generate_constraints<CS: ConstraintSystemAbstract<<C::PairingEngineTick as PairingEngine>::Fr>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {

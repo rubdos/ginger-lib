@@ -6,7 +6,7 @@ use algebra::{
     curves::bn_382::Bn382,
     UniformRand, PrimeField, Field,
 };
-use r1cs_core::{SynthesisError, ConstraintSynthesizer, ConstraintSystem, LinearCombination};
+use r1cs_core::{SynthesisError, ConstraintSynthesizer, ConstraintSystemAbstract, LinearCombination};
 use proof_systems::groth16::{generate_random_parameters, create_random_proof};
 
 use rand::SeedableRng;
@@ -24,7 +24,7 @@ pub struct Benchmark<F: PrimeField> {
 }
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for Benchmark<F> {
-    fn generate_constraints<CS: ConstraintSystem<F>>(
+    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
@@ -70,7 +70,7 @@ pub struct BenchmarkHighDensities<F: Field> {
 }
 
 impl<F: Field> ConstraintSynthesizer<F> for BenchmarkHighDensities<F> {
-    fn generate_constraints<CS: ConstraintSystem<F>>(
+    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {

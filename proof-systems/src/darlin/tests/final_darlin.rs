@@ -2,7 +2,7 @@
 //! a simple quadratic relation, allocates a given instance of `FinalDarlinDeferredData`,
 //! and wires it to the outside via system inputs.
 use algebra::{AffineCurve, ToConstraintField, UniformRand};
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError};
 use crate::darlin::{
     pcd::{
         PCD, PCDParameters, PCDCircuit,
@@ -142,7 +142,7 @@ impl<G1, G2> ConstraintSynthesizer<G1::ScalarField> for TestCircuit<G1, G2>
         G1: AffineCurve<BaseField = <G2 as AffineCurve>::ScalarField> + ToConstraintField<<G2 as AffineCurve>::ScalarField>,
         G2: AffineCurve<BaseField = <G1 as AffineCurve>::ScalarField> + ToConstraintField<<G1 as AffineCurve>::ScalarField>,
 {
-    fn generate_constraints<CS: ConstraintSystem<G1::ScalarField>>(
+    fn generate_constraints<CS: ConstraintSystemAbstract<G1::ScalarField>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError>

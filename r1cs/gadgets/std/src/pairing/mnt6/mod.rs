@@ -1,4 +1,4 @@
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 
 use crate::{fields::{fp6_2over3::Fp6Gadget, FieldGadget}, groups::curves::short_weierstrass::mnt::mnt6::{G1Gadget, G2Gadget, G1PreparedGadget, G2PreparedGadget}};
 
@@ -16,7 +16,7 @@ impl<P: MNT6Parameters> PairingGadget<MNT6p<P>, P::Fp> for MNT6PairingGadget<P>
     type G2PreparedGadget = G2PreparedGadget<P>;
     type GTGadget = Fp6Gadget<P::Fp6Params, P::Fp>;
 
-    fn miller_loop<CS: ConstraintSystem<P::Fp>>(
+    fn miller_loop<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         p: &[Self::G1PreparedGadget],
         q: &[Self::G2PreparedGadget],
@@ -88,7 +88,7 @@ impl<P: MNT6Parameters> PairingGadget<MNT6p<P>, P::Fp> for MNT6PairingGadget<P>
         Ok(result)
     }
 
-    fn final_exponentiation<CS: ConstraintSystem<P::Fp>>(
+    fn final_exponentiation<CS: ConstraintSystemAbstract<P::Fp>>(
         mut cs: CS,
         value: &Self::GTGadget,
     ) -> Result<Self::GTGadget, SynthesisError>{
@@ -132,7 +132,7 @@ impl<P: MNT6Parameters> PairingGadget<MNT6p<P>, P::Fp> for MNT6PairingGadget<P>
 
     }
 
-    fn prepare_g1<CS: ConstraintSystem<P::Fp>>(
+    fn prepare_g1<CS: ConstraintSystemAbstract<P::Fp>>(
         cs: CS,
         q: &Self::G1Gadget,
     ) -> Result<Self::G1PreparedGadget, SynthesisError>
@@ -140,7 +140,7 @@ impl<P: MNT6Parameters> PairingGadget<MNT6p<P>, P::Fp> for MNT6PairingGadget<P>
         Self::G1PreparedGadget::from_affine(cs, q)
     }
 
-    fn prepare_g2<CS: ConstraintSystem<P::Fp>>(
+    fn prepare_g2<CS: ConstraintSystemAbstract<P::Fp>>(
         cs: CS,
         q: &Self::G2Gadget,
     ) -> Result<Self::G2PreparedGadget, SynthesisError>

@@ -11,7 +11,7 @@ use r1cs_std::{
     },
     alloc::ConstantGadget,
 };
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::marker::PhantomData;
 
 #[cfg(feature = "mnt4_753")]
@@ -58,7 +58,7 @@ impl<
 > PoseidonHashGadget<ConstraintF, P, SB, SBG>
 {
 
-    fn poseidon_perm<CS: ConstraintSystem<ConstraintF>>(
+    fn poseidon_perm<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         state: &mut [FpGadget<ConstraintF>],
     ) -> Result<(), SynthesisError>
@@ -146,7 +146,7 @@ impl<
     }
 
     // Function that does the dot product for the mix matrix
-    fn dot_prod<CS: ConstraintSystem<ConstraintF>>(
+    fn dot_prod<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         res: &mut FpGadget<ConstraintF>,
         state: &mut [FpGadget<ConstraintF>],
@@ -163,7 +163,7 @@ impl<
     }
 
     // Function that does the mix matrix
-    fn matrix_mix<CS: ConstraintSystem<ConstraintF>>(
+    fn matrix_mix<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         state: &mut [FpGadget<ConstraintF>],
     ) -> Result<(), SynthesisError>
@@ -207,7 +207,7 @@ impl<ConstraintF, P, SB, SBG> FieldBasedHashGadget<PoseidonHash<ConstraintF, P, 
 {
     type DataGadget = FpGadget<ConstraintF>;
 
-    fn enforce_hash_constant_length<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_hash_constant_length<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         input: &[Self::DataGadget],
     ) -> Result<Self::DataGadget, SynthesisError>

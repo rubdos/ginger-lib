@@ -1,5 +1,5 @@
 use algebra::{groups::Group, Field};
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::prelude::*;
 
 use crate::signature::SigRandomizePkGadget;
@@ -65,7 +65,7 @@ for SchnorrRandomizePkGadget<G, ConstraintF, GG>
     type ParametersGadget = SchnorrSigGadgetParameters<G, ConstraintF, GG>;
     type PublicKeyGadget = SchnorrSigGadgetPk<G, ConstraintF, GG>;
 
-    fn check_randomization_gadget<CS: ConstraintSystem<ConstraintF>>(
+    fn check_randomization_gadget<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         parameters: &Self::ParametersGadget,
         public_key: &Self::PublicKeyGadget,
@@ -97,7 +97,7 @@ for SchnorrSigGadgetParameters<G, ConstraintF, GG>
         GG: GroupGadget<G, ConstraintF>,
         D: Digest,
 {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
         where
             F: FnOnce() -> Result<T, SynthesisError>,
             T: Borrow<SchnorrSigParameters<G, D>>,
@@ -110,7 +110,7 @@ for SchnorrSigGadgetParameters<G, ConstraintF, GG>
         })
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -134,7 +134,7 @@ for SchnorrSigGadgetPk<G, ConstraintF, GG>
         ConstraintF: Field,
         GG: GroupGadget<G, ConstraintF>,
 {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
         where
             F: FnOnce() -> Result<T, SynthesisError>,
             T: Borrow<SchnorrPublicKey<G>>,
@@ -147,7 +147,7 @@ for SchnorrSigGadgetPk<G, ConstraintF, GG>
         })
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -171,7 +171,7 @@ impl<G, ConstraintF, GG> EqGadget<ConstraintF> for SchnorrSigGadgetPk<G, Constra
         GG: GroupGadget<G, ConstraintF>,
 {
     #[inline]
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self
@@ -180,7 +180,7 @@ impl<G, ConstraintF, GG> EqGadget<ConstraintF> for SchnorrSigGadgetPk<G, Constra
     }
 
     #[inline]
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -191,7 +191,7 @@ impl<G, ConstraintF, GG> EqGadget<ConstraintF> for SchnorrSigGadgetPk<G, Constra
     }
 
     #[inline]
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -208,14 +208,14 @@ impl<G, ConstraintF, GG> ToBytesGadget<ConstraintF> for SchnorrSigGadgetPk<G, Co
         ConstraintF: Field,
         GG: GroupGadget<G, ConstraintF>,
 {
-    fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
         self.pub_key.to_bytes(&mut cs.ns(|| "PubKey To Bytes"))
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {

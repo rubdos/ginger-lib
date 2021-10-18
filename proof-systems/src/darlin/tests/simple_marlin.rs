@@ -1,7 +1,7 @@
 //! A R1CS density one test circuit of specified number of constraints, which processes 
 //! two public inputs satisfying a simple quadratic relation.
 use algebra::{Field, AffineCurve, UniformRand};
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError};
 use poly_commit::ipa_pc::{InnerProductArgPC, CommitterKey, UniversalParams};
 use marlin::{
     Marlin, ProverKey as MarlinProverKey, VerifierKey as MarlinVerifierKey,
@@ -29,7 +29,7 @@ pub(crate) struct Circuit<F: Field> {
 }
 
 impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF> for Circuit<ConstraintF> {
-    fn generate_constraints<CS: ConstraintSystem<ConstraintF>>(
+    fn generate_constraints<CS: ConstraintSystemAbstract<ConstraintF>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
