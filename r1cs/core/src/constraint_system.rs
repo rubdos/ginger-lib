@@ -285,9 +285,6 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         None
     }
 
-    fn is_satisfied(&self) -> bool {
-        self.which_is_unsatisfied().is_none()
-    }
     fn set(&mut self, path: &str, to: F) {
         if self.is_in_setup_mode() {
             panic!("it is not possible to set the value of variables during setup.")
