@@ -1,9 +1,11 @@
 # The following Sage script check the consistency of the following curves parameters:
 #
-#   1) P=(GENERATOR_X,GENERATOR_Y)  must belongs to the curve of equation E: y^2 = x^3 + Ax + B   
+#   1) P=(GENERATOR_X,GENERATOR_Y)      must belongs to the curve of equation E: y^2 = x^3 + Ax + B   
 #   2) P                                must have order equal to the MODULUS of the scalar field
 #   3) COFACTOR                         must be equal to Order(E)/Order(P)
 #   4) COFACTOR_INV                     must be the inverse of COFACTOR in the scalar Field
+#   5) ENDO_COEFF                       must be a cube root in the base field.
+#   6) ENDO_SCALAR                      must be a cube root in the scalar field and satisfy ENDO_SCALAR * (X, Y) == (ENDO_COEFF * X, Y)                                 
 # Open Sage Shell in the corresponding folder and run the command 
 #       "sage check_curve_paramaters sage [file_path_curve] [file_path_basefield] [file_path_scalarfield]".
 
@@ -165,29 +167,57 @@ if Fr(COFACTOR) * Fr(COFACTOR_INV) == Fr(SCALAR_FIELD_R):
 else:
     print("WARNING! COFACTOR_INV IS NOT THE INVERSE OF COFACTOR IN THE SCALAR FIELD!")
 ####### Checking the correctness of ENDO_COEFF and ENDO_FACTOR ############
-zeta_q = Fq(ENDO_COEFF) * Fq(BASE_FIELD_R)**(-1)
-if zeta_q**3 == Fq(1):
-    print("Correct. ENDO_COEFF is a cube root of unity.")
-else:
-    print("WARNING! ENDO_COEFF IS NOT A CUBE ROOT OF UNITY")
-zeta_r = Fr(ENDO_SCALAR) * Fr(SCALAR_FIELD_R)**(-1)
-if zeta_r**3 == Fr(1):
-    print("Correct. ENDO_SCALAR is a cube root of unity.")
-else:
-    print("WARNING! ENDO_SCALAR IS NOT A CUBE ROOT OF UNITY")
+endo_mul_is_used = False
+if 'ENDO_COEFF' in locals() and 'ENDO_SCALAR' in locals():
+    zeta_q = Fq(ENDO_COEFF) * Fq(BASE_FIELD_R)**(-1)
+    if zeta_q**2 + zeta_q == Fq(-1):
+        endo_mul_is_used = True
+        print("Correct. ENDO_COEFF is a primitive cube root of unity.")
+    else:
+        print("WARNING! ENDO_COEFF IS NOT A PRIMITIVE CUBE ROOT OF UNITY.")
+    zeta_r = Fr(ENDO_SCALAR) * Fr(SCALAR_FIELD_R)**(-1)
+    if zeta_r**2 + zeta_r == Fr(-1):
+        print("Correct. ENDO_SCALAR is a primitive cube root of unity.")
+    else:
+        print("WARNING! ENDO_SCALAR IS NOT A PRIMITIVE CUBE ROOT OF UNITY.")
 
-########## Checking that shortest vector in the lattices ([1,\zeta_(q\r)],[0,q\r]) is long enough #########
-## The Halo paper (https://eprint.iacr.org/2019/1021.pdf) claims the injectivity of the endo_mul map.
+
+####### Checking the consistency of ENDO_COEFF and ENDO_SCALAR #############
+if endo_mul_is_used:
+    Q = int(zeta_r) * P
+    if Q == E([zeta_q * X, Y]):
+        print("Correct. ENDO_COEFF and ENDO_SCALAR are consistent.")
+    else:
+        print("WARNING! ENDO_COEFF AND ENDO_SCALAR ARE NOT CONSISTENT!")
+
+
+########## Checking that shortest vector in the lattice ([1,zeta_r),[0,r]) is long enough #########
+## The Halo paper (https://eprint.iacr.org/2019/1021.pdf) proves the injectivity of the endo_mul map.
 ## The injectivity of the map (a,b) |-> a\zeta + b for a,b in [0,A] (essential for using add_unsafe)
 ## is equivalent the lattice condition below.
-## TODO: Write more in detail the motivation of this equivalence (not done in this way in the paper).
-#### Bound for a,b in endo_mul, see the Halo paper:
-## In general it is 2**(l/2 + 1) + 2**(l/2), where l is the length of the input string (in endo_mul we use l = 128)
-A = 2**65 + 2**64 
-from sage.modules.free_module_integer import IntegerLattice
-L_q = IntegerLattice([[1,int(zeta_q)],[0,BASE_FIELD_MODULUS]])
-if L_q.shortest_vector().norm().n() <= (sqrt(2)*A).n():
-    print("WARNING! WE CAN'T USE add_unsafe FOR endo_mul")
-L_r = IntegerLattice([[1,int(zeta_r)],[0,SCALAR_FIELD_MODULUS]])
-if L_r.shortest_vector().norm().n() <= (sqrt(2)*A).n():
-    print("WARNING! WE CAN'T USE add_unsafe FOR endo_mul")
+## In the Halo paper is explained that the condition that a*zeta + b != a'*zeta + b' for a,a',b,b' in [0,A] is equivalent
+## to the condition that min({distance(zeta*a,zeta*a'): a,a' in [0,A]}) > A. This can be plainly restated as
+## a*zeta notin [-A,A] mod r if a in [-A,A] mod r.
+## This can be restated as a lattice condition: suppose in fact that
+##      a * zeta = b mod r  for a,b in [-A,A].
+## Then it would exists c such that
+##      b = a * zeta + c * r.
+## Then
+##      (a, b) = (a, c) * (1  zeta)
+##                        (0    r )
+## would be vector of length <= sqrt(2)*A in a lattice of  determinant r (Gaussian expectation for the shortest vector ~sqrt(r)).
+## If we show that the shortest vector in the lattice spanned by (1, zeta) and (0, r) is longer than sqrt(2)*A, then we
+## have a sufficient (but not necessary) condition.
+## We could have indeed also a necessary condition: if there were a Sage functions listing all the vector shorter than sqrt(2)*A
+## one can look at them: if none of them has both coordinates in the range [-A,A] then the parameters can be accepted
+## even if the shortest vector has length in the range (A, sqrt(2)A].
+## Anyway, due to our choice of parameters, A ~ 2^65, while sqrt(r) ~ 2^128.
+## In general it is A = 2**(l/2 + 1) + 2**(l/2), where l is the length of the input string (in endo_mul we use l = 128)
+if endo_mul_is_used:
+    A = 2**65 + 2**64 
+    from sage.modules.free_module_integer import IntegerLattice
+    L = IntegerLattice([[1,int(zeta_r)],[0,SCALAR_FIELD_MODULUS]])
+    if L.shortest_vector().norm().n() <= (sqrt(2)*A).n():
+        print("WARNING! WE CAN'T USE add_unsafe FOR endo_mul")
+else:
+    print("endo_mul is not used for this curve.")
