@@ -11,49 +11,10 @@ use crate::gm17::r1cs_to_sap::R1CStoSAP;
 
 use r1cs_core::{ConstraintSynthesizer, SynthesisError, ConstraintSystem, SynthesisMode};
 
-// use smallvec::SmallVec;
-
 use std::{
     ops::AddAssign,
     sync::Arc,
 };
-
-// type CoeffVec<T> = SmallVec<[T; 2]>;
-//
-// #[inline]
-// fn eval<E: PairingEngine>(
-//     lc: &LinearCombination<E::Fr>,
-//     constraints: &mut [CoeffVec<(E::Fr, Index)>],
-//     input_assignment: &[E::Fr],
-//     aux_assignment: &[E::Fr],
-//     this_constraint: usize,
-// ) -> E::Fr {
-//     let mut acc = E::Fr::zero();
-//
-//     for &(index, coeff) in lc.as_ref() {
-//         let mut tmp;
-//
-//         match index.get_unchecked() {
-//             Index::Input(i) => {
-//                 constraints[this_constraint].push((coeff, Index::Input(i)));
-//                 tmp = input_assignment[i];
-//             },
-//             Index::Aux(i) => {
-//                 constraints[this_constraint].push((coeff, Index::Aux(i)));
-//                 tmp = aux_assignment[i];
-//             },
-//         }
-//
-//         if coeff.is_one() {
-//             acc.add_assign(&tmp);
-//         } else {
-//             tmp.mul_assign(&coeff);
-//             acc.add_assign(&tmp);
-//         }
-//     }
-//
-//     acc
-// }
 
 pub fn create_random_proof<E, C, R>(
     circuit: C,
