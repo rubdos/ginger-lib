@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use algebra::Field;
-use radix_trie::{Trie, TrieCommon};
+use radix_trie::Trie;
 
 use crate::{Index, Variable, LinearCombination, SynthesisError};
 
@@ -73,9 +73,6 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
 
     /// Output the number of constraints in the system.
     fn num_constraints(&self) -> usize;
-
-    /// Prints the list of named object currently registered into the constraint system.
-    fn print_named_objects(&self);
 
     /// Returns an Option containing the name of the first constraint which is not satisfied
     /// or None if all the constraints are satisfied.
@@ -273,11 +270,6 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     }
     fn num_constraints(&self) -> usize {
         self.num_constraints
-    }
-    fn print_named_objects(&self) {
-        for (name, _) in self.named_objects.iter() {
-            println!("{}", name);
-        }
     }
     fn which_is_unsatisfied(&self) -> Option<&str> {
         for i in 0..self.num_constraints {
@@ -496,9 +488,6 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     }
 
     #[inline]
-    fn print_named_objects(&self) { self.0.print_named_objects(); }
-
-    #[inline]
     fn which_is_unsatisfied(&self) -> Option<&str> { self.0.which_is_unsatisfied() }
 
     #[inline]
@@ -580,9 +569,6 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     fn num_constraints(&self) -> usize {
         (**self).num_constraints()
     }
-
-    #[inline]
-    fn print_named_objects(&self) { (**self).print_named_objects(); }
 
     #[inline]
     fn which_is_unsatisfied(&self) -> Option<&str> { (**self).which_is_unsatisfied() }
