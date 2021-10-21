@@ -70,7 +70,7 @@ pub(crate) mod tests {
         bits::boolean::Boolean, prelude::*,
     };
     use algebra::{BitIterator, Field, Group, PairingEngine, PrimeField, UniformRand};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
     use rand;
     use rand::thread_rng;
 
@@ -81,6 +81,7 @@ pub(crate) mod tests {
         P: PairingGadget<E, ConstraintF>,
     >() {
         let mut cs = ConstraintSystem::<ConstraintF>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         let mut rng = &mut thread_rng();
         let a = E::G1Projective::rand(&mut rng);

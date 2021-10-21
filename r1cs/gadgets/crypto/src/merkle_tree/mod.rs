@@ -261,7 +261,7 @@ mod test {
         injective_map::{PedersenCRHCompressorGadget, TECompressorGadget},
     };
     use algebra::{curves::jubjub::JubJubAffine as JubJub, fields::jubjub::fq::Fq};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use super::*;
@@ -295,6 +295,7 @@ mod test {
         let mut satisfied = true;
         for (i, leaf) in leaves.iter().enumerate() {
             let mut cs = ConstraintSystem::<Fq>::new();
+            cs.set_mode(SynthesisMode::Debug);
             let proof = tree.generate_proof(i, &leaf).unwrap();
             assert!(proof.verify(&crh_parameters, &root, &leaf).unwrap());
 

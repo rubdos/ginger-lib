@@ -121,12 +121,13 @@ mod test {
         },
         *,
     };
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
     use r1cs_std::prelude::*;
 
     #[test]
     fn commitment_gadget_test() {
         let mut cs = ConstraintSystem::<Fr>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         let input = [1u8; 32];
 

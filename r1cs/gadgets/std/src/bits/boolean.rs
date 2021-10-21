@@ -935,7 +935,7 @@ mod test {
     use super::{AllocatedBit, Boolean};
     use crate::prelude::*;
     use algebra::{fields::bls12_381::Fr, BitIterator, Field, PrimeField, UniformRand, ToBits};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
     use rand::{SeedableRng, Rng};
     use rand_xorshift::XorShiftRng;
     use std::str::FromStr;
@@ -944,6 +944,7 @@ mod test {
     fn test_boolean_to_byte() {
         for val in [true, false].iter() {
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
             let a: Boolean = AllocatedBit::alloc(&mut cs, || Ok(*val)).unwrap().into();
             let bytes = a.to_bytes(&mut cs.ns(|| "ToBytes")).unwrap();
             assert_eq!(bytes.len(), 1);
@@ -962,6 +963,7 @@ mod test {
     #[test]
     fn test_allocated_bit() {
         let mut cs = ConstraintSystem::<Fr>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         AllocatedBit::alloc(&mut cs, || Ok(true)).unwrap();
         assert!(cs.get("boolean") == Fr::one());
@@ -978,6 +980,7 @@ mod test {
         use rand::thread_rng;
 
         let mut cs = ConstraintSystem::<Fr>::new();
+        cs.set_mode(SynthesisMode::Debug);
         let rng = &mut thread_rng();
 
         //Random test
@@ -1030,6 +1033,7 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::xor(&mut cs, &a, &b).unwrap();
@@ -1045,6 +1049,7 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::or(&mut cs, &a, &b).unwrap();
@@ -1062,6 +1067,7 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::and(&mut cs, &a, &b).unwrap();
@@ -1098,6 +1104,7 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::and_not(&mut cs, &a, &b).unwrap();
@@ -1134,6 +1141,7 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
                 let a = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(*b_val)).unwrap();
                 let c = AllocatedBit::nor(&mut cs, &a, &b).unwrap();
@@ -1172,6 +1180,7 @@ mod test {
                 for a_neg in [false, true].iter().cloned() {
                     for b_neg in [false, true].iter().cloned() {
                         let mut cs = ConstraintSystem::<Fr>::new();
+                        cs.set_mode(SynthesisMode::Debug);
 
                         let mut a: Boolean = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(a_bool))
                             .unwrap()
@@ -1203,6 +1212,7 @@ mod test {
                 for a_neg in [false, true].iter().cloned() {
                     for b_neg in [false, true].iter().cloned() {
                         let mut cs = ConstraintSystem::<Fr>::new();
+                        cs.set_mode(SynthesisMode::Debug);
 
                         // First test if constraint system is satisfied
                         // when we do want to enforce the condition.
@@ -1228,6 +1238,7 @@ mod test {
                         // Now test if constraint system is satisfied even
                         // when we don't want to enforce the condition.
                         let mut cs = ConstraintSystem::<Fr>::new();
+                        cs.set_mode(SynthesisMode::Debug);
 
                         let mut a: Boolean = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(a_bool))
                             .unwrap()
@@ -1259,6 +1270,7 @@ mod test {
     #[test]
     fn test_boolean_negation() {
         let mut cs = ConstraintSystem::<Fr>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         let mut b = Boolean::from(AllocatedBit::alloc(&mut cs, || Ok(true)).unwrap());
 
@@ -1327,6 +1339,7 @@ mod test {
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
 
                 let a;
                 let b;
@@ -1537,6 +1550,7 @@ mod test {
             for first_operand in variants.iter().cloned() {
                 for second_operand in variants.iter().cloned() {
                     let mut cs = ConstraintSystem::<Fr>::new();
+                    cs.set_mode(SynthesisMode::Debug);
 
                     let cond;
                     let a;
@@ -1601,6 +1615,7 @@ mod test {
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
 
                 let a;
                 let b;
@@ -1813,6 +1828,7 @@ mod test {
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
 
                 let a;
                 let b;
@@ -2037,6 +2053,7 @@ mod test {
     fn test_enforce_in_field() {
         {
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let mut bits = vec![];
             for (i, b) in BitIterator::new(Fr::characteristic()).skip(1).enumerate() {
@@ -2055,6 +2072,7 @@ mod test {
         for _ in 0..1000 {
             let r = Fr::rand(&mut rng);
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let mut bits = vec![];
             for (i, b) in BitIterator::new(r.into_repr()).skip(1).enumerate() {
@@ -2102,6 +2120,7 @@ mod test {
     fn test_enforce_nand() {
         {
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             assert!(Boolean::enforce_nand(&mut cs, &[Boolean::constant(false)]).is_ok());
             assert!(Boolean::enforce_nand(&mut cs, &[Boolean::constant(true)]).is_err());
@@ -2113,6 +2132,7 @@ mod test {
                 // with every possible negation
                 for mut n in 0..(1 << i) {
                     let mut cs = ConstraintSystem::<Fr>::new();
+                    cs.set_mode(SynthesisMode::Debug);
 
                     let mut expected = true;
 
@@ -2165,6 +2185,7 @@ mod test {
             // with every possible assignment for them
             for mut b in 0..(1 << i) {
                 let mut cs = ConstraintSystem::<Fr>::new();
+                cs.set_mode(SynthesisMode::Debug);
 
                 let mut expected = true;
 

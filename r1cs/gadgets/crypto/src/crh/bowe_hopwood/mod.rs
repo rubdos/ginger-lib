@@ -157,7 +157,7 @@ mod test {
         FixedLengthCRHGadget,
     };
     use algebra::{curves::edwards_sw6::EdwardsProjective as Edwards, ProjectiveCurve};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
     use r1cs_std::{
         alloc::AllocGadget, instantiated::edwards_sw6::EdwardsSWGadget, uint8::UInt8,
     };
@@ -192,6 +192,7 @@ mod test {
     fn crh_primitive_gadget_test() {
         let rng = &mut thread_rng();
         let mut cs = ConstraintSystem::<Fr>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         let (input, input_bytes) = generate_input(&mut cs, rng);
         println!("number of constraints for input: {}", cs.num_constraints());

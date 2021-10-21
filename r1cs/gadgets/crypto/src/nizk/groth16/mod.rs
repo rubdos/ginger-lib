@@ -569,7 +569,7 @@ mod test {
     // tests simultaneously from the cargo test framework, the memory will run out and the
     // tests execution will crash.
     use proof_systems::groth16::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError, ConstraintSystem};
+    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError, ConstraintSystem, SynthesisMode};
 
     use super::*;
     use algebra::{
@@ -657,6 +657,7 @@ mod test {
 
             // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
             let mut cs = ConstraintSystem::<E::Fq>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let inputs: Vec<_> = inputs.into_iter().map(|input| input.unwrap()).collect();
             let mut input_gadgets = Vec::new();

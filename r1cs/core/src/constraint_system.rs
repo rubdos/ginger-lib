@@ -96,8 +96,9 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
 #[derive(Debug, Clone)]
 pub struct ConstraintSystem<F: Field> {
     /// The mode in which the constraint system is operating. `self` can either
-    /// be in setup mode (i.e., `self.mode == SynthesisMode::Setup`) or in
-    /// proving mode (i.e., `self.mode == SynthesisMode::Prove`). If we are
+    /// be in setup mode (i.e., `self.mode == SynthesisMode::Setup`), in
+    /// proving mode (i.e., `self.mode == SynthesisMode::Prove`), or in debug
+    /// mode (i.e. `self.mode == SynthesisMode::Debug`). If we are
     /// in proving mode, then we have the additional option of whether or
     /// not to construct the A, B, and C matrices of the constraint system
     /// (see below).
@@ -122,8 +123,15 @@ pub struct ConstraintSystem<F: Field> {
     pub bt: Vec<Vec<(F, Index)>>,
     /// `C` matrix of the R1CS.
     pub ct: Vec<Vec<(F, Index)>>,
+    /// A data structure for associating a name to variables, constraints and
+    /// namespaces registered into the constraint system. This is populated only
+    /// if `self.debug == true`.
     named_objects: Trie<String, NamedObject>,
+    /// A stack keeping track of the current namespace. This is populated only if
+    /// `self.debug == true`.
     current_namespace: Vec<String>,
+    /// A list of the constraint names. This is populated only if `self.debug
+    /// == true`.
     constraint_names: Vec<String>,
 }
 
@@ -141,6 +149,10 @@ pub enum SynthesisMode {
         /// the matrices as in the `Setup` case.
         construct_matrices: bool,
     },
+    /// Indicate to `ConstraintSystem` that it populate variable assignments,
+    /// generate constraint matrices and register names of variables, constraints
+    /// and namespaces
+    Debug,
 }
 
 #[derive(Debug, Clone)]
@@ -186,9 +198,11 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         let index = self.num_aux;
         self.num_aux += 1;
 
-        let path = compute_path(&self.current_namespace, annotation().into());
-        let var = Variable::new_unchecked(Index::Aux(index));
-        self.set_named_obj(path, NamedObject::Var(var));
+        if self.is_in_debug_mode() {
+            let path = compute_path(&self.current_namespace, annotation().into());
+            let var = Variable::new_unchecked(Index::Aux(index));
+            self.set_named_obj(path, NamedObject::Var(var));
+        }
 
         if !self.is_in_setup_mode() {
             self.aux_assignment.push(f()?);
@@ -205,9 +219,11 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         let index = self.num_inputs;
         self.num_inputs += 1;
 
-        let path = compute_path(&self.current_namespace, annotation().into());
-        let var = Variable::new_unchecked(Index::Input(index));
-        self.set_named_obj(path, NamedObject::Var(var));
+        if self.is_in_debug_mode() {
+            let path = compute_path(&self.current_namespace, annotation().into());
+            let var = Variable::new_unchecked(Index::Input(index));
+            self.set_named_obj(path, NamedObject::Var(var));
+        }
 
         if !self.is_in_setup_mode() {
             self.input_assignment.push(f()?);
@@ -223,11 +239,12 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
             LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
             LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
     {
-        let path = compute_path(&self.current_namespace, annotation().into());
-        let index = self.num_constraints;
-        self.set_named_obj(path.clone(), NamedObject::Constraint(index));
-
-        self.constraint_names.push(path.clone());
+        if self.is_in_debug_mode() {
+            let path = compute_path(&self.current_namespace, annotation().into());
+            let index = self.num_constraints;
+            self.set_named_obj(path.clone(), NamedObject::Constraint(index));
+            self.constraint_names.push(path.clone());
+        }
 
         if self.should_construct_matrices() {
             self.at.push(vec![]);
@@ -257,13 +274,17 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
             NR: Into<String>,
             N: FnOnce() -> NR
     {
-        let name = name_fn().into();
-        let path = compute_path(&self.current_namespace, name.clone());
-        self.set_named_obj(path.clone(), NamedObject::Namespace);
-        self.current_namespace.push(name);
+        if self.is_in_debug_mode() {
+            let name = name_fn().into();
+            let path = compute_path(&self.current_namespace, name.clone());
+            self.set_named_obj(path.clone(), NamedObject::Namespace);
+            self.current_namespace.push(name);
+        }
     }
     fn pop_namespace(&mut self) {
-        assert!(self.current_namespace.pop().is_some());
+        if self.is_in_debug_mode() {
+            assert!(self.current_namespace.pop().is_some());
+        }
     }
     fn get_root(&mut self) -> &mut Self::Root {
         self
@@ -286,9 +307,6 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     }
 
     fn set(&mut self, path: &str, to: F) {
-        if self.is_in_setup_mode() {
-            panic!("it is not possible to set the value of variables during setup.")
-        }
         match self.named_objects.get(path) {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
                 Index::Input(index) => self.input_assignment[index] = to,
@@ -302,9 +320,6 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         }
     }
     fn get(&mut self, path: &str) -> F {
-        if self.is_in_setup_mode() {
-            panic!("it is not possible to get the value of variables during setup.")
-        }
         match self.named_objects.get(path) {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
                 Index::Input(index) => self.input_assignment[index],
@@ -359,8 +374,15 @@ impl<F: Field> ConstraintSystem<F> {
         match self.mode {
             SynthesisMode::Setup => true,
             SynthesisMode::Prove { construct_matrices } => construct_matrices,
+            SynthesisMode::Debug => true,
         }
     }
+
+    /// Check if the constraint system is in debug mode
+    pub fn is_in_debug_mode(&self) -> bool {
+        self.mode == SynthesisMode::Debug
+    }
+
     fn push_constraints(
         l: LinearCombination<F>,
         constraints: &mut [Vec<(F, Index)>],

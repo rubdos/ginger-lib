@@ -1505,7 +1505,7 @@ pub(crate) fn test<ConstraintF, P, GG>()
     use crate::{
         boolean::AllocatedBit, groups::test::group_test, prelude::*
     };
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystem, SynthesisMode};
     use algebra::{Group, PrimeField, UniformRand};
     use rand::{
         thread_rng, Rng
@@ -1514,6 +1514,7 @@ pub(crate) fn test<ConstraintF, P, GG>()
     group_test::<ConstraintF, TEAffine<P>, GG>();
 
     let mut cs = ConstraintSystem::new();
+    cs.set_mode(SynthesisMode::Debug);
 
     let a: TEAffine<P> = UniformRand::rand(&mut thread_rng());
     let gadget_a = GG::alloc(&mut cs.ns(|| "a"), || Ok(a)).unwrap();
@@ -1536,6 +1537,7 @@ pub(crate) fn test<ConstraintF, P, GG>()
 
     // Test the cost of allocation, conditional selection, and point addition.
     let mut cs = ConstraintSystem::new();
+    cs.set_mode(SynthesisMode::Debug);
 
     let bit = AllocatedBit::alloc(&mut cs.ns(|| "bool"), || Ok(true))
         .unwrap()

@@ -461,7 +461,7 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
 #[cfg(test)]
 mod test {
     use proof_systems::gm17::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError, ConstraintSystem};
+    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError, ConstraintSystem, SynthesisMode};
 
     use algebra::{
         curves::bls12_377::Bls12_377,
@@ -557,6 +557,7 @@ mod test {
 
             // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
             let mut cs = ConstraintSystem::<Fq>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let inputs: Vec<_> = inputs.iter().map(|input| input.unwrap()).collect();
             let mut input_gadgets = Vec::new();

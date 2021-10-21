@@ -338,13 +338,14 @@ mod test {
     use super::UInt8;
     use crate::prelude::*;
     use algebra::fields::bls12_381::Fr;
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
     use rand::{Rng, SeedableRng, RngCore};
     use rand_xorshift::XorShiftRng;
 
     #[test]
     fn test_uint8_from_bits_to_bits() {
         let mut cs = ConstraintSystem::<Fr>::new();
+        cs.set_mode(SynthesisMode::Debug);
         let byte_val = 0b01110001;
         let byte = UInt8::alloc(cs.ns(|| "alloc value"), || Ok(byte_val)).unwrap();
         let bits = byte.into_bits_le();
@@ -359,6 +360,7 @@ mod test {
         use rand::thread_rng;
 
         let mut cs = ConstraintSystem::<Fr>::new();
+        cs.set_mode(SynthesisMode::Debug);
         let rng = &mut thread_rng();
 
         //Random test
@@ -446,6 +448,7 @@ mod test {
 
         for _ in 0..1000 {
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let a: u8 = rng.gen();
             let b: u8 = rng.gen();

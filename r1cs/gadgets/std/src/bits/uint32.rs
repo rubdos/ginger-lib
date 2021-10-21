@@ -356,7 +356,7 @@ mod test {
     use super::UInt32;
     use crate::bits::boolean::Boolean;
     use algebra::fields::{bls12_381::Fr, Field};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -398,6 +398,7 @@ mod test {
 
         for _ in 0..1000 {
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let a: u32 = rng.gen();
             let b: u32 = rng.gen();
@@ -440,6 +441,7 @@ mod test {
 
         for _ in 0..1000 {
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let a: u32 = rng.gen();
             let b: u32 = rng.gen();
@@ -475,6 +477,7 @@ mod test {
 
         for _ in 0..1000 {
             let mut cs = ConstraintSystem::<Fr>::new();
+            cs.set_mode(SynthesisMode::Debug);
 
             let a: u32 = rng.gen();
             let b: u32 = rng.gen();

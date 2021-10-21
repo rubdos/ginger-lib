@@ -178,7 +178,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 #[cfg(test)]
 pub(crate) mod test {
     use algebra::{Field, UniformRand};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
 
     use crate::prelude::*;
     use algebra::groups::Group;
@@ -192,6 +192,7 @@ pub(crate) mod test {
     >()
     {
         let mut cs = ConstraintSystem::<ConstraintF>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         let a: G = UniformRand::rand(&mut thread_rng());
         let b: G = UniformRand::rand(&mut thread_rng());
@@ -249,6 +250,7 @@ pub(crate) mod test {
     >()
     {
         let mut cs = ConstraintSystem::<ConstraintF>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         let a: G = UniformRand::rand(&mut thread_rng());
         let b: G = UniformRand::rand(&mut thread_rng());

@@ -67,7 +67,7 @@ mod test {
 
         alloc::AllocGadget,
     };
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
 
     pub(crate) fn constant_length_field_based_hash_gadget_native_test<
         F: PrimeField,
@@ -76,6 +76,7 @@ mod test {
     >(inputs: Vec<F>)
     {
         let mut cs = ConstraintSystem::<F>::new();
+        cs.set_mode(SynthesisMode::Debug);
 
         let primitive_result = {
             let mut digest = H::init_constant_length(inputs.len(), None);
