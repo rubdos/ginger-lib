@@ -261,7 +261,7 @@ mod test {
         injective_map::{PedersenCRHCompressorGadget, TECompressorGadget},
     };
     use algebra::{curves::jubjub::JubJubAffine as JubJub, fields::jubjub::fq::Fq};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use super::*;

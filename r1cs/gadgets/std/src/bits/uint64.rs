@@ -367,7 +367,7 @@ mod test {
     use algebra::fields::{
         bls12_381::Fr, Field
     };
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

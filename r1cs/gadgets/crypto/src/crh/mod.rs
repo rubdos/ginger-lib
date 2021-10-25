@@ -67,7 +67,7 @@ mod test {
 
         alloc::AllocGadget,
     };
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
 
     pub(crate) fn constant_length_field_based_hash_gadget_native_test<
         F: PrimeField,

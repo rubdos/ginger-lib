@@ -201,7 +201,7 @@ mod test {
             CommitmentGadget,
     };
     use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use r1cs_std::{
         instantiated::jubjub::JubJubGadget, prelude::*,
     };

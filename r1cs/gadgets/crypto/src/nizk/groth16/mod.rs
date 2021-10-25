@@ -569,7 +569,8 @@ mod test {
     // tests simultaneously from the cargo test framework, the memory will run out and the
     // tests execution will crash.
     use proof_systems::groth16::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, ConstraintSystemDebugger,
+                    SynthesisError, ConstraintSystem, SynthesisMode};
 
     use super::*;
     use algebra::{

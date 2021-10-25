@@ -391,7 +391,7 @@ mod test {
     };
     use crate::crh::MNT4PoseidonHashGadget;
     use algebra::fields::mnt4753::Fr;
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use super::*;

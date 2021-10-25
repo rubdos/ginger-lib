@@ -70,7 +70,7 @@ pub(crate) mod tests {
         bits::boolean::Boolean, prelude::*,
     };
     use algebra::{BitIterator, Field, Group, PairingEngine, PrimeField, UniformRand};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use rand;
     use rand::thread_rng;
 

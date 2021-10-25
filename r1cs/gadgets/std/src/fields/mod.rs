@@ -252,7 +252,7 @@ pub(crate) mod tests {
     use rand_xorshift::XorShiftRng;
     use crate::{prelude::*,  fields::fp::FpGadget};
     use algebra::{BitIterator, Field, UniformRand, PrimeField, leading_zeros};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
 
     #[allow(dead_code)]
     pub(crate) fn field_test<

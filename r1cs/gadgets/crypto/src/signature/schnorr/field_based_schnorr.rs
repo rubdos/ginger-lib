@@ -515,7 +515,7 @@ mod test {
         crh::{MNT4PoseidonHashGadget, MNT6PoseidonHashGadget},
     };
 
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use r1cs_std::alloc::AllocGadget;
 
     use r1cs_std::instantiated::{

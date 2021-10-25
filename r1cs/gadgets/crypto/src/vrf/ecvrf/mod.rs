@@ -448,7 +448,7 @@ mod test {
         }
     };
 
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use r1cs_std::alloc::AllocGadget;
     use r1cs_std::instantiated::{
         mnt4_753::G1Gadget as MNT4G1Gadget,

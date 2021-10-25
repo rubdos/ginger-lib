@@ -461,7 +461,8 @@ for VerifyingKeyGadget<PairingE, ConstraintF, P>
 #[cfg(test)]
 mod test {
     use proof_systems::gm17::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, ConstraintSystemDebugger,
+                    SynthesisError, ConstraintSystem, SynthesisMode};
 
     use algebra::{
         curves::bls12_377::Bls12_377,

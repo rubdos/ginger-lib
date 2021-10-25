@@ -338,7 +338,7 @@ mod test {
     use super::UInt8;
     use crate::prelude::*;
     use algebra::fields::bls12_381::Fr;
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use rand::{Rng, SeedableRng, RngCore};
     use rand_xorshift::XorShiftRng;
 

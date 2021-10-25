@@ -1505,7 +1505,7 @@ pub(crate) fn test<ConstraintF, P, GG>()
     use crate::{
         boolean::AllocatedBit, groups::test::group_test, prelude::*
     };
-    use r1cs_core::{ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystem, ConstraintSystemDebugger, SynthesisMode};
     use algebra::{Group, PrimeField, UniformRand};
     use rand::{
         thread_rng, Rng

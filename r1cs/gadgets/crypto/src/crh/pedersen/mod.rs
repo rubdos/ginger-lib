@@ -130,7 +130,7 @@ mod test {
         FixedLengthCRH, FixedLengthCRHGadget,
     };
     use algebra::curves::{jubjub::JubJubProjective as JubJub, ProjectiveCurve};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use r1cs_std::{instantiated::jubjub::JubJubGadget, prelude::*};
 
     type TestCRH = PedersenCRH<JubJub, Window>;

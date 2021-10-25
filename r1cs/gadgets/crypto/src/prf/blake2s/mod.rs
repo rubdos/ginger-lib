@@ -514,7 +514,7 @@ mod test {
     use primitives::prf::blake2s::Blake2s as B2SPRF;
     use crate::prf::blake2s::blake2s_gadget;
     use blake2::Blake2s;
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
 
     use super::Blake2sGadget;
     use r1cs_std::{

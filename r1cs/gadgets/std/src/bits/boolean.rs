@@ -935,7 +935,7 @@ mod test {
     use super::{AllocatedBit, Boolean};
     use crate::prelude::*;
     use algebra::{fields::bls12_381::Fr, BitIterator, Field, PrimeField, UniformRand, ToBits};
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use rand::{SeedableRng, Rng};
     use rand_xorshift::XorShiftRng;
     use std::str::FromStr;

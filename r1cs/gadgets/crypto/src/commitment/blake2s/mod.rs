@@ -121,7 +121,7 @@ mod test {
         },
         *,
     };
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode};
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
     use r1cs_std::prelude::*;
 
     #[test]

@@ -74,6 +74,11 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
     /// Output the number of constraints in the system.
     fn num_constraints(&self) -> usize;
 
+}
+
+/// Defines debugging functionalities for a constraint system, which allow to verify which
+/// constraints are unsatisfied as well as to set and get the values assigned to variables
+pub trait ConstraintSystemDebugger<F: Field>: ConstraintSystemAbstract<F> {
     /// Returns an Option containing the name of the first constraint which is not satisfied
     /// or None if all the constraints are satisfied.
     fn which_is_unsatisfied(&self) -> Option<&str>;
@@ -123,6 +128,20 @@ pub struct ConstraintSystem<F: Field> {
     pub bt: Vec<Vec<(F, Index)>>,
     /// `C` matrix of the R1CS.
     pub ct: Vec<Vec<(F, Index)>>,
+    /// An optional struct to hold info useful for debugging the constraint system.
+    /// It is None if SynthesisMode
+    debug_info: Option<DebugInfo>,
+}
+
+#[derive(Debug, Clone)]
+enum NamedObject {
+    Constraint(usize),
+    Var(Variable),
+    Namespace,
+}
+
+#[derive(Debug, Clone)]
+struct DebugInfo {
     /// A data structure for associating a name to variables, constraints and
     /// namespaces registered into the constraint system. This is populated only
     /// if `self.debug == true`.
@@ -133,6 +152,60 @@ pub struct ConstraintSystem<F: Field> {
     /// A list of the constraint names. This is populated only if `self.debug
     /// == true`.
     constraint_names: Vec<String>,
+}
+
+impl DebugInfo {
+    pub(crate) fn push_namespace<A, AR>(&mut self, name: A)
+        where
+            A: FnOnce() -> AR,
+            AR: Into<String>,
+    {
+        let name = name().into();
+        self.add_named_object(NamedObject::Namespace, || name.clone());
+        self.current_namespace.push(name);
+    }
+    pub(crate) fn pop_namespace(&mut self) {
+        assert!(self.current_namespace.pop().is_some());
+    }
+    pub(crate) fn add_named_object<A, AR>(&mut self, obj: NamedObject, name: A)
+        where
+            A: FnOnce() -> AR,
+            AR: Into<String>,
+    {
+        let path = self.compute_path(name().into());
+        match obj {
+            NamedObject::Constraint(_) => {
+                self.constraint_names.push(path.clone());
+            },
+            _ => {}
+        }
+        self.set_named_obj(path, obj);
+    }
+    fn compute_path(&self, name: String) -> String {
+        if name.chars().any(|a| a == '/') {
+            panic!("'/' is not allowed in names");
+        }
+
+        let mut path = String::new();
+
+        let mut needs_separation = false;
+        for ns in self.current_namespace.iter().chain(Some(&name).into_iter()) {
+            if needs_separation {
+                path += "/";
+            }
+
+            path += ns;
+            needs_separation = true;
+        }
+
+        path
+    }
+    fn set_named_obj(&mut self, path: String, to: NamedObject) {
+        if self.named_objects.get(&path).is_some() {
+            panic!("tried to create object at existing path: {}", path);
+        }
+        self.named_objects.insert(path, to);
+    }
 }
 
 /// Defines the mode of operation of `ConstraintSystem`.
@@ -155,33 +228,6 @@ pub enum SynthesisMode {
     Debug,
 }
 
-#[derive(Debug, Clone)]
-enum NamedObject {
-    Constraint(usize),
-    Var(Variable),
-    Namespace,
-}
-
-fn compute_path(ns: &[String], this: String) -> String {
-    if this.chars().any(|a| a == '/') {
-        panic!("'/' is not allowed in names");
-    }
-
-    let mut name = String::new();
-
-    let mut needs_separation = false;
-    for ns in ns.iter().chain(Some(&this).into_iter()) {
-        if needs_separation {
-            name += "/";
-        }
-
-        name += ns;
-        needs_separation = true;
-    }
-
-    name
-}
-
 impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     type Root = ConstraintSystem<F>;
     #[inline]
@@ -197,17 +243,17 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     {
         let index = self.num_aux;
         self.num_aux += 1;
+        let var = Variable::new_unchecked(Index::Aux(index));
 
         if self.is_in_debug_mode() {
-            let path = compute_path(&self.current_namespace, annotation().into());
-            let var = Variable::new_unchecked(Index::Aux(index));
-            self.set_named_obj(path, NamedObject::Var(var));
+            self.debug_info.as_mut().unwrap().add_named_object(NamedObject::Var(var.clone()), annotation);
         }
 
         if !self.is_in_setup_mode() {
             self.aux_assignment.push(f()?);
         }
-        Ok(Variable::new_unchecked(Index::Aux(index)))
+
+        Ok(var)
     }
     #[inline]
     fn alloc_input<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
@@ -218,17 +264,17 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     {
         let index = self.num_inputs;
         self.num_inputs += 1;
+        let var = Variable::new_unchecked(Index::Input(index));
 
         if self.is_in_debug_mode() {
-            let path = compute_path(&self.current_namespace, annotation().into());
-            let var = Variable::new_unchecked(Index::Input(index));
-            self.set_named_obj(path, NamedObject::Var(var));
+            self.debug_info.as_mut().unwrap().add_named_object(NamedObject::Var(var.clone()), annotation);
         }
 
         if !self.is_in_setup_mode() {
             self.input_assignment.push(f()?);
         }
-        Ok(Variable::new_unchecked(Index::Input(index)))
+
+        Ok(var)
     }
     #[inline]
     fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
@@ -240,10 +286,8 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
             LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
     {
         if self.is_in_debug_mode() {
-            let path = compute_path(&self.current_namespace, annotation().into());
             let index = self.num_constraints;
-            self.set_named_obj(path.clone(), NamedObject::Constraint(index));
-            self.constraint_names.push(path.clone());
+            self.debug_info.as_mut().unwrap().add_named_object(NamedObject::Constraint(index), annotation);
         }
 
         if self.should_construct_matrices() {
@@ -275,15 +319,12 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
             N: FnOnce() -> NR
     {
         if self.is_in_debug_mode() {
-            let name = name_fn().into();
-            let path = compute_path(&self.current_namespace, name.clone());
-            self.set_named_obj(path.clone(), NamedObject::Namespace);
-            self.current_namespace.push(name);
+            self.debug_info.as_mut().unwrap().push_namespace(name_fn);
         }
     }
     fn pop_namespace(&mut self) {
         if self.is_in_debug_mode() {
-            assert!(self.current_namespace.pop().is_some());
+            self.debug_info.as_mut().unwrap().pop_namespace();
         }
     }
     fn get_root(&mut self) -> &mut Self::Root {
@@ -292,6 +333,9 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     fn num_constraints(&self) -> usize {
         self.num_constraints
     }
+}
+
+impl<F: Field> ConstraintSystemDebugger<F> for ConstraintSystem<F> {
     fn which_is_unsatisfied(&self) -> Option<&str> {
         for i in 0..self.num_constraints {
             let mut a = Self::eval_lc(&self.at[i], &self.input_assignment, &self.aux_assignment);
@@ -300,14 +344,20 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
             a.mul_assign(&b);
 
             if a != c {
-                return Some(&self.constraint_names[i]);
+                return Some(self.debug_info.as_ref().unwrap().constraint_names[i].as_ref());
             }
         }
         None
     }
 
     fn set(&mut self, path: &str, to: F) {
-        match self.named_objects.get(path) {
+        match self
+            .debug_info
+            .as_ref()
+            .expect("only available in Debug mode.")
+            .named_objects
+            .get(path)
+        {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
                 Index::Input(index) => self.input_assignment[index] = to,
                 Index::Aux(index) => self.aux_assignment[index] = to,
@@ -320,7 +370,12 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         }
     }
     fn get(&mut self, path: &str) -> F {
-        match self.named_objects.get(path) {
+        match self
+            .debug_info
+            .as_ref()
+            .expect("only available in debug mode")
+            .named_objects
+            .get(path) {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
                 Index::Input(index) => self.input_assignment[index],
                 Index::Aux(index) => self.aux_assignment[index],
@@ -337,11 +392,6 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
 impl<F: Field> ConstraintSystem<F> {
     /// Construct an empty `ConstraintSystemAbstract`.
     pub fn new() -> Self {
-        let mut map = Trie::new();
-        map.insert(
-            "ONE".into(),
-            NamedObject::Var(ConstraintSystem::<F>::one()),
-        );
         Self {
             num_inputs: 1,
             num_aux: 0,
@@ -354,14 +404,29 @@ impl<F: Field> ConstraintSystem<F> {
             mode: SynthesisMode::Prove {
                 construct_matrices: true,
             },
-            named_objects: map,
-            current_namespace: vec![],
-            constraint_names: vec![],
+            debug_info: None,
         }
     }
     /// Set `self.mode` to `mode`.
     pub fn set_mode(&mut self, mode: SynthesisMode) {
         self.mode = mode;
+        match mode {
+            SynthesisMode::Debug => {
+                let mut map = Trie::new();
+                map.insert(
+                    "ONE".into(),
+                    NamedObject::Var(ConstraintSystem::<F>::one()),
+                );
+                self.debug_info = Some(
+                    DebugInfo {
+                        named_objects: map,
+                        current_namespace: vec![],
+                        constraint_names: vec![],
+                    }
+                );
+            },
+            _ => {}
+        }
     }
 
     /// Check whether `self.mode == SynthesisMode::Setup`.
@@ -413,15 +478,6 @@ impl<F: Field> ConstraintSystem<F> {
         }
 
         acc
-    }
-
-
-    fn set_named_obj(&mut self, path: String, to: NamedObject) {
-        if self.named_objects.get(&path).is_some() {
-            panic!("tried to create object at existing path: {}", path);
-        }
-
-        self.named_objects.insert(path, to);
     }
 }
 
@@ -505,7 +561,9 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     fn num_constraints(&self) -> usize {
         self.0.num_constraints()
     }
+}
 
+impl<F: Field, CS: ConstraintSystemAbstract<F> + ConstraintSystemDebugger<F>> ConstraintSystemDebugger<F> for Namespace<'_, F, CS> {
     #[inline]
     fn which_is_unsatisfied(&self) -> Option<&str> { self.0.which_is_unsatisfied() }
 
@@ -588,7 +646,9 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     fn num_constraints(&self) -> usize {
         (**self).num_constraints()
     }
+}
 
+impl<F: Field, CS: ConstraintSystemAbstract<F> + ConstraintSystemDebugger<F>> ConstraintSystemDebugger<F> for &mut CS {
     #[inline]
     fn which_is_unsatisfied(&self) -> Option<&str> { (**self).which_is_unsatisfied() }
 
