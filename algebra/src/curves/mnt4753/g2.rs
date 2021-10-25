@@ -4,10 +4,7 @@ use crate::{
     curves::{
         models::{ModelParameters, SWModelParameters},
     },
-    fields::{
-        mnt4753::*,
-        FpParameters,
-    },
+    fields::mnt4753::*,
 };
 use crate::curves::mnt4753::MNT4_753Parameters;
 use crate::curves::models::mnt4::MNT4Parameters;
@@ -119,14 +116,6 @@ impl SWModelParameters for MNT4G2Parameters {
             MUL_BY_A_C1 * &elt.c1,
         )
     }
-
-    const ENDO_COEFF: Self::BaseField = field_new!(
-        Fq2,
-        FQ_ONE,
-        FQ_ZERO
-    );
-
-    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);    
 }
 
 const G2_GENERATOR_X: Fq2 = field_new!(Fq2, G2_GENERATOR_X_C0, G2_GENERATOR_X_C1);

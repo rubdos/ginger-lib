@@ -4,7 +4,7 @@ use crate::{
     curves::models::{ModelParameters, SWModelParameters},
     fields::{
         bls12_377::*,
-        Field, FpParameters,
+        Field,
     },
 };
 
@@ -50,10 +50,6 @@ impl SWModelParameters for Bls12_377G1Parameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
-
-    const ENDO_COEFF: Self::BaseField = FQ_ONE;   
-
-    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);    
 }
 
 /// G1_GENERATOR_X =

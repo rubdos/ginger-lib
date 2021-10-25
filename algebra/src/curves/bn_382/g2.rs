@@ -1,7 +1,7 @@
 use crate::{
     biginteger::BigInteger384 as BigInteger,
     curves::models::{ModelParameters, SWModelParameters},
-    Field, field_new, FpParameters,
+    Field, field_new,
     fields::bn_382::*
 };
 
@@ -75,10 +75,6 @@ impl SWModelParameters for Bn382G2Parameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
-
-    const ENDO_COEFF: Self::BaseField = FQ2_ONE;
-
-    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);
 }
 
 pub const G2_GENERATOR_X: Fq2 = field_new!(Fq2, G2_GENERATOR_X_C0, G2_GENERATOR_X_C1);

@@ -3,10 +3,9 @@
 use crate::{Field, field_new};
 use crate::biginteger::BigInteger320;
 use crate::fields::{
-    FpParameters,
     secp256k1::{
-        fq::{FqParameters, Fq},
-        fr::{FrParameters, Fr}
+        fq::Fq,
+        fr::Fr,
     }
 };
 use crate::curves::{
@@ -61,10 +60,6 @@ impl SWModelParameters for Secp256k1Parameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
-
-    const ENDO_COEFF: Self::BaseField = field_new!(Fq, FqParameters::R);
-
-    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);
 }
 
 /// G_GENERATOR_X = 

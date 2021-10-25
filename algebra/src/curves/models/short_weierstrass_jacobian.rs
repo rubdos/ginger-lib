@@ -4,7 +4,7 @@ use std::{
     io::{Read, Result as IoResult, Write, Error as IoError, ErrorKind},
     marker::PhantomData,
 };
-use crate::{bytes::{FromBytes, ToBytes}, curves::{AffineCurve, ProjectiveCurve, models::SWModelParameters as Parameters}, fields::{BitIterator, Field, PrimeField, SquareRootField}, CanonicalSerialize, SerializationError, CanonicalSerializeWithFlags, CanonicalDeserialize, CanonicalDeserializeWithFlags, UniformRand, SemanticallyValid, Error, FromBytesChecked, BitSerializationError, FromCompressedBits, ToCompressedBits, SWFlags};
+use crate::{bytes::{FromBytes, ToBytes}, curves::{AffineCurve, ProjectiveCurve, models::SWModelParameters as Parameters, models::EndoMulParameters as EndoParameters}, fields::{BitIterator, Field, PrimeField, SquareRootField}, CanonicalSerialize, SerializationError, CanonicalSerializeWithFlags, CanonicalDeserialize, CanonicalDeserializeWithFlags, UniformRand, SemanticallyValid, Error, FromBytesChecked, BitSerializationError, FromCompressedBits, ToCompressedBits, SWFlags, EndoMulCurve};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use serde::{Serialize, Deserialize};
 
@@ -277,14 +277,17 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
     fn mul_by_cofactor_inv(&self) -> Self {
         self.mul(P::COFACTOR_INV).into()
     }
+}
 
-    fn apply_endomorphism(&self) -> Self { 
+impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
+
+    fn apply_endomorphism(&self) -> Self {
         let mut self_e = self.clone();
         self_e.x.mul_assign(P::ENDO_COEFF);
         self_e
     }
 
-    fn endo_rep_to_scalar(bits: Vec<bool>) -> Self::ScalarField {
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Result<Self::ScalarField, Error> {
 
         let mut a : P::ScalarField = 2u64.into();
         let mut b : P::ScalarField = 2u64.into();
@@ -292,9 +295,18 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
         let one = P::ScalarField::one();
         let one_neg = one.neg();
 
+        let mut bits = bits;
+        if bits.len() % 2 == 1 {
+            bits.push(false);
+        }
+
+        if bits.len() > P::LAMBDA {
+            Err("Endo mul bits length exceeds LAMBDA")?
+        }
+
         for i in (0..(bits.len() / 2)).rev() {
             a.double_in_place();
-            b.double_in_place();            
+            b.double_in_place();
 
             let s =
                 if bits[i * 2] {
@@ -310,11 +322,11 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
             }
         }
 
-        a.mul(P::ENDO_SCALAR) + &b
+        Ok(a.mul(P::ENDO_SCALAR) + &b)
     }
 
     /// Performs scalar multiplication of this element with mixed addition.
-    fn endo_mul(&self, bits: Vec<bool>) -> Self::Projective {
+    fn endo_mul(&self, bits: Vec<bool>) -> Result<Self::Projective, Error> {
 
         let self_neg = self.neg();
 
@@ -324,6 +336,15 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
         let mut acc = self_e.into_projective();
         acc.add_assign_mixed(&self);
         acc.double_in_place();
+
+        let mut bits = bits;
+        if bits.len() % 2 == 1 {
+            bits.push(false);
+        }
+
+        if bits.len() > P::LAMBDA {
+            Err("Endo mul bits length exceeds LAMBDA")?
+        }
 
         for i in (0..(bits.len() / 2)).rev() {
 
@@ -346,7 +367,7 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
             acc.add_assign_mixed(s);
         }
 
-        acc
+        Ok(acc)
     }
 }
 

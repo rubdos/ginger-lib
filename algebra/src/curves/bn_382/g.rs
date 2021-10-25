@@ -4,7 +4,7 @@ use crate::{
         models::short_weierstrass_jacobian::{GroupAffine, GroupProjective},
         ModelParameters, SWModelParameters
     },
-    Field, field_new, FpParameters,
+    Field, field_new,
     fields::bn_382::*
 };
 
@@ -60,10 +60,6 @@ impl SWModelParameters for Bn382GParameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
-
-    const ENDO_COEFF: Self::BaseField = field_new!(Fr, FrParameters::R);
-
-    const ENDO_SCALAR: Self::ScalarField = FQ_ONE;
 }
 
 /// G_GENERATOR_X =

@@ -1,12 +1,7 @@
-use crate::{
-    biginteger::BigInteger256,
-    curves::{
-        models::short_weierstrass_jacobian::{GroupAffine, GroupProjective},
-        ModelParameters, SWModelParameters
-    },
-    Field, field_new,
-    fields::tweedle::*
-};
+use crate::{biginteger::BigInteger256, curves::{
+    models::short_weierstrass_jacobian::{GroupAffine, GroupProjective},
+    ModelParameters, SWModelParameters
+}, Field, field_new, fields::tweedle::*, EndoMulParameters};
 
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub struct TweedledeeParameters;
@@ -56,26 +51,31 @@ impl SWModelParameters for TweedledeeParameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
+}
+
+impl EndoMulParameters for TweedledeeParameters {
 
     const ENDO_COEFF: Self::BaseField = field_new!(
         Fq,
         BigInteger256([
-            1444470991491022206, 
-            3301226169728360777, 
-            72516509137424193, 
-            708688398506307241
+            0x140bcab6b02dbd7e,
+            0x2dd04fb5f1e1e149,
+            0x0101a1617f7ccf41,
+            0x09d5c457f968aea9,
         ])
     );
 
     const ENDO_SCALAR: Self::ScalarField = field_new!(
         Fr,
         BigInteger256([
-            13597504620482004229,
-            16590497220115833568,
-            15137822970486674306,
-            1901757351910266741
+            0xbcb40a68df900505,
+            0xe63d49524c1c22e0,
+            0xd21459c9bc9b5382,
+            0x1a64663c51995775,
         ])
     );
+
+    const LAMBDA: usize = 128;
 }
 
 /// G_GENERATOR_X =

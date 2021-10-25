@@ -4,7 +4,6 @@ use crate::{
     fields::{Field, PrimeField, SquareRootField},
     groups::Group, SemanticallyValid, FromBytesChecked, bits::{FromCompressedBits, ToCompressedBits},
     CanonicalSerialize, CanonicalDeserialize,
-    convert,
 };
 use crate::UniformRand;
 use std::{
@@ -302,19 +301,16 @@ pub trait AffineCurve:
     /// `Self::ScalarField`.
     #[must_use]
     fn mul_by_cofactor_inv(&self) -> Self;
+}
 
+pub trait EndoMulCurve: AffineCurve {
     /// An efficiently computable endomorphism of the curve (if any).
-    fn apply_endomorphism(&self) -> Self { self.clone() }
+    fn apply_endomorphism(&self) -> Self;
 
-    fn endo_rep_to_scalar(bits: Vec<bool>) -> Self::ScalarField {
-        convert::<Self::ScalarField>(bits).unwrap()
-    }
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Result<Self::ScalarField, Error>;
 
     /// Performs scalar multiplication of this element with mixed addition.
-    fn endo_mul(&self, bits: Vec<bool>) -> Self::Projective {
-        let fe = Self::endo_rep_to_scalar(bits);
-        self.mul(fe.into())
-    }
+    fn endo_mul(&self, bits: Vec<bool>) -> Result<Self::Projective, Error>;
 }
 
 impl<C: ProjectiveCurve> Group for C {

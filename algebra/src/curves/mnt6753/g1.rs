@@ -4,10 +4,7 @@ use crate::{
     curves::{
         models::{ModelParameters, SWModelParameters},
     },
-    fields::{
-        mnt6753::*,
-        FpParameters,
-    },
+    fields::mnt6753::*,
 };
 
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
@@ -74,10 +71,6 @@ impl SWModelParameters for MNT6G1Parameters {
 
     const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField) =
         (G1_GENERATOR_X, G1_GENERATOR_Y);
-
-    const ENDO_COEFF: Self::BaseField = FQ_ONE;   
-
-    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);    
 }
 
 //generator of prime order r

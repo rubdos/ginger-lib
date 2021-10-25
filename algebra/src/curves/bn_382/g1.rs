@@ -4,7 +4,7 @@ use crate::{
     curves::{
         models::{ModelParameters, SWModelParameters},
     },
-    Field, field_new, FpParameters,
+    Field, field_new,
 };
 
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
@@ -56,10 +56,6 @@ impl SWModelParameters for Bn382G1Parameters {
     fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
         Self::BaseField::zero()
     }
-
-    const ENDO_COEFF: Self::BaseField = FQ_ONE;   
-
-    const ENDO_SCALAR: Self::ScalarField = field_new!(Fr, FrParameters::R);
 }
 
 /// G1_GENERATOR_X =

@@ -1,20 +1,19 @@
 use crate::{
     curves::{
-        models::SWModelParameters, 
+        models::SWModelParameters,
         tweedle::*,
         tests::curve_tests,
-        AffineCurve, ProjectiveCurve,
+        AffineCurve, ProjectiveCurve, EndoMulCurve,
     },
     groups::tests::group_test,
     fields::{Field, SquareRootField, PrimeField, tweedle::*},
-    BigInteger
+    BigInteger,
+    rand::UniformRand,
 };
 use std::ops::{AddAssign, MulAssign};
 use std::str::FromStr;
 
-use rand::{
-    Rng, SeedableRng
-};
+use rand::{Rng, SeedableRng, thread_rng};
 use rand_xorshift::XorShiftRng;
 use crate::curves::tests::sw_jacobian_tests;
 use crate::curves::tweedle::dee::TweedledeeParameters;
@@ -184,65 +183,37 @@ fn test_dum_addition_correctness() {
 }
 
 #[test]
-fn test_dee_apply_endomorphism() {
-
-    let p = dee::Projective::new(
-        Fq::from_str("17071515411234329267051251142008744532074161438140426170549136904789606209155").unwrap(),
-        Fq::from_str("9067370984564524093871625068725679070040168060994636121507153477916099620826").unwrap(),
-        Fq::one(),
-    ).into_affine();
-
-    let pe = p.apply_endomorphism(); 
-    let pe_mul = p.mul(dee::TweedledeeParameters::ENDO_SCALAR).into_affine();
-
-    assert_eq!(pe, pe_mul);
-}
-
-#[test]
 fn test_dee_endo_mul() {
 
-    let p = dee::Projective::new(
-        Fq::from_str("17071515411234329267051251142008744532074161438140426170549136904789606209155").unwrap(),
-        Fq::from_str("9067370984564524093871625068725679070040168060994636121507153477916099620826").unwrap(),
-        Fq::one(),
-    ).into_affine();
+    for _ in 0..100 {
 
-    let bits = Fr::from_str("21118483776076764996122757821606091900059043860162004907989579660882026321197").unwrap().into_repr().to_bits();
+        let p = dee::Projective::rand(&mut thread_rng()).into_affine();
 
-    let p_mul = p.mul(dee::Affine::endo_rep_to_scalar(bits.clone()));
-    let pe_mul = p.endo_mul(bits.clone());
+        let f: Fq = u128::rand(&mut thread_rng()).into();
+        let bits = f.into_repr().to_bits().as_slice()[0..128].to_vec();
 
-    assert_eq!(p_mul, pe_mul);
-}
+        let p_mul = p.mul(dee::Affine::endo_rep_to_scalar(bits.clone()).unwrap());
+        let pe_mul = p.endo_mul(bits.clone()).unwrap();
 
-#[test]
-fn test_dum_apply_endomorphism() {
-
-    let p = dum::Projective::new(
-        Fr::from_str("21118483776076764996122757821606091900059043860162004907989579660882026321197").unwrap(),
-        Fr::from_str("9025588652913915603174720117986570170395425582417356177673155554443430464689").unwrap(),
-        Fr::one(),
-    ).into_affine();
-
-    let pe = p.apply_endomorphism();
-    let pe_mul = p.mul(dum::TweedledumParameters::ENDO_SCALAR).into_affine();
-
-    assert_eq!(pe, pe_mul);
+        assert_eq!(p_mul, pe_mul);
+    }
 }
 
 #[test]
 fn test_dum_endo_mul() {
 
-    let p = dum::Projective::new(
-        Fr::from_str("17071515411234329267051251142008744532074161438140426170549136904789606209155").unwrap(),
-        Fr::from_str("9067370984564524093871625068725679070040168060994636121507153477916099620826").unwrap(),
-        Fr::one(),
-    ).into_affine();
+    for _ in 0..100 {
 
-    let bits = Fq::from_str("21118483776076764996122757821606091900059043860162004907989579660882026321197").unwrap().into_repr().to_bits();
+        let p = dum::Projective::rand(&mut thread_rng()).into_affine();
 
-    let p_mul = p.mul(dum::Affine::endo_rep_to_scalar(bits.clone())).into_affine();
-    let pe_mul = p.endo_mul(bits.clone()).into_affine();
+        let f: Fq = u128::rand(&mut thread_rng()).into();
+        let bits = f.into_repr().to_bits().as_slice()[0..128].to_vec();
 
-    assert_eq!(p_mul, pe_mul);
+        println!("{}", bits.len());
+
+        let p_mul = p.mul(dum::Affine::endo_rep_to_scalar(bits.clone()).unwrap());
+        let pe_mul = p.endo_mul(bits.clone()).unwrap();
+
+        assert_eq!(p_mul, pe_mul);
+    }
 }
