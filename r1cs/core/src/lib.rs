@@ -92,8 +92,7 @@ pub enum ConstraintVar<F: Field> {
 /// If there are unsatisfied constraints, return `Ok(Some(name))`,
 /// where `name` is the name of the first unsatisfied constraint.
 pub fn debug_circuit<F: Field, C: ConstraintSynthesizer<F>>(circuit: C) -> Result<Option<String>, SynthesisError> {
-    let mut cs = ConstraintSystem::<F>::new();
-    cs.set_mode(SynthesisMode::Debug);
+    let mut cs = ConstraintSystem::<F>::new(SynthesisMode::Debug);
     circuit.generate_constraints(&mut cs)?;
     let unsatisfied_constraint = cs.which_is_unsatisfied();
     match unsatisfied_constraint {

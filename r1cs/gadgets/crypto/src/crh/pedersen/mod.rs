@@ -162,8 +162,7 @@ mod test {
     #[test]
     fn crh_primitive_gadget_test() {
         let rng = &mut thread_rng();
-        let mut cs = ConstraintSystem::<Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
         let (input, input_bytes) = generate_input(&mut cs, rng);
         println!("number of constraints for input: {}", cs.num_constraints());

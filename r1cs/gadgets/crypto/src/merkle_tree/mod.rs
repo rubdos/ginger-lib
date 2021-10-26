@@ -294,8 +294,7 @@ mod test {
         let root = tree.root().unwrap();
         let mut satisfied = true;
         for (i, leaf) in leaves.iter().enumerate() {
-            let mut cs = ConstraintSystem::<Fq>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<Fq>::new(SynthesisMode::Debug);
             let proof = tree.generate_proof(i, &leaf).unwrap();
             assert!(proof.verify(&crh_parameters, &root, &leaf).unwrap());
 

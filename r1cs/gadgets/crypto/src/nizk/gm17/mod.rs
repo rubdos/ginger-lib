@@ -557,8 +557,7 @@ mod test {
             };
 
             // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
-            let mut cs = ConstraintSystem::<Fq>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<Fq>::new(SynthesisMode::Debug);
 
             let inputs: Vec<_> = inputs.iter().map(|input| input.unwrap()).collect();
             let mut input_gadgets = Vec::new();

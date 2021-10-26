@@ -191,8 +191,7 @@ pub(crate) mod test {
         GG: GroupGadget<G, ConstraintF>,
     >()
     {
-        let mut cs = ConstraintSystem::<ConstraintF>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         let a: G = UniformRand::rand(&mut thread_rng());
         let b: G = UniformRand::rand(&mut thread_rng());
@@ -249,8 +248,7 @@ pub(crate) mod test {
         GG: GroupGadget<G, ConstraintF>,
     >()
     {
-        let mut cs = ConstraintSystem::<ConstraintF>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         let a: G = UniformRand::rand(&mut thread_rng());
         let b: G = UniformRand::rand(&mut thread_rng());

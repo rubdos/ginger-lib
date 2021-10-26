@@ -75,8 +75,7 @@ mod test {
         HG: FieldBasedHashGadget<H, F, DataGadget = FpGadget<F>>
     >(inputs: Vec<F>)
     {
-        let mut cs = ConstraintSystem::<F>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<F>::new(SynthesisMode::Debug);
 
         let primitive_result = {
             let mut digest = H::init_constant_length(inputs.len(), None);

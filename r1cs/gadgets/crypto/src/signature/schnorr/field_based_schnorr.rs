@@ -550,8 +550,7 @@ mod test {
     }
 
     fn mnt4_schnorr_gadget_generate_constraints(message: MNT4Fr, pk: &SchnorrMNT4Pk, sig: SchnorrMNT4Sig) -> bool {
-        let mut cs = ConstraintSystem::<MNT4Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<MNT4Fr>::new(SynthesisMode::Debug);
 
         //Alloc signature, pk and message
         let sig_g = <SchnorrMNT4Gadget as FieldBasedSigGadget<SchnorrMNT4, MNT4Fr>>::SignatureGadget::alloc(
@@ -616,8 +615,7 @@ mod test {
     }
 
     fn mnt6_schnorr_gadget_generate_constraints(message: MNT6Fr, pk: &SchnorrMNT6Pk, sig: SchnorrMNT6Sig) -> bool {
-        let mut cs = ConstraintSystem::<MNT6Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<MNT6Fr>::new(SynthesisMode::Debug);
 
         //Alloc signature, pk and message
         let sig_g = <SchnorrMNT6Gadget as FieldBasedSigGadget<SchnorrMNT6, MNT6Fr>>::SignatureGadget::alloc(
@@ -690,8 +688,7 @@ mod test {
         for _ in 0..samples {
             let message: MNT4Fr = rng.gen();
             let (sig, pk) = sign::<SchnorrMNT4, _>(rng, message);
-            let mut cs = ConstraintSystem::<MNT4Fr>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<MNT4Fr>::new(SynthesisMode::Debug);
 
             //Alloc signature, pk and message
             let sig_g = <SchnorrMNT4Gadget as FieldBasedSigGadget<SchnorrMNT4, MNT4Fr>>::SignatureGadget::alloc(

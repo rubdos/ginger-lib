@@ -208,8 +208,7 @@ mod test {
 
     #[test]
     fn commitment_gadget_test() {
-        let mut cs = ConstraintSystem::<Fq>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<Fq>::new(SynthesisMode::Debug);
 
         #[derive(Clone, PartialEq, Eq, Hash)]
         pub(super) struct Window;

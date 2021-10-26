@@ -408,8 +408,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = ConstraintSystem::<Fr>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
             let a: u64 = rng.gen();
             let b: u64 = rng.gen();
@@ -451,8 +450,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = ConstraintSystem::<Fr>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
             let a: u64 = rng.gen();
             let b: u64 = rng.gen();
@@ -487,8 +485,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = ConstraintSystem::<Fr>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
             let a: u64 = rng.gen();
             let b: u64 = rng.gen();

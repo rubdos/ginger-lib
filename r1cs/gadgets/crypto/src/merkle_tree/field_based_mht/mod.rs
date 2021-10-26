@@ -425,8 +425,7 @@ mod test {
 
         //Merkle Path Gadget test
         for (i, leaf) in leaves.iter().enumerate() {
-            let mut cs = ConstraintSystem::<Fr>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
             let proof = tree.generate_proof(i, leaf).unwrap();
             assert!(proof.verify(TEST_HEIGHT, &leaf, &root).unwrap());
 
@@ -503,8 +502,7 @@ mod test {
         let root = tree.root().unwrap();
 
         //Merkle Tree Gadget test
-        let mut cs = ConstraintSystem::<Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
         // Allocate Merkle Tree Root
         let root = FqGadget::alloc(

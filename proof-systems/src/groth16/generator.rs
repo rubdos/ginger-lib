@@ -48,8 +48,7 @@ pub fn generate_parameters<E, C, R>(
         C: ConstraintSynthesizer<E::Fr>,
         R: Rng,
 {
-    let mut assembly = ConstraintSystem::<E::Fr>::new();
-    assembly.set_mode(SynthesisMode::Setup);
+    let mut assembly = ConstraintSystem::<E::Fr>::new(SynthesisMode::Setup);
 
     // Synthesize the circuit.
     let synthesis_time = start_timer!(|| "Constraint synthesis");

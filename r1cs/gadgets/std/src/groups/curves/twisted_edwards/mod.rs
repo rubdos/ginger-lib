@@ -1513,8 +1513,7 @@ pub(crate) fn test<ConstraintF, P, GG>()
 
     group_test::<ConstraintF, TEAffine<P>, GG>();
 
-    let mut cs = ConstraintSystem::new();
-    cs.set_mode(SynthesisMode::Debug);
+    let mut cs = ConstraintSystem::new(SynthesisMode::Debug);
 
     let a: TEAffine<P> = UniformRand::rand(&mut thread_rng());
     let gadget_a = GG::alloc(&mut cs.ns(|| "a"), || Ok(a)).unwrap();
@@ -1536,8 +1535,7 @@ pub(crate) fn test<ConstraintF, P, GG>()
     assert!(cs.is_satisfied());
 
     // Test the cost of allocation, conditional selection, and point addition.
-    let mut cs = ConstraintSystem::new();
-    cs.set_mode(SynthesisMode::Debug);
+    let mut cs = ConstraintSystem::new(SynthesisMode::Debug);
 
     let bit = AllocatedBit::alloc(&mut cs.ns(|| "bool"), || Ok(true))
         .unwrap()

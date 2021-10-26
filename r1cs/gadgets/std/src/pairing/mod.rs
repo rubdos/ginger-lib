@@ -80,8 +80,7 @@ pub(crate) mod tests {
         ConstraintF: Field,
         P: PairingGadget<E, ConstraintF>,
     >() {
-        let mut cs = ConstraintSystem::<ConstraintF>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         let mut rng = &mut thread_rng();
         let a = E::G1Projective::rand(&mut rng);

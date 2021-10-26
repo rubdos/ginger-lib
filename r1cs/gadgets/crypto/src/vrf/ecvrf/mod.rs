@@ -512,8 +512,7 @@ mod test {
 
     fn mnt4_ecvrf_gadget_generate_constraints(message: MNT4Fr, pk: &EcVrfMNT4Pk, proof: EcVrfMNT4Proof, pp: &BHMNT4Parameters) -> bool {
 
-        let mut cs = ConstraintSystem::<MNT4Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<MNT4Fr>::new(SynthesisMode::Debug);
 
         //Alloc proof, pk and message
         let proof_g = <EcVrfMNT4Gadget as FieldBasedVrfGadget<EcVrfMNT4, MNT4Fr>>::ProofGadget::alloc(
@@ -572,8 +571,7 @@ mod test {
 
     fn mnt6_ecvrf_gadget_generate_constraints(message: MNT6Fr, pk: &EcVrfMNT6Pk, proof: EcVrfMNT6Proof, pp: &BHMNT6Parameters) -> bool {
 
-        let mut cs = ConstraintSystem::<MNT6Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<MNT6Fr>::new(SynthesisMode::Debug);
 
         //Alloc proof, pk and message
         let proof_g = <EcVrfMNT6Gadget as FieldBasedVrfGadget<EcVrfMNT6, MNT6Fr>>::ProofGadget::alloc(
@@ -640,8 +638,7 @@ mod test {
         for _ in 0..samples {
             let message: MNT4Fr = rng.gen();
             let (sig, pk) = prove::<EcVrfMNT4, _>(rng, &pp, message);
-            let mut cs = ConstraintSystem::<MNT4Fr>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<MNT4Fr>::new(SynthesisMode::Debug);
 
             //Alloc proof, pk, hash params and message
             let proof_g = <EcVrfMNT4Gadget as FieldBasedVrfGadget<EcVrfMNT4, MNT4Fr>>::ProofGadget::alloc(

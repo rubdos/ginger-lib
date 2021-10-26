@@ -261,8 +261,7 @@ pub(crate) mod tests {
         F: FieldGadget<FE, ConstraintF>,
     >()
     {
-        let mut cs = ConstraintSystem::<ConstraintF>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         let mut rng = &mut thread_rng();
 
@@ -471,8 +470,7 @@ pub(crate) mod tests {
         F: FieldGadget<FE, ConstraintF>,
     >(maxpower: usize)
     {
-        let mut cs = ConstraintSystem::<ConstraintF>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
         for i in 0..(maxpower + 1) {
             let mut a = FE::rand(&mut rng);
@@ -490,8 +488,7 @@ pub(crate) mod tests {
     pub(crate) fn from_bits_fp_gadget_test<ConstraintF: PrimeField>()
     {
         let mut rng = thread_rng();
-        let mut cs = ConstraintSystem::<ConstraintF>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         // Sample a random field element with bit length MODULUS_BITS - 1
         // (Because `from_bits` pack only up until MODULUS_BITS - 1 bits)
@@ -545,8 +542,7 @@ pub(crate) mod tests {
         use crate::algebra::FpParameters;
 
         let mut rng = thread_rng();
-        let mut cs = ConstraintSystem::<ConstraintF>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         //Native to_bits test
         let a = ConstraintF::rand(&mut rng);
@@ -627,8 +623,7 @@ pub(crate) mod tests {
 
         //Case a == b
         {
-            let mut cs = ConstraintSystem::<ConstraintF>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
             let a_gadget = FpGadget::<ConstraintF>::alloc(
                 cs.ns(|| "alloc a"),
@@ -659,8 +654,7 @@ pub(crate) mod tests {
 
         //Case a != b
         {
-            let mut cs = ConstraintSystem::<ConstraintF>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
             let a_gadget = FpGadget::<ConstraintF>::alloc(
                 cs.ns(|| "alloc a"),

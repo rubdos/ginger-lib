@@ -126,8 +126,7 @@ mod test {
 
     #[test]
     fn commitment_gadget_test() {
-        let mut cs = ConstraintSystem::<Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
         let input = [1u8; 32];
 

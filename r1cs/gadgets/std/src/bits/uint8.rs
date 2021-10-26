@@ -344,8 +344,7 @@ mod test {
 
     #[test]
     fn test_uint8_from_bits_to_bits() {
-        let mut cs = ConstraintSystem::<Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
         let byte_val = 0b01110001;
         let byte = UInt8::alloc(cs.ns(|| "alloc value"), || Ok(byte_val)).unwrap();
         let bits = byte.into_bits_le();
@@ -359,8 +358,7 @@ mod test {
         use algebra::{to_bytes, ToBytes, Field, PrimeField, FpParameters, UniformRand};
         use rand::thread_rng;
 
-        let mut cs = ConstraintSystem::<Fr>::new();
-        cs.set_mode(SynthesisMode::Debug);
+        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
         let rng = &mut thread_rng();
 
         //Random test
@@ -447,8 +445,7 @@ mod test {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for _ in 0..1000 {
-            let mut cs = ConstraintSystem::<Fr>::new();
-            cs.set_mode(SynthesisMode::Debug);
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
             let a: u8 = rng.gen();
             let b: u8 = rng.gen();
