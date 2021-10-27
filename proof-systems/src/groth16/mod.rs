@@ -1,8 +1,10 @@
 //! An implementation of the [Groth][Groth16] zkSNARK.
 //! [Groth16]: https://eprint.iacr.org/2016/260.pdf
-use algebra::{Field, serialize::*, bytes::{
-    ToBytes, FromBytes,
-}, PairingEngine, FromBytesChecked, SemanticallyValid};
+use algebra::{
+    bytes::{FromBytes, ToBytes},
+    serialize::*,
+    Field, FromBytesChecked, PairingEngine, SemanticallyValid,
+};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use r1cs_core::{Index, LinearCombination, SynthesisError};
 use serde::{Deserialize, Serialize};
@@ -247,7 +249,8 @@ impl<E: PairingEngine> SemanticallyValid for VerifyingKey<E> {
             && !self.delta_g2.is_zero()
             && !self
                 .gamma_abc_g1
-                .iter().any(|p| !p.is_valid() || p.is_zero())
+                .iter()
+                .any(|p| !p.is_valid() || p.is_zero())
             && Self::check_gamma_abc_g1_points(self.gamma_abc_g1.as_slice()).is_ok()
     }
 }
@@ -468,12 +471,8 @@ impl<E: PairingEngine> SemanticallyValid for Parameters<E> {
             && !self.a_query.iter().any(|p| !p.is_valid())
             && !self.b_g1_query.iter().any(|p| !p.is_valid())
             && !self.b_g2_query.iter().any(|p| !p.is_valid())
-            && !self
-                .h_query
-                .iter().any(|p| !p.is_valid() || p.is_zero())
-            && !self
-                .l_query
-                .iter().any(|p| !p.is_valid() || p.is_zero())
+            && !self.h_query.iter().any(|p| !p.is_valid() || p.is_zero())
+            && !self.l_query.iter().any(|p| !p.is_valid() || p.is_zero())
     }
 }
 

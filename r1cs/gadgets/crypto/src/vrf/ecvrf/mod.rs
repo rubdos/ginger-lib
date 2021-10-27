@@ -14,13 +14,10 @@ use crate::{
     crh::{FieldBasedHashGadget, FixedLengthCRHGadget},
     vrf::FieldBasedVrfGadget,
 };
-use r1cs_core::{ConstraintSystem, SynthesisError, ToConstraintField};
-use std::{
-    marker::PhantomData,
-    borrow::Borrow,
-};
 use primitives::vrf::ecvrf::FieldBasedEcVrfPk;
+use r1cs_core::{ConstraintSystem, SynthesisError, ToConstraintField};
 use r1cs_std::bits::boolean::Boolean;
+use std::{borrow::Borrow, marker::PhantomData};
 
 #[derive(Derivative)]
 #[derivative(
@@ -378,21 +375,19 @@ where
         );
 
         //Check u = g^s - pk^c
-        let u =
-        {
-            let c_times_pk = public_key.pk
+        let u = {
+            let c_times_pk = public_key
+                .pk
                 .mul_bits(cs.ns(|| "pk * c"), c_bits.as_slice().iter().rev())?;
-            GG::mul_bits_fixed_base(&g.get_constant(),
-                                    cs.ns(|| "s * G"),
-                                    s_bits.as_slice())?
-            // If add is incomplete, and s * G - c * pk = 0, the circuit of the add won't be satisfiable
-            .sub(cs.ns(|| "(s * G) - (c * pk)"), &c_times_pk)?
+            GG::mul_bits_fixed_base(&g.get_constant(), cs.ns(|| "s * G"), s_bits.as_slice())?
+                // If add is incomplete, and s * G - c * pk = 0, the circuit of the add won't be satisfiable
+                .sub(cs.ns(|| "(s * G) - (c * pk)"), &c_times_pk)?
         };
 
         //Check v = mh^s - gamma^c
-        let v =
-        {
-            let c_times_gamma = proof.gamma
+        let v = {
+            let c_times_gamma = proof
+                .gamma
                 .mul_bits(cs.ns(|| "c * gamma"), c_bits.as_slice().iter().rev())?;
             message_on_curve
                 .mul_bits(cs.ns(|| "s * mh"), s_bits.as_slice().iter())?

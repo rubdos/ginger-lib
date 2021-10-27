@@ -1,10 +1,10 @@
 //! A module for representing 32 bit unsigned integers over a prime constraint field.
-//! Besides elementary gadgets (such as toBits, toBytes, etc.) implements the bitwise 
+//! Besides elementary gadgets (such as toBits, toBytes, etc.) implements the bitwise
 //! operations
 //!     - rotl, rotr, shr, xor,
-//! as well as 
+//! as well as
 //!     - add_many, which performs the addition modulo 2^32 of a slice of operands,
-//!     the result of which does exceed in length the capacity bound of the constraint 
+//!     the result of which does exceed in length the capacity bound of the constraint
 //!     field.
 use algebra::{Field, FpParameters, PrimeField};
 
@@ -12,9 +12,9 @@ use r1cs_core::{ConstraintSystem, LinearCombination, SynthesisError};
 
 use crate::{
     boolean::{AllocatedBit, Boolean},
+    eq::MultiEq,
     prelude::*,
     Assignment,
-    eq::MultiEq
 };
 
 /// Represents an interpretation of 32 `Boolean` objects as an
@@ -22,7 +22,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct UInt32 {
     // Least significant bit_gadget first
-    pub bits:  Vec<Boolean>,
+    pub bits: Vec<Boolean>,
     pub value: Option<u32>,
 }
 
@@ -167,7 +167,7 @@ impl UInt32 {
             .collect();
 
         UInt32 {
-            bits:  new_bits,
+            bits: new_bits,
             value: self.value.map(|v| v.rotate_left(by as u32)),
         }
     }
@@ -209,7 +209,7 @@ impl UInt32 {
             value: self.value.map(|v| v >> by as u32),
         }
     }
-    
+
     /// XOR this `UInt32` with another `UInt32`
     pub fn xor<ConstraintF, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
     where
@@ -237,17 +237,17 @@ impl UInt32 {
 
     /// Perform addition modulo 2^32 of several `UInt32` objects.
     pub fn addmany<ConstraintF, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
-        where
-            ConstraintF: PrimeField,
-            CS: ConstraintSystem<ConstraintF>,
-            M: ConstraintSystem<ConstraintF, Root = MultiEq<ConstraintF, CS>>,
+    where
+        ConstraintF: PrimeField,
+        CS: ConstraintSystem<ConstraintF>,
+        M: ConstraintSystem<ConstraintF, Root = MultiEq<ConstraintF, CS>>,
     {
         // Make some arbitrary bounds for ourselves to avoid overflows
         // in the scalar field
 
         assert!(ConstraintF::Params::MODULUS_BITS >= 64);
         assert!(operands.len() >= 2); // Weird trivial cases that should never happen
-        // TODO: Check this bound. Is it really needed ?
+                                      // TODO: Check this bound. Is it really needed ?
         assert!(operands.len() <= 10);
 
         // Compute the maximum value of the sum so we allocate enough bits for
@@ -314,10 +314,9 @@ impl UInt32 {
         let mut i = 0;
         while max_value != 0 {
             // Allocate the bit using result_value
-            let b = AllocatedBit::alloc(
-                cs.ns(|| format!("result bit {}", i)),
-                || result_value.map(|v| (v >> i) & 1 == 1).get()
-            )?;
+            let b = AllocatedBit::alloc(cs.ns(|| format!("result bit {}", i)), || {
+                result_value.map(|v| (v >> i) & 1 == 1).get()
+            })?;
 
             // Add this bit to the result combination
             result_lc = result_lc + (coeff, b.get_variable());
@@ -424,7 +423,9 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt32 {
 #[cfg(test)]
 mod test {
     use super::UInt32;
-    use crate::{bits::boolean::Boolean, test_constraint_system::TestConstraintSystem, eq::MultiEq};
+    use crate::{
+        bits::boolean::Boolean, eq::MultiEq, test_constraint_system::TestConstraintSystem,
+    };
     use algebra::fields::{bls12_381::Fr, Field};
     use r1cs_core::ConstraintSystem;
     use rand::{Rng, SeedableRng};
@@ -516,12 +517,14 @@ mod test {
             let operands_val = (0..num_operands).map(|_| rng.gen()).collect::<Vec<u32>>();
             let mut expected = operands_val.iter().fold(0u32, |acc, x| x.wrapping_add(acc));
 
-            let operands_gadget = operands_val.into_iter().map(|val| UInt32::constant(val)).collect::<Vec<UInt32>>();
+            let operands_gadget = operands_val
+                .into_iter()
+                .map(|val| UInt32::constant(val))
+                .collect::<Vec<UInt32>>();
 
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
-                let r =
-                    UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
+                let r = UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
                 r
             };
             assert!(r.value == Some(expected));
@@ -554,14 +557,17 @@ mod test {
             let operands_val = (0..num_operands).map(|_| rng.gen()).collect::<Vec<u32>>();
             let mut expected = operands_val.iter().fold(0u32, |acc, x| x.wrapping_add(acc));
 
-            let operands_gadget = operands_val.into_iter().enumerate().map(
-                |(i, val)| UInt32::alloc(cs.ns(|| format!("alloc u32 {}", i)), Some(val)).unwrap()
-            ).collect::<Vec<UInt32>>();
+            let operands_gadget = operands_val
+                .into_iter()
+                .enumerate()
+                .map(|(i, val)| {
+                    UInt32::alloc(cs.ns(|| format!("alloc u32 {}", i)), Some(val)).unwrap()
+                })
+                .collect::<Vec<UInt32>>();
 
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
-                let r =
-                    UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
+                let r = UInt32::addmany(cs.ns(|| "addition"), operands_gadget.as_slice()).unwrap();
                 r
             };
 
@@ -641,7 +647,7 @@ mod test {
                 match b {
                     &Boolean::Constant(b) => {
                         assert_eq!(b, tmp & 1 == 1);
-                    },
+                    }
                     _ => unreachable!(),
                 }
 

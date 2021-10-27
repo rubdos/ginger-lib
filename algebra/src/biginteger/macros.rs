@@ -153,7 +153,7 @@ macro_rules! bigint_impl {
                 let mut res = Self::default();
                 let mut acc: u64 = 0;
 
-                // convert to little endian as the limbs are in 
+                // convert to little endian as the limbs are in
                 // little endian order
                 let mut bits = bits.to_vec();
                 bits.reverse();

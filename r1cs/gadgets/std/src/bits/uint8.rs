@@ -355,7 +355,9 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for UInt8 {
             .iter()
             .zip(&false_value.bits)
             .enumerate()
-            .map(|(i, (t, f)) | Boolean::conditionally_select(&mut cs.ns(|| format!("bit {}", i)), cond, t, f));
+            .map(|(i, (t, f))| {
+                Boolean::conditionally_select(&mut cs.ns(|| format!("bit {}", i)), cond, t, f)
+            });
         let mut bits = [Boolean::Constant(false); 8];
         for (result, new) in bits.iter_mut().zip(selected_bits) {
             *result = new?;
@@ -368,14 +370,16 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for UInt8 {
                 false_value.get_value()
             }
         });
-        Ok(Self { bits: bits.to_vec(), value })
+        Ok(Self {
+            bits: bits.to_vec(),
+            value,
+        })
     }
 
     fn cost() -> usize {
-       8 * <Boolean as CondSelectGadget<ConstraintF>>::cost()
+        8 * <Boolean as CondSelectGadget<ConstraintF>>::cost()
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -542,7 +546,6 @@ mod test {
         NegatedAllocatedFalse,
     }
 
-
     #[test]
     fn test_uint8_cond_select() {
         let variants = [
@@ -556,7 +559,7 @@ mod test {
 
         use rand::thread_rng;
         let rng = &mut thread_rng();
-        
+
         //random generates a and b numbers and check all the conditions for each couple
         for _ in 0..1000 {
             for condition in variants.iter().cloned() {
@@ -574,16 +577,16 @@ mod test {
                             OperandType::False => Boolean::constant(false),
                             OperandType::AllocatedTrue => {
                                 Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap())
-                            },
+                            }
                             OperandType::AllocatedFalse => {
                                 Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap())
-                            },
+                            }
                             OperandType::NegatedAllocatedTrue => {
                                 Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap()).not()
-                            },
+                            }
                             OperandType::NegatedAllocatedFalse => {
                                 Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap()).not()
-                            },
+                            }
                         }
                     };
 
@@ -595,7 +598,7 @@ mod test {
                 let before = cs.num_constraints();
                 let c = UInt8::conditionally_select(&mut cs, &cond, &a, &b).unwrap();
                 let after = cs.num_constraints();
-                
+
                 assert!(
                     cs.is_satisfied(),
                     "failed with operands: cond: {:?}, a: {:?}, b: {:?}",
@@ -603,7 +606,14 @@ mod test {
                     a,
                     b,
                 );
-                assert_eq!(c.get_value(), if cond.get_value().unwrap() { a.get_value() } else { b.get_value() });
+                assert_eq!(
+                    c.get_value(),
+                    if cond.get_value().unwrap() {
+                        a.get_value()
+                    } else {
+                        b.get_value()
+                    }
+                );
                 assert!(<UInt8 as CondSelectGadget<Fr>>::cost() >= after - before);
             }
         }

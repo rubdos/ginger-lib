@@ -488,10 +488,9 @@ impl<F: PrimeField> ToBitsGadget<F> for FpGadget<F> {
 // The bundling regards the Booleans in big endian order.
 impl<F: PrimeField> FromBitsGadget<F> for FpGadget<F> {
     fn from_bits<CS: ConstraintSystem<F>>(
-        mut cs: CS, 
-        bits: &[Boolean]
+        mut cs: CS,
+        bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
-
         // We can safely pack up to CAPACITY bits
         let bits = bits.chunks(F::Params::CAPACITY as usize).next().unwrap();
 

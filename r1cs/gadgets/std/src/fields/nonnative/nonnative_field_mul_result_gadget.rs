@@ -1,18 +1,20 @@
-use crate::{prelude::*, fields::{
-    fp::FpGadget,
-    nonnative::{
-        params::get_params,
-        reduce::{bigint_to_constraint_field, limbs_to_bigint, Reducer},
-        nonnative_field_gadget::NonNativeFieldGadget,
-    }
-}, overhead, FromGadget};
-use algebra::fields::{FpParameters, PrimeField};
-use r1cs_core::{ConstraintSystem, SynthesisError};
-use std::{
-    marker::PhantomData,
-    vec::Vec,
+use crate::{
+    fields::{
+        fp::FpGadget,
+        nonnative::{
+            nonnative_field_gadget::NonNativeFieldGadget,
+            params::get_params,
+            reduce::{bigint_to_constraint_field, limbs_to_bigint, Reducer},
+        },
+    },
+    overhead,
+    prelude::*,
+    FromGadget,
 };
+use algebra::fields::{FpParameters, PrimeField};
 use num_bigint::BigUint;
+use r1cs_core::{ConstraintSystem, SynthesisError};
+use std::{marker::PhantomData, vec::Vec};
 
 #[derive(Debug)]
 #[must_use]
@@ -25,12 +27,13 @@ pub struct NonNativeFieldMulResultGadget<SimulationF: PrimeField, ConstraintF: P
     pub simulation_phantom: PhantomData<SimulationF>,
 }
 
-impl<SimulationF: PrimeField, ConstraintF: PrimeField> FromGadget<&NonNativeFieldGadget<SimulationF, ConstraintF>, ConstraintF>
-for NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
+impl<SimulationF: PrimeField, ConstraintF: PrimeField>
+    FromGadget<&NonNativeFieldGadget<SimulationF, ConstraintF>, ConstraintF>
+    for NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
 {
     fn from<CS: ConstraintSystem<ConstraintF>>(
         other: &NonNativeFieldGadget<SimulationF, ConstraintF>,
-        cs: CS
+        cs: CS,
     ) -> Result<Self, SynthesisError> {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -39,7 +42,8 @@ for NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
         limbs.resize(2 * params.num_limbs - 1, FpGadget::<ConstraintF>::zero(cs)?);
         limbs.reverse();
 
-        let prod_of_num_of_additions = other.num_of_additions_over_normal_form + &ConstraintF::one();
+        let prod_of_num_of_additions =
+            other.num_of_additions_over_normal_form + &ConstraintF::one();
 
         Ok(Self {
             limbs,
@@ -49,7 +53,8 @@ for NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
     }
 }
 
-impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
+impl<SimulationF: PrimeField, ConstraintF: PrimeField>
+    NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
 {
     /// Get the value of the multiplication result
     pub fn value(&self) -> Result<SimulationF, SynthesisError> {
@@ -75,8 +80,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
     pub fn reduce<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
-    ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError>
-    {
+    ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         // Step 1: get p
@@ -90,7 +94,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
         for (i, limb) in p_representations.iter().enumerate() {
             p_gadget_limbs.push(FpGadget::<ConstraintF>::from_value(
                 cs.ns(|| format!("hardcode limb {}", i)),
-                limb
+                limb,
             ));
         }
         let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
@@ -120,9 +124,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
             for i in 0..total_len {
                 res.push(Boolean::alloc(
                     cs.ns(|| format!("alloc k bit {}", i)),
-                    || {
-                    Ok(&k_cur % 2u64 == BigUint::from(1u64))
-                })?);
+                    || Ok(&k_cur % 2u64 == BigUint::from(1u64)),
+                )?);
                 k_cur /= 2u64; // drops the remainder
             }
             res
@@ -151,7 +154,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
                     limb = limb.conditionally_add_constant(
                         cs.ns(|| format!("add bit {} for limb {}", j, i)),
                         bit,
-                        cur
+                        cur,
                     )?;
                     cur.double_in_place();
                 }
@@ -169,10 +172,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
             simulation_phantom: PhantomData,
         };
 
-        let r_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
-            cs.ns(|| "alloc r"),
-            || Ok(self.value()?),
-        )?;
+        let r_gadget =
+            NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc r"), || {
+                Ok(self.value()?)
+            })?;
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -188,11 +191,16 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
             for j in 0..params.num_limbs {
                 let mul_result = p_gadget.limbs[i].mul(
                     cs.ns(|| format!("mul_result = p_gadget.limbs[{}] * k_gadget.limbs[{}]", i, j)),
-                    &k_gadget.limbs[j]
+                    &k_gadget.limbs[j],
                 )?;
                 prod_limbs[i + j] = prod_limbs[i + j].add(
-                    cs.ns(|| format!("prod_limbs[{},{}] = prod_limbs[{},{}] + mul_result", i, j, i, j)),
-                    &mul_result
+                    cs.ns(|| {
+                        format!(
+                            "prod_limbs[{},{}] = prod_limbs[{},{}] + mul_result",
+                            i, j, i, j
+                        )
+                    }),
+                    &mul_result,
                 )?;
             }
         }
@@ -208,8 +216,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
         let kp_plus_r_limbs_len = kp_plus_r_gadget.limbs.len();
         for (i, limb) in r_gadget.limbs.iter().rev().enumerate() {
             kp_plus_r_gadget.limbs[kp_plus_r_limbs_len - 1 - i].add_in_place(
-                cs.ns(|| format!("kp_plus_r_gadget.limbs[{}] + r_gadget.limbs_rev[{}]", kp_plus_r_limbs_len - 1 - i, i)),
-                limb
+                cs.ns(|| {
+                    format!(
+                        "kp_plus_r_gadget.limbs[{}] + r_gadget.limbs_rev[{}]",
+                        kp_plus_r_limbs_len - 1 - i,
+                        i
+                    )
+                }),
+                limb,
             )?;
         }
 
@@ -229,7 +243,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
     pub fn add<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
-        other: &Self
+        other: &Self,
     ) -> Result<Self, SynthesisError> {
         let mut new_limbs = Vec::new();
 
@@ -250,7 +264,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
     pub fn add_constant<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
-        other: &SimulationF
+        other: &SimulationF,
     ) -> Result<Self, SynthesisError> {
         let mut other_limbs =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations(other)?;
@@ -262,7 +276,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> NonNativeFieldMulResultGa
             if i < other_limbs.len() {
                 let new_limb = limb.add_constant(
                     cs.ns(|| format!("limb_{} + other_limb_{}", i, i)),
-                    &other_limbs[i]
+                    &other_limbs[i],
                 )?;
                 new_limbs.push(new_limb);
             } else {
