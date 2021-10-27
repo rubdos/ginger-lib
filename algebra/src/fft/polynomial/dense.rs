@@ -376,7 +376,7 @@ impl<'a, 'b, F: PrimeField> Mul<&'a DensePolynomial<F>> for &'b DensePolynomial<
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bls12_381"))]
 mod tests {
     use crate::domain::get_best_evaluation_domain;
     use crate::fields::bls12_381::fr::Fr;

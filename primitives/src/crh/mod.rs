@@ -1,4 +1,4 @@
-use algebra::{bytes::ToBytes, Field};
+use algebra::{Field, bytes::ToBytes};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;

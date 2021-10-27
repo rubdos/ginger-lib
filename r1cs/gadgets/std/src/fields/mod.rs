@@ -1,5 +1,5 @@
 // use std::ops::{Mul, MulAssign};
-use algebra::Field;
+use algebra::{Field, BitIterator};
 use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::fmt::Debug;
 
@@ -14,6 +14,9 @@ pub mod fp4;
 pub mod fp6_2over3;
 pub mod fp6_3over2;
 pub mod quadratic_extension;
+
+#[cfg(feature = "nonnative")]
+pub mod nonnative;
 
 pub trait FieldGadget<F: Field, ConstraintF: Field>:
     Sized
@@ -239,6 +242,35 @@ pub trait FieldGadget<F: Field, ConstraintF: Field>:
         Ok(res)
     }
 
+    /// Computes `self^S`, where S is interpreted as an little-endian
+    /// u64-decomposition of an integer.
+    fn pow_by_constant<S: AsRef<[u64]>, CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        exp: S
+    ) -> Result<Self, SynthesisError> {
+        let mut res = Self::one(cs.ns(|| "alloc result"))?;
+        let mut found_one = false;
+
+        for i in BitIterator::new(exp) {
+
+            // Skip leading zeros
+            if !found_one {
+                if i {
+                    found_one = true;
+                } else {
+                    continue;
+                }
+            }
+            res.square_in_place(cs.ns(|| format!("square_{}", i)))?;
+
+            if i {
+                res.mul_in_place(cs.ns(|| format!("multiply_{}", i)), self)?;
+            }
+        }
+        Ok(res)
+    }
+
     fn cost_of_mul() -> usize;
 
     fn cost_of_mul_equals() -> usize;
@@ -451,6 +483,8 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert_eq!(ab_true.get_value().unwrap(), a_native + &b_native);
+
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]
@@ -472,7 +506,33 @@ pub(crate) mod tests {
             a.frobenius_map(i);
 
             assert_eq!(a_gadget.get_value().unwrap(), a);
+            assert!(cs.is_satisfied());
         }
+    }
+
+    pub(crate) fn even_odd_fp_gadget_test<ConstraintF: PrimeField>(){
+        let rng = &mut thread_rng();
+
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+        let one = FpGadget::<ConstraintF>::one(cs.ns(|| "one")).unwrap();
+        let two = one.double(cs.ns(|| "two")).unwrap();
+
+        assert!(one.is_odd(cs.ns(|| "one is odd")).unwrap().get_value().unwrap());
+        assert!(!two.is_odd(cs.ns(|| "two is not odd")).unwrap().get_value().unwrap());
+
+        for i in 0..100 {
+            let mut iter_cs = cs.ns(|| format!("iter_{}", i));
+
+            let random_native = ConstraintF::rand(rng);
+            let random = FpGadget::<ConstraintF>::alloc(
+                iter_cs.ns(|| "alloc random"),
+                || Ok(random_native)
+            ).unwrap();
+
+            assert_eq!(random_native.is_odd(), random.is_odd(iter_cs.ns(|| "is random odd")).unwrap().get_value().unwrap());
+        }
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]

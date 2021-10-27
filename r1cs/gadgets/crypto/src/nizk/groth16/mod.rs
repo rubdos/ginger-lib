@@ -145,11 +145,13 @@ where
                 .by_ref()
                 .zip(pvk.gamma_abc_g1.iter().skip(1))
                 .enumerate()
-            {
-                let input_bits = input.to_bits(cs.ns(|| format!("Input {}", i)))?;
-                g_ic = b.mul_bits(cs.ns(|| format!("Mul {}", i)), &g_ic, input_bits.iter())?;
-                input_len += 1;
-            }
+                {
+                    let input_bits = input.to_bits(cs.ns(|| format!("Input {}", i)))?;
+                    g_ic = b
+                        .mul_bits(cs.ns(|| format!("Mul {}", i)), input_bits.iter())?
+                        .add(cs.ns(|| format!("Add {}", i)), &g_ic)?;
+                    input_len += 1;
+                }
             // Check that the input and the query in the verification are of the
             // same length.
             if input_len != pvk.gamma_abc_g1.len() || public_inputs.next().is_some() {
@@ -578,8 +580,12 @@ mod test {
     use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
 
     use super::*;
-    use algebra::{BitIterator, PrimeField, UniformRand};
-    use r1cs_std::{boolean::Boolean, test_constraint_system::TestConstraintSystem};
+    use algebra::{
+        UniformRand, ToBits,
+    };
+    use r1cs_std::{
+        boolean::Boolean, test_constraint_system::TestConstraintSystem
+    };
     use rand::thread_rng;
 
     struct Bench<F: Field> {
@@ -666,7 +672,7 @@ mod test {
             {
                 let mut cs = cs.ns(|| "Allocate Input");
                 for (i, input) in inputs.into_iter().enumerate() {
-                    let mut input_bits = BitIterator::new(input.into_repr()).collect::<Vec<_>>();
+                    let mut input_bits = input.write_bits();
                     // Input must be in little-endian, but BitIterator outputs in big-endian.
                     input_bits.reverse();
 

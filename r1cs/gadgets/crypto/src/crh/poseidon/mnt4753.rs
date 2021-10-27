@@ -7,5 +7,5 @@ pub type MNT4PoseidonHashGadget = PoseidonHashGadget<
     MNT4753Fr,
     MNT4753PoseidonParameters,
     MNT4InversePoseidonSBox,
-    MNT4InverseSBoxGadget,
+    MNT4InverseSBoxGadget
 >;
