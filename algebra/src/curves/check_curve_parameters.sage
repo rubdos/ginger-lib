@@ -5,7 +5,9 @@
 #   3) COFACTOR                         must be equal to Order(E)/Order(P)
 #   4) COFACTOR_INV                     must be the inverse of COFACTOR in the scalar Field
 #   5) ENDO_COEFF                       must be a cube root in the base field.
-#   6) ENDO_SCALAR                      must be a cube root in the scalar field and satisfy ENDO_SCALAR * (X, Y) == (ENDO_COEFF * X, Y)                                 
+#   6) ENDO_SCALAR                      must be a cube root in the scalar field and satisfy ENDO_SCALAR * (X, Y) == (ENDO_COEFF * X, Y)        
+#   7) The intersection of the plane lattice spanned by {(1, ENDO_SCALAR), (0, SCALAR_FIELD_MODULUS)} with the square [-A,A]^2 must be empty,
+#       where A = 2^65 + 2^64 + 1.                         
 # Open Sage Shell in the corresponding folder and run the command 
 #       "sage check_curve_paramaters sage [file_path_curve] [file_path_basefield] [file_path_scalarfield]".
 
@@ -195,29 +197,30 @@ if endo_mul_is_used:
 ## The Halo paper (https://eprint.iacr.org/2019/1021.pdf) proves the injectivity of the endo_mul map.
 ## The injectivity of the map (a,b) |-> a\zeta + b for a,b in [0,A] (essential for using add_unsafe)
 ## is equivalent the lattice condition below.
-## In the Halo paper is explained that the condition that a*zeta + b != a'*zeta + b' for a,a',b,b' in [0,A] is equivalent
-## to the condition that min({distance(zeta*a,zeta*a'): a,a' in [0,A]}) > A. This can be plainly restated as
-## a*zeta notin [-A,A] mod r if a in [-A,A] mod r.
-## This can be restated as a lattice condition: suppose in fact that
-##      a * zeta = b mod r  for a,b in [-A,A].
+## a*zeta + b = a'*zeta + b' mod r   for a,a',b,b' in [0,A] 
+## is equivalent to the fact that there are non-zero solutions to 
+##      a * zeta = b mod r      for a,b in [-A,A].
 ## Then it would exists c such that
 ##      b = a * zeta + c * r.
-## Then
-##      (a, b) = (a, c) * (1  zeta)
+## Any such solution correspond to a point of the lattice spanned by (1, zeta_r) and (0, r).
+##      (a, b) = (a, c) * (1  zeta_r)
 ##                        (0    r )
-## would be vector of length <= sqrt(2)*A in a lattice of  determinant r (Gaussian expectation for the shortest vector ~sqrt(r)).
-## If we show that the shortest vector in the lattice spanned by (1, zeta) and (0, r) is longer than sqrt(2)*A, then we
-## have a sufficient (but not necessary) condition.
-## We could have indeed also a necessary condition: if there were a Sage functions listing all the vector shorter than sqrt(2)*A
-## one can look at them: if none of them has both coordinates in the range [-A,A] then the parameters can be accepted
-## even if the shortest vector has length in the range (A, sqrt(2)A].
-## Anyway, due to our choice of parameters, A ~ 2^65, while sqrt(r) ~ 2^128.
-## In general it is A = 2**(l/2 + 1) + 2**(l/2), where l is the length of the input string (in endo_mul we use l = 128)
+## The injectivity is equivalent to the fact that the intersection between this lattice and [-A, A]^2
+## is trivial. To verify this it is sufficient to first compute a LLL reduced basis {v,w} and
+## then check if at least one of v, w, v + w, v - w is belongs to such a square.
+## If not, there can't be other lattice points in the square.
 if endo_mul_is_used:
     A = 2**65 + 2**64 
-    from sage.modules.free_module_integer import IntegerLattice
-    L = IntegerLattice([[1,int(zeta_r)],[0,SCALAR_FIELD_MODULUS]])
-    if L.shortest_vector().norm().n() <= (sqrt(2)*A).n():
-        print("WARNING! WE CAN'T USE add_unsafe FOR endo_mul")
+    L = Matrix([[1,Integer(zeta_r)],[0,SCALAR_FIELD_MODULUS]])
+    Lred = L.LLL()
+    set = [Lred.row(0), Lred.row(1), Lred.row(0) - Lred.row(1), Lred.row(0) + Lred.row(1)]
+    add_unsafe = True
+    for v in set:
+        if abs(v[0]) <= A and abs(v[1]) <= A:
+            add_unsafe = False
+    if add_unsafe:
+        print("We can use add_unsafe for endo_mul.")
+    else:
+        print("WARNING! WE CAN'T USE add_unsafe FOR endo_mul!")
 else:
     print("endo_mul is not used for this curve.")
