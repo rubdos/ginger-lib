@@ -64,7 +64,7 @@ impl UInt32 {
                 }
 
                 v
-            },
+            }
             None => vec![None; 32],
         };
 
@@ -103,25 +103,25 @@ impl UInt32 {
                     if b {
                         value.as_mut().map(|v| *v |= 1);
                     }
-                },
+                }
                 &Boolean::Is(ref b) => match b.get_value() {
                     Some(true) => {
                         value.as_mut().map(|v| *v |= 1);
-                    },
-                    Some(false) => {},
+                    }
+                    Some(false) => {}
                     None => value = None,
                 },
                 &Boolean::Not(ref b) => match b.get_value() {
                     Some(false) => {
                         value.as_mut().map(|v| *v |= 1);
-                    },
-                    Some(true) => {},
+                    }
+                    Some(true) => {}
                     None => value = None,
                 },
             }
         }
 
-        Self { value, bits }
+        Self { bits, value }
     }
 
     pub fn into_bits_be(self) -> Vec<Boolean> {
@@ -185,7 +185,7 @@ impl UInt32 {
             .collect();
 
         UInt32 {
-            bits:  new_bits,
+            bits: new_bits,
             value: self.value.map(|v| v.rotate_right(by as u32)),
         }
     }
@@ -366,7 +366,7 @@ impl<ConstraintF: Field> ToBytesGadget<ConstraintF> for UInt32 {
         let mut bytes = Vec::new();
         for (i, chunk8) in self.to_bits_le().chunks(8).into_iter().enumerate() {
             let byte = UInt8 {
-                bits:  chunk8.to_vec(),
+                bits: chunk8.to_vec(),
                 value: value_chunks[i],
             };
             bytes.push(byte);
@@ -385,7 +385,7 @@ impl<ConstraintF: Field> ToBytesGadget<ConstraintF> for UInt32 {
 
 impl PartialEq for UInt32 {
     fn eq(&self, other: &Self) -> bool {
-        !self.value.is_none() && !other.value.is_none() && self.value == other.value
+        self.value.is_some() && other.value.is_some() && self.value == other.value
     }
 }
 
@@ -395,7 +395,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt32 {
     fn is_eq<CS: ConstraintSystem<ConstraintF>>(
         &self,
         cs: CS,
-        other: &Self
+        other: &Self,
     ) -> Result<Boolean, SynthesisError> {
         self.bits.as_slice().is_eq(cs, &other.bits)
     }
@@ -404,18 +404,20 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt32 {
         &self,
         cs: CS,
         other: &Self,
-        should_enforce: &Boolean
+        should_enforce: &Boolean,
     ) -> Result<(), SynthesisError> {
-        self.bits.conditional_enforce_equal(cs, &other.bits, should_enforce)
+        self.bits
+            .conditional_enforce_equal(cs, &other.bits, should_enforce)
     }
 
     fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
-        should_enforce: &Boolean
+        should_enforce: &Boolean,
     ) -> Result<(), SynthesisError> {
-        self.bits.conditional_enforce_not_equal(cs, &other.bits, should_enforce)
+        self.bits
+            .conditional_enforce_not_equal(cs, &other.bits, should_enforce)
     }
 }
 
@@ -443,7 +445,7 @@ mod test {
                 match bit_gadget {
                     &Boolean::Constant(bit_gadget) => {
                         assert!(bit_gadget == ((b.value.unwrap() >> i) & 1 == 1));
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -452,8 +454,8 @@ mod test {
 
             for x in v.iter().zip(expected_to_be_same.iter()) {
                 match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true)) => {},
-                    (&Boolean::Constant(false), &Boolean::Constant(false)) => {},
+                    (&Boolean::Constant(true), &Boolean::Constant(true)) => {}
+                    (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
                     _ => unreachable!(),
                 }
             }
@@ -488,13 +490,13 @@ mod test {
                 match b {
                     &Boolean::Is(ref b) => {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
-                    },
+                    }
                     &Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
-                    },
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
+                    }
                     &Boolean::Constant(b) => {
                         assert!(b == (expected & 1 == 1));
-                    },
+                    }
                 }
 
                 expected >>= 1;
@@ -530,7 +532,7 @@ mod test {
                     &Boolean::Not(_) => panic!(),
                     &Boolean::Constant(b) => {
                         assert!(b == (expected & 1 == 1));
-                    },
+                    }
                 }
 
                 expected >>= 1;
@@ -571,10 +573,10 @@ mod test {
                 match b {
                     &Boolean::Is(ref b) => {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
-                    },
+                    }
                     &Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
-                    },
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
+                    }
                     &Boolean::Constant(_) => unreachable!(),
                 }
 
@@ -610,7 +612,7 @@ mod test {
                 match b {
                     &Boolean::Constant(b) => {
                         assert_eq!(b, tmp & 1 == 1);
-                    },
+                    }
                     _ => unreachable!(),
                 }
 

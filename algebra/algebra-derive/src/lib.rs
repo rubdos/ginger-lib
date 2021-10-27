@@ -1,5 +1,17 @@
 #![warn(unused, future_incompatible, nonstandard_style, rust_2018_idioms)]
 #![forbid(unsafe_code)]
+#![allow(
+    clippy::upper_case_acronyms,
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::try_err,
+    clippy::map_collect_result_unit,
+    clippy::not_unsafe_ptr_arg_deref,
+    clippy::suspicious_op_assign_impl,
+    clippy::suspicious_arithmetic_impl,
+    clippy::assertions_on_constants
+)]
+
 
 use proc_macro2::TokenStream;
 use syn::{parse_macro_input, Data, DeriveInput, Index, Type};
@@ -154,7 +166,8 @@ fn impl_deserialize_field(ty: &Type) -> (TokenStream, TokenStream, TokenStream, 
             let mut uncompressed_fields = Vec::new();
             let mut uncompressed_unchecked_fields = Vec::new();
             for elem_ty in tuple.elems.iter() {
-                let (compressed, unchecked, uncompressed, uncompressed_unchecked) = impl_deserialize_field(elem_ty);
+                let (compressed, unchecked, uncompressed, uncompressed_unchecked) =
+                    impl_deserialize_field(elem_ty);
                 compressed_fields.push(compressed);
                 unchecked_fields.push(unchecked);
                 uncompressed_fields.push(uncompressed);
@@ -206,12 +219,17 @@ fn impl_canonical_deserialize(ast: &syn::DeriveInput) -> TokenStream {
                     }
                     // struct field without len_type
                     Some(ident) => {
-                        let (compressed_field, unchecked_field, uncompressed_field, uncompressed_unchecked_field) =
-                            impl_deserialize_field(&field.ty);
+                        let (
+                            compressed_field,
+                            unchecked_field,
+                            uncompressed_field,
+                            uncompressed_unchecked_field,
+                        ) = impl_deserialize_field(&field.ty);
                         compressed_field_cases.push(quote! { #ident: #compressed_field });
                         unchecked_field_cases.push(quote! { #ident: #unchecked_field });
                         uncompressed_field_cases.push(quote! { #ident: #uncompressed_field });
-                        uncompressed_unchecked_field_cases.push(quote! { #ident: #uncompressed_unchecked_field });
+                        uncompressed_unchecked_field_cases
+                            .push(quote! { #ident: #uncompressed_unchecked_field });
                     }
                 }
             }
