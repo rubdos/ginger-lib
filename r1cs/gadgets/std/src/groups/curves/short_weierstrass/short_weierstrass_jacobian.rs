@@ -973,6 +973,15 @@ impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for Aff
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
 
+        let mut bits = bits.to_vec();
+        if bits.len() % 2 == 1 {
+            bits.push(Boolean::constant(false));
+        }
+
+        if bits.len() > P::LAMBDA {
+            Err(SynthesisError::Other("Endo mul bits length exceeds LAMBDA".to_owned()))?
+        }
+
         let endo_self = self.apply_endomorphism(cs.ns(|| "endo self"))?;
         let self_y_neg = self.y.negate(cs.ns(|| "self y negate"))?;
 
