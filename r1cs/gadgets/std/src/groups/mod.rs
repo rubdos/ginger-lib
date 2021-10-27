@@ -70,12 +70,6 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 
     fn negate<CS: ConstraintSystem<ConstraintF>>(&self, cs: CS) -> Result<Self, SynthesisError>;
 
-    fn conditionally_negate<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        cs: CS,
-        cond: &Boolean,
-    ) -> Result<Self, SynthesisError>;
-
     /// Variable base exponentiation.
     /// Inputs must be specified in *little-endian* form.
     /// If the addition law is incomplete for the identity element,
@@ -180,6 +174,20 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_add() -> usize;
 
     fn cost_of_double() -> usize;
+}
+
+pub trait EndoMulCurveGadget<G: Group, ConstraintF: Field>: GroupGadget<G, ConstraintF> {
+
+    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        cs: CS,
+    ) -> Result<Self, SynthesisError>;
+
+    fn endo_mul<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        cs: CS,
+        bits: &[Boolean],
+    ) -> Result<Self, SynthesisError>;
 }
 
 /// Pre-checks for vbSM with incomplete arithmetic using Hopwood algorithm (https://github.com/zcash/zcash/issues/3924) :

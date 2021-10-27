@@ -189,8 +189,8 @@ fn test_dee_endo_mul() {
 
         let p = dee::Projective::rand(&mut thread_rng()).into_affine();
 
-        let f: Fq = u128::rand(&mut thread_rng()).into();
-        let bits = f.into_repr().to_bits().as_slice()[0..128].to_vec();
+        let scalar: Fq = u128::rand(&mut thread_rng()).into();
+        let bits = scalar.into_repr().to_bits().as_slice()[0..128].to_vec();
 
         let p_mul = p.mul(dee::Affine::endo_rep_to_scalar(bits.clone()).unwrap());
         let pe_mul = p.endo_mul(bits.clone()).unwrap();
@@ -206,8 +206,8 @@ fn test_dum_endo_mul() {
 
         let p = dum::Projective::rand(&mut thread_rng()).into_affine();
 
-        let f: Fq = u128::rand(&mut thread_rng()).into();
-        let bits = f.into_repr().to_bits().as_slice()[0..128].to_vec();
+        let scalar: Fq = u128::rand(&mut thread_rng()).into();
+        let bits = scalar.into_repr().to_bits().as_slice()[0..128].to_vec();
 
         println!("{}", bits.len());
 

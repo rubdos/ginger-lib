@@ -19,9 +19,10 @@ mod test {
         instantiated::tweedle::{
             TweedleDeeGadget,
             TweedleDumGadget,
-        }
+        },
+        groups::EndoMulCurveGadget,
     };
-    use algebra::{UniformRand, AffineCurve, ProjectiveCurve, fields::tweedle::{
+    use algebra::{UniformRand, AffineCurve, ProjectiveCurve, EndoMulCurve, fields::tweedle::{
         Fq, Fr,
     }, curves::tweedle::{
         dee::Projective as DeeProjective,
@@ -59,15 +60,15 @@ mod test {
         let a_native = DeeProjective::rand(&mut thread_rng()).into_affine();
         let a = TweedleDeeGadget::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native.into_projective())).unwrap();
 
-        let scalar = Fq::rand(&mut thread_rng());
+        let scalar: Fr = u128::rand(&mut thread_rng()).into();
 
-        let b_native = scalar.into_repr().to_bits();
+        let b_native = scalar.into_repr().to_bits().as_slice()[0..128].to_vec();
         let b = b_native
             .iter()
             .map(|&bit| Boolean::constant(bit))
             .collect::<Vec<_>>();
 
-        let r_native = a_native.endo_mul(b_native).into_affine();
+        let r_native = a_native.endo_mul(b_native).unwrap().into_affine();
         let r = a.endo_mul(cs.ns(|| "endo mul"), &b).unwrap().get_value().unwrap().into_affine();
 
         assert_eq!(r_native, r);
@@ -83,15 +84,15 @@ mod test {
         let a_native = DumProjective::rand(&mut thread_rng()).into_affine();
         let a = TweedleDumGadget::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native.into_projective())).unwrap();
 
-        let scalar = Fq::rand(&mut thread_rng());
+        let scalar: Fq = u128::rand(&mut thread_rng()).into();
 
-        let b_native = scalar.into_repr().to_bits();
+        let b_native = scalar.into_repr().to_bits().as_slice()[0..128].to_vec();
         let b = b_native
             .iter()
             .map(|&bit| Boolean::constant(bit))
             .collect::<Vec<_>>();
 
-        let r_native = a_native.endo_mul(b_native).into_affine();
+        let r_native = a_native.endo_mul(b_native).unwrap().into_affine();
         let r = a.endo_mul(cs.ns(|| "endo mul"), &b).unwrap().get_value().unwrap().into_affine();
 
         assert_eq!(r_native, r);

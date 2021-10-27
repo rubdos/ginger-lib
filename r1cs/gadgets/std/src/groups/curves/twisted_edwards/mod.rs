@@ -463,18 +463,6 @@ mod affine_impl {
             ))
         }
 
-        fn conditionally_negate<CS: ConstraintSystem<ConstraintF>>(
-            &self,
-            mut cs: CS,
-            cond: &Boolean,
-        ) -> Result<Self, SynthesisError> {
-            let x_neg = self.x.negate(cs.ns(|| "negate y"))?;
-            Ok(Self::new(
-                F::conditionally_select(&mut cs.ns(|| "x"), cond, &self.x, &x_neg)?,
-                self.y.clone(),
-            ))
-        }
-
         fn cost_of_add() -> usize {
             4 * F::cost_of_mul() + 2 * F::cost_of_mul_equals()
         }
@@ -950,18 +938,6 @@ mod projective_impl {
         ) -> Result<Self, SynthesisError> {
             Ok(Self::new(
                 self.x.negate(cs.ns(|| "negate x"))?,
-                self.y.clone(),
-            ))
-        }
-
-        fn conditionally_negate<CS: ConstraintSystem<ConstraintF>>(
-            &self,
-            mut cs: CS,
-            cond: &Boolean,
-        ) -> Result<Self, SynthesisError> {
-            let x_neg = self.x.negate(cs.ns(|| "negate y"))?;
-            Ok(Self::new(
-                F::conditionally_select(&mut cs.ns(|| "x"), cond, &self.x, &x_neg)?,
                 self.y.clone(),
             ))
         }

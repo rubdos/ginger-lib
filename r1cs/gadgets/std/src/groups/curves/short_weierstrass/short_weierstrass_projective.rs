@@ -497,19 +497,6 @@ for AffineGadget<P, ConstraintF, F>
         ))
     }
 
-    fn conditionally_negate<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        mut cs: CS,
-        cond: &Boolean,
-    ) -> Result<Self, SynthesisError> {
-        let y_neg = self.y.negate(cs.ns(|| "negate y"))?;
-        Ok(Self::new(
-            self.x.clone(),
-            F::conditionally_select(&mut cs.ns(|| "y"), cond, &self.y, &y_neg)?,
-            self.infinity
-        ))
-    }
-
     /// [Hopwood]'s optimized scalar multiplication, adapted to the general case of no
     /// leading-one assumption. This is achieved by transforming the scalar to (almost) 
     /// constant length by adding the scalar field modulus, and applying the Hopwood algorithm

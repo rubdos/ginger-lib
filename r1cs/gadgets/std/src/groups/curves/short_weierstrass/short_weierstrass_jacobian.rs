@@ -1,4 +1,4 @@
-use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
+use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, EndoMulParameters, curves::short_weierstrass_jacobian::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
 use std::ops::{Add, Mul};
@@ -25,7 +25,6 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         P: SWModelParameters,
         ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
-
 {
     pub fn new(x: F, y: F, infinity: Boolean) -> Self {
         Self {
@@ -118,69 +117,6 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         other: &Self,
     ) -> Result<Self, SynthesisError> {
         self.add_internal(cs, other, false)
-    }
-
-    /// Given an arbitrary curve element `&self`, applies the endomorphism 
-    /// defined by `ENDO_COEFF`.
-    pub fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        mut cs: CS,
-    ) -> Result<Self, SynthesisError> {
-        Ok(Self::new(
-            self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
-            self.y.clone(),
-            self.infinity
-        ))
-    }
-
-    /// The endomorphism-based scalar multiplication circuit from [Halo],taking only 
-    /// 3.5 constraints per "scalar" bit. Assumes that `ENDO_SCALAR` satisfies the minimal 
-    /// distance property as mentioned in `SWModelParameters`.
-    /// Given any non-trivial point `P= &self` of the prime order r subgroup, and a slice 
-    /// of an even number of at most `lambda` Booleans `bits`, enforces that the result equals 
-    ///     phi(bits) * P,
-    /// where `phi(bits)` is the equivalent scalar representation of `bits`.
-    /// 
-    /// [Halo]: https://eprint.iacr.org/2019/1021
-    pub fn endo_mul<CS: ConstraintSystem<ConstraintF>>(
-        &self, 
-        mut cs: CS,
-        bits: &[Boolean],
-    ) -> Result<Self, SynthesisError> {
-        
-        let endo_self = self.apply_endomorphism(cs.ns(|| "endo self"))?;
-        let self_y_neg = self.y.negate(cs.ns(|| "self y negate"))?;
-
-        let mut acc = endo_self.clone();
-        acc = acc.add(cs.ns(|| "add"), &self)?;
-        acc.double_in_place(cs.ns(|| "double"))?;
-
-        for i in (0..(bits.len() / 2)).rev() {
-
-            // Conditional select between (-1)^b_0 * Phi^{b_1}(&self), according
-            // to [b_1,b_0] = bits[2i+1, 2i].
-            // Takes 2 constraints.
-            let add = Self::new(
-                F::conditionally_select(
-                    cs.ns(|| format!("conditional bit1 select endo {}", i)),
-                    &bits[i * 2 + 1],
-                    &endo_self.x,
-                    &self.x,
-                )?,
-                F::conditionally_select(
-                    cs.ns(|| format!("conditional bit0 select negate {}", i)),
-                    &bits[i * 2],
-                    &self.y,
-                    &self_y_neg,
-                )?,
-                self.infinity
-            );
-
-            // The unsafe double and add, takes 5 constraints.
-            acc = acc.double_and_add_unsafe(cs.ns(|| format!("double_and_add {}", i)), &add)?;
-        }
-
-        Ok(acc)
     }
 
     #[inline]
@@ -557,19 +493,6 @@ for AffineGadget<P, ConstraintF, F>
         Ok(Self::new(
             self.x.clone(),
             self.y.negate(cs.ns(|| "negate y"))?,
-            self.infinity
-        ))
-    }
-
-    fn conditionally_negate<CS: ConstraintSystem<ConstraintF>>(
-        &self,
-        mut cs: CS,
-        cond: &Boolean,
-    ) -> Result<Self, SynthesisError> {
-        let y_neg = self.y.negate(cs.ns(|| "negate y"))?;
-        Ok(Self::new(
-            self.x.clone(),
-            F::conditionally_select(&mut cs.ns(|| "y"), cond, &self.y, &y_neg)?,
             self.infinity
         ))
     }
@@ -1016,6 +939,76 @@ for AffineGadget<P, ConstraintF, F>
     }
 }
 
+impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for AffineGadget<P, ConstraintF, F>
+    where
+        P: EndoMulParameters,
+        ConstraintF: PrimeField,
+        F: FieldGadget<P::BaseField, ConstraintF>,
+{
+    /// Given an arbitrary curve element `&self`, applies the endomorphism
+    /// defined by `ENDO_COEFF`.
+    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Self, SynthesisError> {
+        Ok(Self::new(
+            self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
+            self.y.clone(),
+            self.infinity
+        ))
+    }
+
+    /// The endomorphism-based scalar multiplication circuit from [Halo],taking only
+    /// 3.5 constraints per "scalar" bit. Assumes that `ENDO_SCALAR` satisfies the minimal
+    /// distance property as mentioned in `SWModelParameters`.
+    /// Given any non-trivial point `P= &self` of the prime order r subgroup, and a slice
+    /// of an even number of at most `lambda` Booleans `bits`, enforces that the result equals
+    ///     phi(bits) * P,
+    /// where `phi(bits)` is the equivalent scalar representation of `bits`.
+    ///
+    /// [Halo]: https://eprint.iacr.org/2019/1021
+    fn endo_mul<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        bits: &[Boolean],
+    ) -> Result<Self, SynthesisError> {
+
+        let endo_self = self.apply_endomorphism(cs.ns(|| "endo self"))?;
+        let self_y_neg = self.y.negate(cs.ns(|| "self y negate"))?;
+
+        let mut acc = endo_self.clone();
+        acc = acc.add(cs.ns(|| "add"), &self)?;
+        acc.double_in_place(cs.ns(|| "double"))?;
+
+        for i in (0..(bits.len() / 2)).rev() {
+
+            // Conditional select between (-1)^b_0 * Phi^{b_1}(&self), according
+            // to [b_1,b_0] = bits[2i+1, 2i].
+            // Takes 2 constraints.
+            let add = Self::new(
+                F::conditionally_select(
+                    cs.ns(|| format!("conditional bit1 select endo {}", i)),
+                    &bits[i * 2 + 1],
+                    &endo_self.x,
+                    &self.x,
+                )?,
+                F::conditionally_select(
+                    cs.ns(|| format!("conditional bit0 select negate {}", i)),
+                    &bits[i * 2],
+                    &self.y,
+                    &self_y_neg,
+                )?,
+                self.infinity
+            );
+
+            // The unsafe double and add, takes 5 constraints.
+            acc = acc.double_and_add_unsafe(cs.ns(|| format!("double_and_add {}", i)), &add)?;
+        }
+
+        Ok(acc)
+    }
+}
+
 impl<P, ConstraintF, F> CondSelectGadget<ConstraintF> for AffineGadget<P, ConstraintF, F>
     where
         P: SWModelParameters,
@@ -1439,6 +1432,8 @@ impl<ConstraintF> CompressAffinePointGadget<ConstraintF>
 
 use crate::ToCompressedBitsGadget;
 use crate::fields::fp::FpGadget;
+use crate::groups::EndoMulCurveGadget;
+
 impl<ConstraintF> ToCompressedBitsGadget<ConstraintF> for CompressAffinePointGadget<ConstraintF>
     where
         ConstraintF: PrimeField,
