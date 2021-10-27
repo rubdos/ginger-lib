@@ -197,11 +197,11 @@ if endo_mul_is_used:
 ## The Halo paper (https://eprint.iacr.org/2019/1021.pdf) proves the injectivity of the endo_mul map.
 ## The injectivity of the map (a,b) |-> a\zeta + b for a,b in [0,A] (essential for using add_unsafe)
 ## is equivalent the lattice condition below.
-## a*zeta + b = a'*zeta + b' mod r   for a,a',b,b' in [0,A] 
+## a*zeta + b = a'*zeta_r + b' mod r   for a,a',b,b' in [0,A] 
 ## is equivalent to the fact that there are non-zero solutions to 
-##      a * zeta = b mod r      for a,b in [-A,A].
+##      a * zeta_r = b mod r      for a,b in [-A,A].
 ## Then it would exists c such that
-##      b = a * zeta + c * r.
+##      b = a * zeta_r + c * r.
 ## Any such solution correspond to a point of the lattice spanned by (1, zeta_r) and (0, r).
 ##      (a, b) = (a, c) * (1  zeta_r)
 ##                        (0    r )
