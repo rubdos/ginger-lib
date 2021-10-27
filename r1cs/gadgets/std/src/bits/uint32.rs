@@ -319,7 +319,7 @@ impl UInt32 {
             })?;
 
             // Add this bit to the result combination
-            result_lc = result_lc + (coeff, b.get_variable());
+            result_lc += (coeff, b.get_variable());
 
             result_bits.push(b.into());
 
@@ -519,7 +519,7 @@ mod test {
 
             let operands_gadget = operands_val
                 .into_iter()
-                .map(|val| UInt32::constant(val))
+                .map(UInt32::constant)
                 .collect::<Vec<UInt32>>();
 
             let r = {

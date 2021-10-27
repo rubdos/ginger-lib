@@ -131,7 +131,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
         let base_g = Self::from_value(cs.ns(|| "hardcode base"), base);
-        base_g.mul_bits(cs, bits.into_iter())
+        base_g.mul_bits(cs, bits.iter())
     }
 
     fn precomputed_base_3_bit_signed_digit_scalar_mul<'a, CS, I, J, B>(
@@ -615,9 +615,9 @@ pub(crate) mod test {
                 "unexpected large native result"
             );
             assert!(
-                native_result[expected_len - 1] == true
-                    || (native_result[expected_len - 1] == false
-                        && native_result[expected_len - 2] == true),
+                native_result[expected_len - 1]
+                    || (!native_result[expected_len - 1]
+                        && native_result[expected_len - 2]),
                 "unexpected value of native result"
             );
 

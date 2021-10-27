@@ -382,7 +382,7 @@ where
         // T = 2^{-1} * base
         let mut t = {
             let two_inv = P::ScalarField::one().double().inverse().unwrap();
-            base.clone().mul(&two_inv)
+            (*base).mul(&two_inv)
         };
 
         // Init to 0 to avoid compilation errors ("usage of possibily uninitialized variable").
@@ -408,7 +408,7 @@ where
 
         for (i, bits) in bits.chunks(2).enumerate() {
             // Compute table for this chunk
-            let ti = t.clone();
+            let ti = t;
             let three_ti = ti.double().add(&ti);
             let mut table = [three_ti.neg(), ti.neg(), ti, three_ti];
 

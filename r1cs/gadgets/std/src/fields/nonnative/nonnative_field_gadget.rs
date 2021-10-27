@@ -983,7 +983,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToConstraintFieldGadget<C
         &self,
         _cs: CS,
     ) -> Result<Vec<Self::FieldGadget>, SynthesisError> {
-        Ok(self.limbs.iter().cloned().collect())
+        Ok(self.limbs.to_vec())
     }
 }
 

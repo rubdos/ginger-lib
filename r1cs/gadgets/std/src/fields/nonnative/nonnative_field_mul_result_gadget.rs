@@ -174,7 +174,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         let r_gadget =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc r"), || {
-                Ok(self.value()?)
+                self.value()
             })?;
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());

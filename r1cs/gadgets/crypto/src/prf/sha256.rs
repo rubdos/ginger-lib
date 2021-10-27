@@ -376,7 +376,7 @@ where
             // (false) xor (c)
             // equals
             // c
-            return Ok(c.clone());
+            return Ok(*c);
         }
         (a, &Boolean::Constant(false), c) => {
             // If b is false
@@ -696,7 +696,7 @@ mod test {
             let mut cs = TestConstraintSystem::<Fr>::new();
             let mut input_bits = vec![];
 
-            for (byte_i, input_byte) in test_input.as_bytes().into_iter().enumerate() {
+            for (byte_i, input_byte) in test_input.as_bytes().iter().enumerate() {
                 for bit_i in (0..8).rev() {
                     let cs = cs.ns(|| format!("input bit {} {}", byte_i, bit_i));
 
@@ -727,7 +727,7 @@ mod test {
                         assert!(s.next().unwrap() != b.get_value().unwrap());
                     }
                     Boolean::Constant(b) => {
-                        assert!(input_bits.len() == 0);
+                        assert!(input_bits.is_empty());
                         assert!(s.next().unwrap() == b);
                     }
                 }

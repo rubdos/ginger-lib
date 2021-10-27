@@ -14,10 +14,10 @@ use crate::sha256::{sha256_ch_boolean, triop};
 fn get_round_constants(round_idx: usize) -> (UInt32, UInt32) {
     let (k, k_prime): (u32, u32) = match round_idx {
         round_idx if round_idx <= 15 => (0x00000000, 0x50a28be6),
-        round_idx if round_idx >= 16 && round_idx <= 31 => (0x5a827999, 0x5c4dd124),
-        round_idx if round_idx >= 32 && round_idx <= 47 => (0x6ed9eba1, 0x6d703ef3),
-        round_idx if round_idx >= 48 && round_idx <= 63 => (0x8f1bbcdc, 0x7a6d76e9),
-        round_idx if round_idx >= 64 && round_idx <= 79 => (0xa953fd4e, 0x00000000),
+        round_idx if (16..=31).contains(&round_idx) => (0x5a827999, 0x5c4dd124),
+        round_idx if (32..=47).contains(&round_idx) => (0x6ed9eba1, 0x6d703ef3),
+        round_idx if (48..=63).contains(&round_idx) => (0x8f1bbcdc, 0x7a6d76e9),
+        round_idx if (64..=79).contains(&round_idx) => (0xa953fd4e, 0x00000000),
         _ => unreachable!(),
     };
     (UInt32::constant(k), UInt32::constant(k_prime))
@@ -82,12 +82,12 @@ where
         // f(j, a, b, c) = (a AND b) OR (NOT(a) AND c)  (16 <= j <= 31)
         // Note: It's the same as the sha256_ch function e.g. (a AND b) XOR (NOT(a) AND c)
         // since the two logical expressions have the same truth table
-        round_idx if round_idx >= 16 && round_idx <= 31 => (
+        round_idx if (16..=31).contains(&round_idx) => (
             |a, b, c| (a & b) | ((!a) & c),
             |cs, i, a, b, c| sha256_ch_boolean(cs.ns(|| format!("ch {}", i)), a, b, c),
         ),
         // f(j, a, b, c) = (a OR NOT(b)) XOR c (32 <= j <= 47)
-        round_idx if round_idx >= 32 && round_idx <= 47 => (
+        round_idx if (32..=47).contains(&round_idx) => (
             |a, b, c| (a | (!b)) ^ c,
             |cs, i, a, b, c| {
                 let t = Boolean::or(cs.ns(|| format!("A OR NOT B {}", i)), &a, &b.not())?;
@@ -96,13 +96,13 @@ where
         ),
         // f(j, a, b, c) = (c AND a) OR (NOT(c) AND b)  (48 <= j <= 63)
         // Note: It's the same as the second round function, but with permuted variables
-        round_idx if round_idx >= 48 && round_idx <= 63 => (
+        round_idx if (48..=63).contains(&round_idx) => (
             |a, b, c| (c & a) | ((!c) & b),
             |cs, i, a, b, c| sha256_ch_boolean(cs.ns(|| format!("permuted ch {}", i)), c, a, b),
         ),
         // f(j, a, b, c) = (b OR NOT(c)) XOR a (64 <= j <= 79)
         // Note: It's the same as the third round function but with permuted variables
-        round_idx if round_idx >= 64 && round_idx <= 79 => (
+        round_idx if (64..=79).contains(&round_idx) => (
             |a, b, c| (b | (!c)) ^ a,
             |cs, i, a, b, c| {
                 let t = Boolean::or(cs.ns(|| format!("B OR NOT C {}", i)), &b, &c.not())?;
@@ -429,7 +429,7 @@ mod test {
             let mut cs = TestConstraintSystem::<Fr>::new();
             let mut input_bits = vec![];
 
-            for (byte_i, input_byte) in test_input.as_bytes().into_iter().enumerate() {
+            for (byte_i, input_byte) in test_input.as_bytes().iter().enumerate() {
                 for bit_i in 0..8 {
                     let cs = cs.ns(|| format!("input bit {} {}", byte_i, bit_i));
 
@@ -459,7 +459,7 @@ mod test {
                         assert!(s.next().unwrap() != b.get_value().unwrap());
                     }
                     Boolean::Constant(b) => {
-                        assert!(input_bits.len() == 0);
+                        assert!(input_bits.is_empty());
                         assert!(s.next().unwrap() == b);
                     }
                 }

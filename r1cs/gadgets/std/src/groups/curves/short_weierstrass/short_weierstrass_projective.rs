@@ -732,7 +732,7 @@ where
         // T = 2^{-1} * base
         let mut t = {
             let two_inv = P::ScalarField::one().double().inverse().unwrap();
-            base.clone().mul(&two_inv)
+            (*base).mul(&two_inv)
         };
 
         // Init to 0 to avoid compilation errors ("usage of possibily uninitialized variable").
@@ -758,7 +758,7 @@ where
 
         for (i, bits) in bits.chunks(2).enumerate() {
             // Compute table for this chunk
-            let ti = t.clone();
+            let ti = t;
             let three_ti = ti.double().add(&ti);
             let mut table = [three_ti.neg(), ti.neg(), ti, three_ti];
 
@@ -846,11 +846,11 @@ where
         };
         // Compute ∏(h_i^{m_i}) for all i.
         for (segment_i, (segment_bits_chunks, segment_powers)) in
-            scalars.into_iter().zip(bases.iter()).enumerate()
+            scalars.iter().zip(bases.iter()).enumerate()
         {
             for (i, (bits, base_power)) in segment_bits_chunks
                 .borrow()
-                .into_iter()
+                .iter()
                 .zip(segment_powers.borrow().iter())
                 .enumerate()
             {
@@ -859,7 +859,7 @@ where
                 let mut coords = vec![];
                 for _ in 0..4 {
                     coords.push(acc_power);
-                    acc_power = acc_power + base_power;
+                    acc_power += base_power;
                 }
                 let bits = bits.borrow().to_bits(
                     &mut cs.ns(|| format!("Convert Scalar {}, {} to bits", segment_i, i)),

@@ -247,10 +247,10 @@ fn distribution_law_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rn
     let b_native = SimulationF::rand(rng);
     let c_native = SimulationF::rand(rng);
 
-    let a_plus_b_native = a_native.clone() + &b_native;
-    let a_times_c_native = a_native.clone() * &c_native;
-    let b_times_c_native = b_native.clone() * &c_native;
-    let a_plus_b_times_c_native = a_plus_b_native.clone() * &c_native;
+    let a_plus_b_native = a_native + &b_native;
+    let a_times_c_native = a_native * &c_native;
+    let b_times_c_native = b_native * &c_native;
+    let a_plus_b_times_c_native = a_plus_b_native * &c_native;
     let a_times_c_plus_b_times_c_native = a_times_c_native + &b_times_c_native;
 
     assert!(
@@ -713,7 +713,7 @@ fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng:
         );
         assert!(!cs.is_satisfied());
         // TODO: Compute correct limb expected to fail
-        let expected_fail = format!("pack bits/packing bits to limb");
+        let expected_fail = "pack bits/packing bits to limb".to_string();
         let actual_fail = cs.which_is_unsatisfied().unwrap().to_owned();
         assert!(
             actual_fail.contains(expected_fail.as_str()),
