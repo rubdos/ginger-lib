@@ -206,7 +206,7 @@ if endo_mul_is_used:
 ##      (a, b) = (a, c) * (1  zeta_r)
 ##                        (0    r )
 ## The injectivity is equivalent to the fact that the intersection between this lattice and [-A, A]^2
-## is trivial. To verify this it is sufficient to first compute a LLL reduced basis {v,w} and
+## is trivial. To verify this we first compute a LLL reduced basis {v,w} and
 ## then check if at least one of v, w, v + w, v - w is belongs to such a square.
 ## If not, there can't be other lattice points in the square.
 if endo_mul_is_used:
