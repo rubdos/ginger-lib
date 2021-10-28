@@ -1,5 +1,5 @@
 // use std::ops::{Mul, MulAssign};
-use algebra::Field;
+use algebra::{BitIterator, Field};
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::fmt::Debug;
 
@@ -14,6 +14,9 @@ pub mod fp4;
 pub mod fp6_2over3;
 pub mod fp6_3over2;
 pub mod quadratic_extension;
+
+#[cfg(feature = "nonnative")]
+pub mod nonnative;
 
 pub trait FieldGadget<F: Field, ConstraintF: Field>:
     Sized
@@ -235,7 +238,7 @@ pub trait FieldGadget<F: Field, ConstraintF: Field>:
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
         let mut res = Self::one(cs.ns(|| "Alloc result"))?;
-        for (i, bit) in bits.into_iter().enumerate() {
+        for (i, bit) in bits.iter().enumerate() {
             res = res.square(cs.ns(|| format!("Double {}", i)))?;
             let tmp = res.mul(cs.ns(|| format!("Add {}-th base power", i)), self)?;
             res = Self::conditionally_select(
@@ -244,6 +247,34 @@ pub trait FieldGadget<F: Field, ConstraintF: Field>:
                 &tmp,
                 &res,
             )?;
+        }
+        Ok(res)
+    }
+
+    /// Computes `self^S`, where S is interpreted as an little-endian
+    /// u64-decomposition of an integer.
+    fn pow_by_constant<S: AsRef<[u64]>, CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        exp: S,
+    ) -> Result<Self, SynthesisError> {
+        let mut res = Self::one(cs.ns(|| "alloc result"))?;
+        let mut found_one = false;
+
+        for i in BitIterator::new(exp) {
+            // Skip leading zeros
+            if !found_one {
+                if i {
+                    found_one = true;
+                } else {
+                    continue;
+                }
+            }
+            res.square_in_place(cs.ns(|| format!("square_{}", i)))?;
+
+            if i {
+                res.mul_in_place(cs.ns(|| format!("multiply_{}", i)), self)?;
+            }
         }
         Ok(res)
     }
@@ -280,11 +311,9 @@ pub(crate) mod tests {
         let zero_native = zero.get_value().unwrap();
         zero.enforce_equal(&mut cs.ns(|| "zero_equals?"), &zero)
             .unwrap();
-        assert_eq!(zero, zero);
 
         let one = F::one(cs.ns(|| "one")).unwrap();
         let one_native = one.get_value().unwrap();
-        assert_eq!(one, one);
         one.enforce_equal(&mut cs.ns(|| "one_equals?"), &one)
             .unwrap();
         assert_ne!(one, zero);
@@ -298,12 +327,8 @@ pub(crate) mod tests {
         let two = one.add(cs.ns(|| "one_plus_one"), &one).unwrap();
         two.enforce_equal(&mut cs.ns(|| "two_equals?"), &two)
             .unwrap();
-        assert_eq!(two, two);
         assert_ne!(zero, two);
         assert_ne!(one, two);
-
-        // a == a
-        assert_eq!(a, a);
 
         // a + 0 = a
         let a_plus_zero = a.add(cs.ns(|| "a_plus_zero"), &zero).unwrap();
@@ -424,7 +449,7 @@ pub(crate) mod tests {
         assert_eq!(a_inv.get_value().unwrap(), a_native.inverse().unwrap());
         // a * a * a = a^3
         let bits = BitIterator::new([0x3])
-            .map(|bit| Boolean::constant(bit))
+            .map(Boolean::constant)
             .collect::<Vec<_>>();
         assert_eq!(
             a_native * &(a_native * &a_native),
@@ -467,6 +492,8 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert_eq!(ab_true.get_value().unwrap(), a_native + &b_native);
+
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]
@@ -488,7 +515,47 @@ pub(crate) mod tests {
             a.frobenius_map(i);
 
             assert_eq!(a_gadget.get_value().unwrap(), a);
+            assert!(cs.is_satisfied());
         }
+    }
+
+    pub(crate) fn even_odd_fp_gadget_test<ConstraintF: PrimeField>() {
+        let rng = &mut thread_rng();
+
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+
+        let one = FpGadget::<ConstraintF>::one(cs.ns(|| "one")).unwrap();
+        let two = one.double(cs.ns(|| "two")).unwrap();
+
+        assert!(one
+            .is_odd(cs.ns(|| "one is odd"))
+            .unwrap()
+            .get_value()
+            .unwrap());
+        assert!(!two
+            .is_odd(cs.ns(|| "two is not odd"))
+            .unwrap()
+            .get_value()
+            .unwrap());
+
+        for i in 0..100 {
+            let mut iter_cs = cs.ns(|| format!("iter_{}", i));
+
+            let random_native = ConstraintF::rand(rng);
+            let random =
+                FpGadget::<ConstraintF>::alloc(iter_cs.ns(|| "alloc random"), || Ok(random_native))
+                    .unwrap();
+
+            assert_eq!(
+                random_native.is_odd(),
+                random
+                    .is_odd(iter_cs.ns(|| "is random odd"))
+                    .unwrap()
+                    .get_value()
+                    .unwrap()
+            );
+        }
+        assert!(cs.is_satisfied());
     }
 
     #[allow(dead_code)]
@@ -551,7 +618,7 @@ pub(crate) mod tests {
 
         //Modify packed value
         cs.set(
-            format!("pack f_g_bits/variable/alloc").as_ref(),
+            "pack f_g_bits/variable/alloc".to_string().as_ref(),
             ConstraintF::rand(&mut rng),
         );
         assert!(!cs.is_satisfied());
@@ -656,8 +723,7 @@ pub(crate) mod tests {
             let a_gadget = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc a"), || Ok(a)).unwrap();
 
             //If a == b then v = True
-            let b_gadget =
-                FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc b"), || Ok(a.clone())).unwrap();
+            let b_gadget = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc b"), || Ok(a)).unwrap();
 
             let v = a_gadget.is_eq(cs.ns(|| "a == b"), &b_gadget).unwrap();
             v.enforce_equal(cs.ns(|| " v == True"), &Boolean::constant(true))

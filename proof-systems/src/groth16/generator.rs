@@ -27,9 +27,6 @@ where
     generate_parameters::<E, C, R>(circuit, alpha, beta, gamma, delta, rng)
 }
 
-/// This is our assembly structure that we'll use to synthesize the
-/// circuit into a QAP.
-
 /// Create parameters for a circuit, given some toxic waste.
 pub fn generate_parameters<E, C, R>(
     circuit: C,

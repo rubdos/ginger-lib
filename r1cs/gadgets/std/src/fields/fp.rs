@@ -57,7 +57,7 @@ impl<F: PrimeField> FpGadget<F> {
         let mut coeff = F::one();
 
         for bit in bits.iter().rev() {
-            lc = lc + (coeff, bit.get_variable());
+            lc += (coeff, bit.get_variable());
 
             coeff.double_in_place();
         }
@@ -102,7 +102,7 @@ impl<F: PrimeField> FpGadget<F> {
         {
             match bit {
                 Boolean::Is(bit) => {
-                    lc = lc + (coeff, bit.get_variable());
+                    lc += (coeff, bit.get_variable());
                     coeff.double_in_place();
                 }
                 Boolean::Constant(_) | Boolean::Not(_) => unreachable!(),
@@ -377,7 +377,7 @@ impl<F: PrimeField> FieldGadget<F, F> for FpGadget<F> {
 
 impl<F: PrimeField> PartialEq for FpGadget<F> {
     fn eq(&self, other: &Self) -> bool {
-        !self.value.is_none() && !other.value.is_none() && self.value == other.value
+        self.value.is_some() && other.value.is_some() && self.value == other.value
     }
 }
 
@@ -489,13 +489,15 @@ impl<F: PrimeField> ToBitsGadget<F> for FpGadget<F> {
     }
 }
 
+// Pack a slice of Boolean gadgets into one or several field elements, bundling at most
+// `F::Params::CAPACITY` many in a single field element (to allow efficient unpacking).
+// The bundling regards the Booleans in big endian order.
 impl<F: PrimeField> FromBitsGadget<F> for FpGadget<F> {
     fn from_bits<CS: ConstraintSystemAbstract<F>>(
         mut cs: CS,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
-        //A malicious prover may pass a bigger input so we enforce considering exactly
-        //CAPACITY bits in the linear combination calculation.
+        // We can safely pack up to CAPACITY bits
         let bits = bits.chunks(F::Params::CAPACITY as usize).next().unwrap();
 
         let mut num = Self::zero(cs.ns(|| "alloc_lc_{}"))?;
@@ -543,7 +545,8 @@ impl<F: PrimeField> ToBytesGadget<F> for FpGadget<F> {
         let bytes = self.to_bytes(&mut cs)?;
         Boolean::enforce_in_field::<_, _, F>(
             &mut cs,
-            &bytes.iter()
+            &bytes
+                .iter()
                 .flat_map(|byte_gadget| byte_gadget.into_bits_le())
                 // This reverse maps the bits into big-endian form, as required by `enforce_in_field`.
                 .rev()
@@ -699,7 +702,7 @@ impl<F: PrimeField> ThreeBitCondNegLookupGadget<F> for FpGadget<F> {
 impl<F: PrimeField> Clone for FpGadget<F> {
     fn clone(&self) -> Self {
         Self {
-            value: self.value.clone(),
+            value: self.value,
             variable: self.variable.clone(),
         }
     }

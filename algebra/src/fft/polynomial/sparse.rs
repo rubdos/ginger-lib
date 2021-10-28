@@ -123,7 +123,7 @@ impl<F: Field> Into<DensePolynomial<F>> for SparsePolynomial<F> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bls12_381"))]
 mod tests {
     use crate::fields::bls12_381::fr::Fr;
     use crate::Field;

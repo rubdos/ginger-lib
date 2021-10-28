@@ -116,7 +116,7 @@ impl UInt64 {
             }
         }
 
-        Self { value, bits }
+        Self { bits, value }
     }
 
     pub fn rotr(&self, by: usize) -> Self {
@@ -172,7 +172,7 @@ impl UInt64 {
         // in the scalar field
         assert!(ConstraintF::Params::MODULUS_BITS >= 128);
 
-        assert!(operands.len() >= 1);
+        assert!(!operands.is_empty());
         assert!(operands.len() <= 10);
 
         if operands.len() == 1 {
@@ -434,7 +434,7 @@ mod test {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
                     &Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     &Boolean::Constant(b) => {
                         assert!(b == (expected & 1 == 1));
@@ -513,7 +513,7 @@ mod test {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
                     &Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     &Boolean::Constant(_) => unreachable!(),
                 }

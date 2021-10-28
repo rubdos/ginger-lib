@@ -56,7 +56,7 @@ where
 
     let input_assignment = Arc::new(
         full_input_assignment[1..prover.num_inputs]
-            .into_iter()
+            .iter()
             .map(|s| s.into_repr())
             .collect::<Vec<_>>(),
     );
@@ -71,7 +71,7 @@ where
 
     let h_input = Arc::new(
         h[0..prover.num_inputs]
-            .into_iter()
+            .iter()
             .map(|s| s.into_repr())
             .collect::<Vec<_>>(),
     );
