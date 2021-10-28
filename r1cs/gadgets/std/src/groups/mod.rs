@@ -792,16 +792,17 @@ pub(crate) mod test {
 
     #[allow(dead_code)]
     pub(crate) fn endo_mul_test<
-        ConstraintF: Field + PrimeField,
-        G: ProjectiveCurve<Affine = GE>,
+        ConstraintF: Field,
+        G: ProjectiveCurve,
         GG: EndoMulCurveGadget<G, ConstraintF, Value = G>,
-        GE: EndoMulCurve<Projective = G>,
     >()
+    where
+        <G as ProjectiveCurve>::Affine: EndoMulCurve
     {
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
         let a_native_proj = G::rand(&mut thread_rng());
-        let a_native: GE = a_native_proj.into_affine();
+        let a_native = a_native_proj.into_affine();
         let a = GG::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native_proj)).unwrap();
 
         let scalar: G::ScalarField = u128::rand(&mut thread_rng()).into();
