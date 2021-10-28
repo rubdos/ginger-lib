@@ -112,7 +112,7 @@ impl<P: Parameters> GroupAffine<P> {
     ///
     /// If and only if `parity` is set will the odd y-coordinate be selected.
     #[allow(dead_code)]
-    pub(crate) fn get_point_from_x_and_parity(x: P::BaseField, parity: bool) -> Option<Self> {
+    pub fn get_point_from_x_and_parity(x: P::BaseField, parity: bool) -> Option<Self> {
         // Compute x^3 + ax + b
         let x3b = P::add_b(&((x.square() * &x) + &P::mul_by_a(&x)));
 
@@ -459,7 +459,9 @@ impl<P: Parameters> PartialEq for GroupProjective<P> {
         let z1 = self.z.square();
         let z2 = other.z.square();
 
-        if (self.x * &z2 != other.x * &z1) || (self.y * &(z2 * &other.z) != other.y * &(z1 * &self.z)) {
+        if (self.x * &z2 != other.x * &z1)
+            || (self.y * &(z2 * &other.z) != other.y * &(z1 * &self.z))
+        {
             false
         } else {
             true

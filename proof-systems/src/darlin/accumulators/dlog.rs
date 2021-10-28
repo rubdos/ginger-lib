@@ -221,10 +221,7 @@ impl<G: AffineCurve, D: Digest> DLogItemAccumulator<G, D> {
             .collect::<Vec<_>>();
 
         // Save the evaluations into a separate vec
-        let values = comms_values
-            .iter()
-            .map(|(_, val)| val.clone())
-            .collect::<Vec<_>>();
+        let values = comms_values.iter().map(|(_, val)| *val).collect::<Vec<_>>();
 
         // Save comms into a separate vector
         let comms = comms_values
@@ -265,7 +262,7 @@ impl<G: AffineCurve, D: Digest> DLogItemAccumulator<G, D> {
         if xi_s.is_some() {
             Ok(Some(DLogItem::<G> {
                 g_final: Commitment::<G> {
-                    comm: vec![proof.pc_proof.final_comm_key.clone()],
+                    comm: vec![proof.pc_proof.final_comm_key],
                     shifted_comm: None,
                 },
                 xi_s: xi_s.unwrap(),
@@ -321,10 +318,7 @@ impl<G: AffineCurve, D: Digest> ItemAccumulator for DLogItemAccumulator<G, D> {
             .map(|(&chal, xi_s)| {
                 Polynomial::from_coefficients_vec(xi_s.compute_scaled_coeffs(-chal))
             })
-            .reduce(
-                || Polynomial::zero(),
-                |acc, scaled_poly| &acc + &scaled_poly,
-            );
+            .reduce(Polynomial::zero, |acc, scaled_poly| &acc + &scaled_poly);
         end_timer!(batching_time);
 
         // The dlog "hard part", checking that G_bar = sum_k lambda^k * G_f[k] == Comm(h_bar(X))
@@ -446,7 +440,7 @@ impl<G: AffineCurve, D: Digest> ItemAccumulator for DLogItemAccumulator<G, D> {
 
         // Verify the aggregated accumulator
         let hard_time = start_timer!(|| "DLOG hard part");
-        let result = Self::check_items::<R>(vk, &vec![new_acc.unwrap()], rng).map_err(|e| {
+        let result = Self::check_items::<R>(vk, &[new_acc.unwrap()], rng).map_err(|e| {
             end_timer!(hard_time);
             end_timer!(check_acc_time);
             e
