@@ -36,7 +36,10 @@ macro_rules! impl_prime_field_serializer {
             // for some reason, the number of bytes required to represent P::MODULUS_BITS
             // is bigger than (P::MODULUS_BITS/8) + 1
             fn serialized_size_with_flags<F: Flags>(&self) -> usize {
-                std::cmp::max($byte_size, buffer_byte_size(P::MODULUS_BITS as usize + F::BIT_SIZE))
+                std::cmp::max(
+                    $byte_size,
+                    buffer_byte_size(P::MODULUS_BITS as usize + F::BIT_SIZE),
+                )
             }
         }
 
@@ -207,7 +210,7 @@ macro_rules! impl_Fp {
 
                     let mut v = self.0;
                     let mut u = P::MODULUS;
-                    let mut r = $BigInteger::from(0); 
+                    let mut r = $BigInteger::from(0);
                     let mut s = $BigInteger::from(1);
                     let mut k: u16 = 0;
                     // TODO: Make it independent from the limb size
@@ -217,7 +220,7 @@ macro_rules! impl_Fp {
                     // The inverse at the end will be -r mod p. The sign is due to the fact
                     // that our big integers are unsigned so we can work with positive numbers.
                     // The arithmetic can be improved drastically since, at the beginning,
-                    // r and s are very small. 
+                    // r and s are very small.
                     while v != zero {
                         while u.is_even() {
                             u.div2();

@@ -1,5 +1,5 @@
 // use std::ops::{Mul, MulAssign};
-use algebra::{Field, BitIterator};
+use algebra::{BitIterator, Field};
 use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::fmt::Debug;
 
@@ -247,13 +247,12 @@ pub trait FieldGadget<F: Field, ConstraintF: Field>:
     fn pow_by_constant<S: AsRef<[u64]>, CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
-        exp: S
+        exp: S,
     ) -> Result<Self, SynthesisError> {
         let mut res = Self::one(cs.ns(|| "alloc result"))?;
         let mut found_one = false;
 
         for i in BitIterator::new(exp) {
-
             // Skip leading zeros
             if !found_one {
                 if i {
@@ -510,7 +509,7 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn even_odd_fp_gadget_test<ConstraintF: PrimeField>(){
+    pub(crate) fn even_odd_fp_gadget_test<ConstraintF: PrimeField>() {
         let rng = &mut thread_rng();
 
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
@@ -518,19 +517,33 @@ pub(crate) mod tests {
         let one = FpGadget::<ConstraintF>::one(cs.ns(|| "one")).unwrap();
         let two = one.double(cs.ns(|| "two")).unwrap();
 
-        assert!(one.is_odd(cs.ns(|| "one is odd")).unwrap().get_value().unwrap());
-        assert!(!two.is_odd(cs.ns(|| "two is not odd")).unwrap().get_value().unwrap());
+        assert!(one
+            .is_odd(cs.ns(|| "one is odd"))
+            .unwrap()
+            .get_value()
+            .unwrap());
+        assert!(!two
+            .is_odd(cs.ns(|| "two is not odd"))
+            .unwrap()
+            .get_value()
+            .unwrap());
 
         for i in 0..100 {
             let mut iter_cs = cs.ns(|| format!("iter_{}", i));
 
             let random_native = ConstraintF::rand(rng);
-            let random = FpGadget::<ConstraintF>::alloc(
-                iter_cs.ns(|| "alloc random"),
-                || Ok(random_native)
-            ).unwrap();
+            let random =
+                FpGadget::<ConstraintF>::alloc(iter_cs.ns(|| "alloc random"), || Ok(random_native))
+                    .unwrap();
 
-            assert_eq!(random_native.is_odd(), random.is_odd(iter_cs.ns(|| "is random odd")).unwrap().get_value().unwrap());
+            assert_eq!(
+                random_native.is_odd(),
+                random
+                    .is_odd(iter_cs.ns(|| "is random odd"))
+                    .unwrap()
+                    .get_value()
+                    .unwrap()
+            );
         }
         assert!(cs.is_satisfied());
     }

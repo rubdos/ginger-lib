@@ -10,7 +10,7 @@ use std::borrow::Borrow;
 #[derive(Copy, Clone, Debug)]
 pub struct AllocatedBit {
     pub variable: Variable,
-    pub value:    Option<bool>,
+    pub value: Option<bool>,
 }
 
 impl AllocatedBit {

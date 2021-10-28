@@ -155,13 +155,13 @@ where
                 .by_ref()
                 .zip(pvk.query.iter().skip(1))
                 .enumerate()
-                {
-                    let input_bits = input.to_bits(cs.ns(|| format!("Input {}", i)))?;
-                    g_psi = b
-                        .mul_bits(cs.ns(|| format!("Mul {}", i)), input_bits.iter())?
-                        .add(cs.ns(|| format!("Add {}", i)), &g_psi)?;
-                    input_len += 1;
-                }
+            {
+                let input_bits = input.to_bits(cs.ns(|| format!("Input {}", i)))?;
+                g_psi = b
+                    .mul_bits(cs.ns(|| format!("Mul {}", i)), input_bits.iter())?
+                    .add(cs.ns(|| format!("Add {}", i)), &g_psi)?;
+                input_len += 1;
+            }
             // Check that the input and the query in the verification are of the
             // same length.
             if input_len != pvk.query.len() || public_inputs.next().is_some() {

@@ -1,16 +1,16 @@
 use crate::{
-    groups::tests::group_test,
-    fields::secp256k1::Fr,
     curves::{
-        secp256k1::{Projective, Affine, Secp256k1Parameters},
+        secp256k1::{Affine, Projective, Secp256k1Parameters},
         tests::{curve_tests, sw_jacobian_curve_serialization_test},
-        AffineCurve, ProjectiveCurve
+        AffineCurve, ProjectiveCurve,
     },
-    FromBytes, SemanticallyValid
+    fields::secp256k1::Fr,
+    groups::tests::group_test,
+    FromBytes, SemanticallyValid,
 };
 use hex_literal::hex;
+use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use rand::{SeedableRng, Rng};
 
 #[test]
 fn test_secp256k1_projective_curve() {
@@ -33,8 +33,7 @@ fn test_secp256k1_generator() {
     assert!(generator.is_in_correct_subgroup_assuming_on_curve());
 }
 
-fn to_internal_repr(mut x: Vec<u8>, mut y: Vec<u8>) -> Projective
-{
+fn to_internal_repr(mut x: Vec<u8>, mut y: Vec<u8>) -> Projective {
     // Hex is in big-endian but FromBytes accepts only in little-endian, so we need to reverse.
     // Plus, we represent the Field using a BigInteger320, e.g. with 40 bytes instead of 32, so we need to pad.
     x.reverse();
@@ -144,8 +143,16 @@ fn test_secp256k1_addition_correctness() {
 
     for (i, (x, y)) in ADD_TEST_VECTORS.iter().enumerate() {
         let test_point = to_internal_repr(x.to_vec(), y.to_vec());
-        assert!(test_point.is_valid(), "Validity test failed for point {}", i);
-        assert_eq!(test_point, curr_point, "Computed value doesn't match test one for point {}", i);
+        assert!(
+            test_point.is_valid(),
+            "Validity test failed for point {}",
+            i
+        );
+        assert_eq!(
+            test_point, curr_point,
+            "Computed value doesn't match test one for point {}",
+            i
+        );
         curr_point += &gen;
     }
 }
@@ -288,7 +295,11 @@ fn test_secp256k1_mul_bits_correctness() {
 
     for (i, (scalar, x, y)) in MUL_TEST_VECTORS.iter().enumerate() {
         let test_point = to_internal_repr(x.to_vec(), y.to_vec());
-        assert!(test_point.is_valid(), "Validity test failed for point {}", i);
+        assert!(
+            test_point.is_valid(),
+            "Validity test failed for point {}",
+            i
+        );
 
         let test_scalar = {
             let mut scalar = scalar.to_vec();
@@ -296,8 +307,17 @@ fn test_secp256k1_mul_bits_correctness() {
             scalar.append(&mut vec![0u8; 8]);
             Fr::read(&scalar[..]).unwrap()
         };
-        assert!(test_scalar.is_valid(), "Validity test failed for scalar {}", i);
+        assert!(
+            test_scalar.is_valid(),
+            "Validity test failed for scalar {}",
+            i
+        );
 
-        assert_eq!(test_point, gen.mul(&test_scalar), "Computed value doesn't match test one for point {}", i);
+        assert_eq!(
+            test_point,
+            gen.mul(&test_scalar),
+            "Computed value doesn't match test one for point {}",
+            i
+        );
     }
 }

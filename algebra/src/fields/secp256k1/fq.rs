@@ -1,7 +1,7 @@
-//! The base field of the SECG secp256k1, a 256 bit prime field. 
+//! The base field of the SECG secp256k1, a 256 bit prime field.
 use crate::{
     biginteger::BigInteger320 as BigInteger,
-    fields::{FpParameters, Fp320, Fp320Parameters},
+    fields::{Fp320, Fp320Parameters, FpParameters},
 };
 
 pub type Fq = Fp320<FqParameters>;
@@ -32,7 +32,7 @@ impl FpParameters for FqParameters {
 
     const TWO_ADICITY: u32 = 1;
 
-    /// (p-1)/2 = 
+    /// (p-1)/2 =
     ///  = 57896044618658097711785492504343953926634992332820282019728792003954417335831
     const MODULUS_MINUS_ONE_DIV_TWO: BigInteger = BigInteger([
         0xffffffff7ffffe17,
@@ -51,7 +51,7 @@ impl FpParameters for FqParameters {
         0x0,
     ]);
 
-    /// (T - 1) / 2 = 
+    /// (T - 1) / 2 =
     /// = 28948022309329048855892746252171976963317496166410141009864396001977208667915
     const T_MINUS_ONE_DIV_TWO: BigInteger = BigInteger([
         0xffffffffbfffff0b,
@@ -61,7 +61,7 @@ impl FpParameters for FqParameters {
         0x0,
     ]);
 
-    /// Montgomery constant R = 2^320 mod p = 
+    /// Montgomery constant R = 2^320 mod p =
     ///  = 79228180536733297607775879168
     const R: BigInteger = BigInteger([
         0x0000000000000000,
@@ -92,7 +92,7 @@ impl FpParameters for FqParameters {
         0x0,
     ]);
 
-    /// ROOT_OF_UNITY = GENERATOR^T (Montgomery rep.) 
+    /// ROOT_OF_UNITY = GENERATOR^T (Montgomery rep.)
     /// = -1 mod p
     const ROOT_OF_UNITY: BigInteger = BigInteger([
         0xfffffffefffffc2f,
@@ -101,5 +101,4 @@ impl FpParameters for FqParameters {
         0xffffffffffffffff,
         0x0,
     ]);
-
 }

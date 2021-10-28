@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use algebra::{BigInteger, Field, PrimeField, FpParameters, Group};
+use algebra::{BigInteger, Field, FpParameters, Group, PrimeField};
 use r1cs_core::{ConstraintSystem, SynthesisError};
 
 use std::{borrow::Borrow, fmt::Debug};
@@ -131,7 +131,7 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
         let base_g = Self::from_value(cs.ns(|| "hardcode base"), base);
-        base_g.mul_bits(cs, bits.into_iter())
+        base_g.mul_bits(cs, bits.iter())
     }
 
     fn precomputed_base_3_bit_signed_digit_scalar_mul<'a, CS, I, J, B>(
@@ -192,25 +192,26 @@ pub trait EndoMulCurveGadget<G: Group, ConstraintF: Field>: GroupGadget<G, Const
 }
 
 /// Pre-checks for vbSM with incomplete arithmetic using Hopwood algorithm (https://github.com/zcash/zcash/issues/3924) :
-/// - 'self' must be non-trivial and in the prime order subgroup 
-/// - 'bits', in little endian, must be of length <= than the scalar field modulus. 
+/// - 'self' must be non-trivial and in the prime order subgroup
+/// - 'bits', in little endian, must be of length <= than the scalar field modulus.
 ///           and must not be equal to {0, p-2, p-1, p, p+1}.
 #[inline]
-pub(crate) fn check_mul_bits_inputs<
-    G: Group,
->(
+pub(crate) fn check_mul_bits_inputs<G: Group>(
     base: &G,
     mut bits: Vec<bool>,
-) -> Result<(), SynthesisError>
-{
+) -> Result<(), SynthesisError> {
     // bits must be smaller than the scalar field modulus
     if bits.len() > G::ScalarField::size_in_bits() {
-        return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), G::ScalarField::size_in_bits())));
+        return Err(SynthesisError::Other(format!(
+            "Input bits size: {}, max allowed size: {}",
+            bits.len(),
+            G::ScalarField::size_in_bits()
+        )));
     }
-        
+
     // Reverse bits
     bits.reverse();
-    
+
     // self must not be trivial
     if base.is_zero() {
         return Err(SynthesisError::Other("Base point is trivial".to_owned()));
@@ -223,45 +224,60 @@ pub(crate) fn check_mul_bits_inputs<
 
     // Read Bigint from bits
     let bits_val = <G::ScalarField as PrimeField>::BigInt::from_bits(bits.as_slice());
-    
+
     // bits_val != 0
-    if bits_val.is_zero() {return Err(SynthesisError::Other("Scalar must not be zero".to_owned()))}
+    if bits_val.is_zero() {
+        return Err(SynthesisError::Other("Scalar must not be zero".to_owned()));
+    }
 
     // bits_val != p
     let mut to_compare = <G::ScalarField as PrimeField>::Params::MODULUS;
-    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus".to_owned()))}
+    if bits_val == to_compare {
+        return Err(SynthesisError::Other(
+            "Scalar must not be equal to modulus".to_owned(),
+        ));
+    }
 
     // bits_val != p + 1
     assert!(!to_compare.add_nocarry(&<G::ScalarField as PrimeField>::BigInt::from(1)));
-    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus + 1".to_owned()))}
+    if bits_val == to_compare {
+        return Err(SynthesisError::Other(
+            "Scalar must not be equal to modulus + 1".to_owned(),
+        ));
+    }
 
     // bits_val != p - 1
     assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(2)));
-    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 1".to_owned()))}
+    if bits_val == to_compare {
+        return Err(SynthesisError::Other(
+            "Scalar must not be equal to modulus - 1".to_owned(),
+        ));
+    }
 
     // bits_val != p - 2
     assert!(!to_compare.sub_noborrow(&<G::ScalarField as PrimeField>::BigInt::from(1)));
-    if bits_val == to_compare {return Err(SynthesisError::Other("Scalar must not be equal to modulus - 2".to_owned()))}
+    if bits_val == to_compare {
+        return Err(SynthesisError::Other(
+            "Scalar must not be equal to modulus - 2".to_owned(),
+        ));
+    }
 
     Ok(())
 }
 
 /// Pre-checks for fbSM due to incomplete arithmetic as in our implementation.
-/// [b_{n-1},...,b_0] are big endian scalar bits, padded with zeros to 
-/// the next multiple of two bits. 
-///     1. [b_n-1, ..., b_1, b_0] != 0 mod p 
+/// [b_{n-1},...,b_0] are big endian scalar bits, padded with zeros to
+/// the next multiple of two bits.
+///     1. [b_n-1, ..., b_1, b_0] != 0 mod p
 ///     2. [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
 /// If n >= len(scalar field modulus), then we must check additionally
 ///     3. 2 * [b_n-1, ..., b_1, b_0] != 3*(2^n - 1) mod p
 ///     4. 2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3 mod p.
 #[inline]
-pub(crate) fn check_mul_bits_fixed_base_inputs<
-    G: Group,
->(
+pub(crate) fn check_mul_bits_fixed_base_inputs<G: Group>(
     base: &G,
     bits: Vec<bool>,
-) -> Result<(), SynthesisError>
-{
+) -> Result<(), SynthesisError> {
     use algebra::FromBits;
 
     // base must not be trivial
@@ -286,35 +302,43 @@ pub(crate) fn check_mul_bits_fixed_base_inputs<
 
     // [b_n-1, ..., b_1, b_0] != 0
     if bits_val == G::ScalarField::zero() {
-        return Err(SynthesisError::Other("[b_n-1, ..., b_1, b_0] != 0".to_owned()))
+        return Err(SynthesisError::Other(
+            "[b_n-1, ..., b_1, b_0] != 0".to_owned(),
+        ));
     }
 
     // [b_n-1, ..., b_1, b_0] != 3*(2^n - 1)
     if bits_val == three_times_two_to_n_minus_one {
-        return Err(SynthesisError::Other("[b_n-1, ..., b_1, b_0] != 3*(2^n - 1)".to_owned()))
+        return Err(SynthesisError::Other(
+            "[b_n-1, ..., b_1, b_0] != 3*(2^n - 1)".to_owned(),
+        ));
     }
 
     if bits.len() >= G::ScalarField::size_in_bits() {
         // 2 *  [b_n-1, ..., b_1, b_0] != 3*(2^n - 1)
         if bits_val.double() == three_times_two_to_n_minus_one {
-            return Err(SynthesisError::Other("2 *  [b_n-1, ..., b_1, b_0] != 3*(2^n - 1)".to_owned()))
+            return Err(SynthesisError::Other(
+                "2 *  [b_n-1, ..., b_1, b_0] != 3*(2^n - 1)".to_owned(),
+            ));
         }
 
         // 2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3
         let msb_val = G::ScalarField::read_bits((&bits[..2]).to_vec()).unwrap();
         let rhs = (msb_val * &two_to_n) - &three;
         if bits_val.double() == rhs {
-            return Err(SynthesisError::Other("2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3".to_owned()))
+            return Err(SynthesisError::Other(
+                "2 *  [b_n-1, ..., b_1, b_0] != [b_n-1, b_n-2] * (2^n) - 3".to_owned(),
+            ));
         }
     }
-    
+
     Ok(())
 }
 
 /// The 'constant' length transformation for scalar multiplication in a group
-/// with scalar field `ScalarF`. 
-/// Implements the non-native big integer addition of the scalar, given as 
-/// little endian vector of Boolean gadgets `bits`, and the modulus of the 
+/// with scalar field `ScalarF`.
+/// Implements the non-native big integer addition of the scalar, given as
+/// little endian vector of Boolean gadgets `bits`, and the modulus of the
 /// scalar field. The result is a vector of Booleans in little-endian
 /// always one bit longer than the scalar field modulus, possibly having
 /// a leading zero.
@@ -323,48 +347,48 @@ pub(crate) fn scalar_bits_to_constant_length<
     'a,
     ConstraintF: PrimeField,
     ScalarF: PrimeField,
-    CS: ConstraintSystem<ConstraintF>
+    CS: ConstraintSystem<ConstraintF>,
 >(
     mut cs: CS,
-    bits: Vec<Boolean>
-) -> Result<Vec<Boolean>, SynthesisError>
-{
+    bits: Vec<Boolean>,
+) -> Result<Vec<Boolean>, SynthesisError> {
     use crate::fields::fp::FpGadget;
 
     if bits.len() > ScalarF::size_in_bits() {
-        Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), ScalarF::size_in_bits())))?
+        Err(SynthesisError::Other(format!(
+            "Input bits size: {}, max allowed size: {}",
+            bits.len(),
+            ScalarF::size_in_bits()
+        )))?
     }
 
-    // bits per limb must not exceed the CAPACITY minus one bit, which is 
+    // bits per limb must not exceed the CAPACITY minus one bit, which is
     // reserved for the addition.
-    let bits_per_limb =  std::cmp::min(
-        (ConstraintF::Params::CAPACITY - 1) as usize, 
-        ScalarF::size_in_bits()
+    let bits_per_limb = std::cmp::min(
+        (ConstraintF::Params::CAPACITY - 1) as usize,
+        ScalarF::size_in_bits(),
     );
     // ceil(ScalarF::size_in_bits()/bits_per_limb)
     // let num_limbs = (ScalarF::size_in_bits() + bits_per_limb - 1)/bits_per_limb;
-    
+
     // Convert the scalar field modulus `MODULUS` to its vector of limbs,
     // little endian ordered.
 
     let scalar_char = &ScalarF::Params::MODULUS;
     let mut char_bits = scalar_char.to_bits();
-    char_bits.reverse(); // little endian, including trailing zeros 
+    char_bits.reverse(); // little endian, including trailing zeros
 
-    let char_limbs: Vec<ConstraintF> = 
-        char_bits[..ScalarF::size_in_bits()] 
+    let char_limbs: Vec<ConstraintF> = char_bits[..ScalarF::size_in_bits()]
         .chunks(bits_per_limb)
-        .map(|chunk| 
-            {
-                // read_bits for PrimeField takes big endian order
-                let mut chunk_rev = chunk.to_vec();
-                chunk_rev.reverse();
-                let limb = ConstraintF::read_bits(chunk_rev.to_vec());
+        .map(|chunk| {
+            // read_bits for PrimeField takes big endian order
+            let mut chunk_rev = chunk.to_vec();
+            chunk_rev.reverse();
+            let limb = ConstraintF::read_bits(chunk_rev.to_vec());
 
-                limb
-            }
-        )
-    .collect::<Result<_, _>>()?;
+            limb
+        })
+        .collect::<Result<_, _>>()?;
 
     // Pad `bits` to the same length as the scalar field characteristic,
     // and pack them into its limbs.
@@ -372,23 +396,21 @@ pub(crate) fn scalar_bits_to_constant_length<
     let mut bits_padded = bits;
     bits_padded.append(&mut vec![Boolean::Constant(false); to_append]);
 
-    let scalar_limbs = 
-        bits_padded
+    let scalar_limbs = bits_padded
         .chunks(bits_per_limb)
         .enumerate()
-        .map(|(i,chunk)| 
-            {
-                // from_bits() assumes big endian vector of bits
-                let mut chunk_rev = chunk.to_vec();
-                chunk_rev.reverse();
-                let limb = FpGadget::<ConstraintF>::from_bits(
-                    cs.ns(|| format!("packing scalar limb {}", i)),
-                    &chunk_rev.to_vec()
-                )?;
-                
-                Ok(limb)   
-            }
-        ).collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
+        .map(|(i, chunk)| {
+            // from_bits() assumes big endian vector of bits
+            let mut chunk_rev = chunk.to_vec();
+            chunk_rev.reverse();
+            let limb = FpGadget::<ConstraintF>::from_bits(
+                cs.ns(|| format!("packing scalar limb {}", i)),
+                &chunk_rev.to_vec(),
+            )?;
+
+            Ok(limb)
+        })
+        .collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
 
     // We compute the sum over the limbs taking carries into account
     let mut sum_limbs_bits: Vec<Boolean> = Vec::with_capacity(ScalarF::size_in_bits() + 1); // LE
@@ -400,43 +422,43 @@ pub(crate) fn scalar_bits_to_constant_length<
         .into_iter()
         .zip(char_limbs.into_iter())
         .enumerate()
-        {
-            
-            if to_be_processed < bits_per_limb{
-                used_in_limb = to_be_processed;            
-            } else {
-                used_in_limb = bits_per_limb;
-            }
-            
-            // add the limb of the scalar with that of `MODULUS`
-            let mut sum_limb = scalar_limb.add_constant(
-                cs.ns(|| format!("scalar_limb + char_limb {}", i)),
-                &char_limb
-            )?;
-
-            // add the previous carry to the limb
-            sum_limb = sum_limb.conditionally_add_constant(
-                cs.ns(|| format!("add carry {}", i)),
-                &carry_bit,
-                ConstraintF::one(),
-            )?;
-            
-            // unpack `sum_limb` into its `used_in_limb + 1` many bits. 
-            let to_skip = <ConstraintF::BasePrimeField as PrimeField>::size_in_bits() - (used_in_limb + 1);
-            let mut sum_limb_bits = sum_limb.to_bits_with_length_restriction(
-                cs.ns(|| format!("sum_limb to_bits_with_length_restriction {}", i)),
-                to_skip
-            )?;
-            sum_limb_bits.reverse();
-            // The leading bit is the carry for the next significant limb
-            carry_bit = sum_limb_bits.pop().unwrap();
-
-            sum_limbs_bits.append(&mut sum_limb_bits);
-            to_be_processed -= used_in_limb;
+    {
+        if to_be_processed < bits_per_limb {
+            used_in_limb = to_be_processed;
+        } else {
+            used_in_limb = bits_per_limb;
         }
 
+        // add the limb of the scalar with that of `MODULUS`
+        let mut sum_limb = scalar_limb.add_constant(
+            cs.ns(|| format!("scalar_limb + char_limb {}", i)),
+            &char_limb,
+        )?;
+
+        // add the previous carry to the limb
+        sum_limb = sum_limb.conditionally_add_constant(
+            cs.ns(|| format!("add carry {}", i)),
+            &carry_bit,
+            ConstraintF::one(),
+        )?;
+
+        // unpack `sum_limb` into its `used_in_limb + 1` many bits.
+        let to_skip =
+            <ConstraintF::BasePrimeField as PrimeField>::size_in_bits() - (used_in_limb + 1);
+        let mut sum_limb_bits = sum_limb.to_bits_with_length_restriction(
+            cs.ns(|| format!("sum_limb to_bits_with_length_restriction {}", i)),
+            to_skip,
+        )?;
+        sum_limb_bits.reverse();
+        // The leading bit is the carry for the next significant limb
+        carry_bit = sum_limb_bits.pop().unwrap();
+
+        sum_limbs_bits.append(&mut sum_limb_bits);
+        to_be_processed -= used_in_limb;
+    }
+
     assert_eq!(to_be_processed, 0, "not all bits processed");
-    
+
     // The last carry is part of the result.
     sum_limbs_bits.push(carry_bit);
 
@@ -458,8 +480,7 @@ pub(crate) mod test {
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
-    >()
-    {
+    >() {
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
         let a: G = UniformRand::rand(&mut thread_rng());
@@ -517,8 +538,7 @@ pub(crate) mod test {
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
-    >()
-    {
+    >() {
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
         let a_native: G = UniformRand::rand(&mut thread_rng());
@@ -578,11 +598,7 @@ pub(crate) mod test {
     /// Tests the 'constant' length transformation of `scalar_bits_to_constant_length` against
     /// the result of 'native' big integer arithmetics.
     #[allow(dead_code)]
-    fn scalar_bits_to_constant_length_test<
-        ConstraintF: PrimeField,
-        G: Group,
-    >()
-    {
+    fn scalar_bits_to_constant_length_test<ConstraintF: PrimeField, G: Group>() {
         for _ in 0..30 {
             let mut cs = TestConstraintSystem::<ConstraintF>::new();
             let rng = &mut thread_rng();
@@ -590,7 +606,10 @@ pub(crate) mod test {
             let a = G::ScalarField::rand(rng);
             let mut a_bigint = a.into_repr();
             println!("scalar bigint: {}", a_bigint);
-            println!("modulus bigint: {}", <G::ScalarField as PrimeField>::Params::MODULUS);
+            println!(
+                "modulus bigint: {}",
+                <G::ScalarField as PrimeField>::Params::MODULUS
+            );
             // the 'native' addition of the scalar a and the scalar field modulus
             let carry = a_bigint.add_nocarry(&<G::ScalarField as PrimeField>::Params::MODULUS);
             println!("sum bigint: {}", a_bigint);
@@ -598,36 +617,52 @@ pub(crate) mod test {
             // prevent this.
             assert_eq!(carry, false, "add_nocarry overflow.");
 
-            // get the bits in little endian order. 
+            // get the bits in little endian order.
             // Note: `to_bits()` seems not to skip leading zeroes
             let mut native_result = a_bigint.to_bits();
             native_result.reverse();
 
             // Checking plausability of native sum
             let expected_len = <G::ScalarField as PrimeField>::size_in_bits() + 1;
-            assert_eq!(native_result[expected_len..], vec![false; native_result.len() - expected_len], "unexpected large native result");
+            assert_eq!(
+                native_result[expected_len..],
+                vec![false; native_result.len() - expected_len],
+                "unexpected large native result"
+            );
             assert!(
-                native_result[expected_len-1] == true ||
-                (native_result[expected_len-1] == false && native_result[expected_len-2] == true),
+                native_result[expected_len - 1]
+                    || (!native_result[expected_len - 1]
+                        && native_result[expected_len - 2]),
                 "unexpected value of native result"
             );
 
             // Alloc a vector of Boolean Gadgets with values according to the scalar bits, little endian.
-            let mut a_bits_gadget = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
+            let mut a_bits_gadget =
+                Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
             a_bits_gadget.reverse();
 
             // Compute the sum by means of the arithmetic circuit of `scalar_bits_to_constant_length()`
-            let gadget_result = crate::groups::scalar_bits_to_constant_length::<_, G::ScalarField, _>(
-                cs.ns(|| "a bits to constant length"), a_bits_gadget
-            )
+            let gadget_result =
+                crate::groups::scalar_bits_to_constant_length::<_, G::ScalarField, _>(
+                    cs.ns(|| "a bits to constant length"),
+                    a_bits_gadget,
+                )
                 .unwrap()
                 .into_iter()
                 .map(|b| b.get_value().unwrap())
                 .collect::<Vec<bool>>();
 
             // check equality with the native sum
-            assert_eq!(expected_len, gadget_result.len(), "Native and circuit length not equal");
-            assert_eq!(native_result[..expected_len], gadget_result, "Native and circuit value not equal");
+            assert_eq!(
+                expected_len,
+                gadget_result.len(),
+                "Native and circuit length not equal"
+            );
+            assert_eq!(
+                native_result[..expected_len],
+                gadget_result,
+                "Native and circuit value not equal"
+            );
 
             assert!(cs.is_satisfied());
         }
@@ -638,36 +673,44 @@ pub(crate) mod test {
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
-    >()
-    {
+    >() {
         let mut cs: TestConstraintSystem<ConstraintF> = TestConstraintSystem::<ConstraintF>::new();
         let rng = &mut thread_rng();
-    
+
         // Sample random base
         let g: G = UniformRand::rand(rng);
         let gg = GG::alloc(cs.ns(|| "generate_g"), || Ok(g)).unwrap();
-    
+
         // Sample random scalar
         let a = G::ScalarField::rand(rng);
-    
+
         // Alloc its bits on the circuit
         let mut a_bits = Vec::<Boolean>::alloc(cs.ns(|| "a bits"), || Ok(a.write_bits())).unwrap();
         a_bits.reverse();
-    
+
         // Variable base scalar multiplication
         let x = cs.num_constraints();
         let a_times_gg_vb = gg.mul_bits(cs.ns(|| "a * G"), a_bits.iter()).unwrap();
-        println!("Variable base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
-    
+        println!(
+            "Variable base SM exponent len {}, num_constraints: {}",
+            a_bits.len(),
+            cs.num_constraints() - x
+        );
+
         // Fixed base scalar multiplication
         let x = cs.num_constraints();
-        let a_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
-        println!("Fixed base SM exponent len {}, num_constraints: {}", a_bits.len(), cs.num_constraints() - x);
-    
+        let a_times_gg_fb =
+            GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
+        println!(
+            "Fixed base SM exponent len {}, num_constraints: {}",
+            a_bits.len(),
+            cs.num_constraints() - x
+        );
+
         // Compare with native results
         assert_eq!(a_times_gg_vb.get_value().unwrap(), g.mul(&a));
         assert_eq!(a_times_gg_fb.get_value().unwrap(), g.mul(&a));
-    
+
         assert!(cs.is_satisfied());
     }
 
@@ -676,8 +719,7 @@ pub(crate) mod test {
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
-    >()
-    {
+    >() {
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
         let rng = &mut thread_rng();
 
@@ -696,26 +738,43 @@ pub(crate) mod test {
         b_bits.reverse();
 
         //let ab_bits = Vec::<Boolean>::alloc(cs.ns(|| "ab bits"), ||Ok(ab.write_bits())).unwrap();
-        let mut a_plus_b_bits = Vec::<Boolean>::alloc(cs.ns(|| "a_plus_b bits"), || Ok(a_plus_b.write_bits())).unwrap();
+        let mut a_plus_b_bits =
+            Vec::<Boolean>::alloc(cs.ns(|| "a_plus_b bits"), || Ok(a_plus_b.write_bits())).unwrap();
         a_plus_b_bits.reverse();
 
         // Additivity test: a * G + b * G = (a + b) * G
         let a_times_gg_vb = gg.mul_bits(cs.ns(|| "a * G"), a_bits.iter()).unwrap();
-        let a_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
+        let a_times_gg_fb =
+            GG::mul_bits_fixed_base(&g, cs.ns(|| "fb a * G"), a_bits.as_slice()).unwrap();
 
         let b_times_gg_vb = gg.mul_bits(cs.ns(|| "b * G"), b_bits.iter()).unwrap();
-        let b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb b * G"), b_bits.as_slice()).unwrap();
+        let b_times_gg_fb =
+            GG::mul_bits_fixed_base(&g, cs.ns(|| "fb b * G"), b_bits.as_slice()).unwrap();
 
-        let a_plus_b_times_gg_vb = gg.mul_bits(cs.ns(|| "(a + b) * G"), a_plus_b_bits.iter()).unwrap();
-        let a_plus_b_times_gg_fb = GG::mul_bits_fixed_base(&g, cs.ns(|| "fb (a + b) * G"), a_plus_b_bits.as_slice()).unwrap();
+        let a_plus_b_times_gg_vb = gg
+            .mul_bits(cs.ns(|| "(a + b) * G"), a_plus_b_bits.iter())
+            .unwrap();
+        let a_plus_b_times_gg_fb =
+            GG::mul_bits_fixed_base(&g, cs.ns(|| "fb (a + b) * G"), a_plus_b_bits.as_slice())
+                .unwrap();
 
         a_times_gg_vb
-            .add(cs.ns(|| "a * G + b * G"), &b_times_gg_vb).unwrap()
-            .enforce_equal(cs.ns(|| "a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_vb).unwrap();
+            .add(cs.ns(|| "a * G + b * G"), &b_times_gg_vb)
+            .unwrap()
+            .enforce_equal(
+                cs.ns(|| "a * G + b * G = (a + b) * G"),
+                &a_plus_b_times_gg_vb,
+            )
+            .unwrap();
 
         a_times_gg_fb
-            .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb).unwrap()
-            .enforce_equal(cs.ns(|| "fb a * G + b * G = (a + b) * G"), &a_plus_b_times_gg_fb).unwrap();
+            .add(cs.ns(|| "fb a * G + b * G"), &b_times_gg_fb)
+            .unwrap()
+            .enforce_equal(
+                cs.ns(|| "fb a * G + b * G = (a + b) * G"),
+                &a_plus_b_times_gg_fb,
+            )
+            .unwrap();
         assert!(cs.is_satisfied());
     }
 
@@ -724,8 +783,7 @@ pub(crate) mod test {
         ConstraintF: Field,
         G: Group,
         GG: GroupGadget<G, ConstraintF, Value = G>,
-    >()
-    {
+    >() {
         for _ in 0..10 {
             mul_bits_native_test::<ConstraintF, G, GG>();
             mul_bits_additivity_test::<ConstraintF, G, GG>();

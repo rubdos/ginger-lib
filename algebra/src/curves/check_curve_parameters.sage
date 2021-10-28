@@ -1,5 +1,6 @@
 # The following Sage script check the consistency of the following curves parameters:
 #
+<<<<<<< HEAD
 #   1) P=(GENERATOR_X,GENERATOR_Y)      must belongs to the curve of equation E: y^2 = x^3 + Ax + B   
 #   2) P                                must have order equal to the MODULUS of the scalar field
 #   3) COFACTOR                         must be equal to Order(E)/Order(P)
@@ -8,6 +9,12 @@
 #   6) ENDO_SCALAR                      must be a cube root in the scalar field and satisfy ENDO_SCALAR * (X, Y) == (ENDO_COEFF * X, Y)        
 #   7) The intersection of the plane lattice spanned by {(1, ENDO_SCALAR), (0, SCALAR_FIELD_MODULUS)} with the square [-A,A]^2 must be empty,
 #       where A = 2^65 + 2^64 + 1.                         
+=======
+#   1) P=(GENERATOR_X,GENERATOR_Y)  must belongs to the curve of equation E: y^2 = x^3 + Ax + B   
+#   2) P                                must have order equal to the MODULUS of the scalar field
+#   3) COFACTOR                         must be equal to Order(E)/Order(P)
+#   4) COFACTOR_INV                     must be the inverse of COFACTOR in the scalar Field
+>>>>>>> development
 # Open Sage Shell in the corresponding folder and run the command 
 #       "sage check_curve_paramaters sage [file_path_curve] [file_path_basefield] [file_path_scalarfield]".
 
@@ -69,10 +76,17 @@ scalar_field_name = re.findall(pattern, readfile)[0]
 fn = "(?:" + base_field_name + "|" + scalar_field_name + ")" #fn = field name = "(:?Fr|Fq)". Useful declaration for the pattern
 
 #### Reading the big integers list and extracting names and values
+<<<<<<< HEAD
 pattern = "const\s+(\w+)[:\w\s]*=\s*field_new!\([\s\w,]*\(\s*\[" + "([0-9a-fA-Fxu\s,]+)\s*" + "\]\s*\)"
 big_int_ls = re.findall(pattern,readfile)    #####list of couples of the form ('[VARIABLE_NAME]',"[u64],..,[u64]")
 
 big_int_names = [b[0] for b in big_int_ls]
+=======
+pattern = "const\s+(\w+):\s*" + fn + "\s*=\s*field_new!\(\s*" + fn + "\s*,\s*BigInteger\d*\s*\(\s*\[" + "([0-9a-fA-Fxu\s,]+)\s*" + "\]\s*\)"
+big_int_ls = re.findall(pattern,readfile)    #####list of couples of the form ('[VARIABLE_NAME]',"[u64],..,[u64]")
+
+big_int_names = [b[0] for b in big_int_ls] 
+>>>>>>> development
 big_int_values = [BigInteger_to_number(b[1]) for b in big_int_ls]
 
 BigIntegerLen = BigInteger_len(big_int_ls[0][1])
@@ -167,6 +181,7 @@ else:
 if Fr(COFACTOR) * Fr(COFACTOR_INV) == Fr(SCALAR_FIELD_R):
     print("Correct. COFACTOR_INV is the inverse of COFACTOR in the the scalar field.")
 else:
+<<<<<<< HEAD
     print("WARNING! COFACTOR_INV IS NOT THE INVERSE OF COFACTOR IN THE SCALAR FIELD!")
 ####### Checking the correctness of ENDO_COEFF and ENDO_FACTOR ############
 endo_mul_is_used = False
@@ -224,3 +239,6 @@ if endo_mul_is_used:
         print("WARNING! WE CAN'T USE add_unsafe FOR endo_mul!")
 else:
     print("endo_mul is not used for this curve.")
+=======
+    print("WARNING! COFACTOR_INV IS NOT THE INVERSE OF COFACTOR IN THE SCALAR FIELD!")
+>>>>>>> development

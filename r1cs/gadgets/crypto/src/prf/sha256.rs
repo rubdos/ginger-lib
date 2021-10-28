@@ -2,12 +2,12 @@
 //! function.
 //! This is a port from the implementation in [Bellman](https://docs.rs/bellman/0.8.0/src/bellman/gadgets/sha256.rs.html#47-74)
 
+use algebra::PrimeField;
+use r1cs_core::{ConstraintSystem, SynthesisError};
 use r1cs_std::boolean::AllocatedBit;
-use r1cs_std::{Assignment, boolean::Boolean};
 use r1cs_std::eq::MultiEq;
 use r1cs_std::uint32::UInt32;
-use r1cs_core::{ConstraintSystem, SynthesisError};
-use algebra::PrimeField;
+use r1cs_std::{boolean::Boolean, Assignment};
 
 #[allow(clippy::unreadable_literal)]
 const ROUND_CONSTANTS: [u32; 64] = [
@@ -44,7 +44,10 @@ where
     )
 }
 
-pub fn sha256<ConstraintF, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
+pub fn sha256<ConstraintF, CS>(
+    mut cs: CS,
+    input: &[Boolean],
+) -> Result<Vec<Boolean>, SynthesisError>
 where
     ConstraintF: PrimeField,
     CS: ConstraintSystem<ConstraintF>,
@@ -137,7 +140,11 @@ where
     }
 
     impl Maybe {
-        fn compute<ConstraintF, CS, M>(self, cs: M, others: &[UInt32]) -> Result<UInt32, SynthesisError>
+        fn compute<ConstraintF, CS, M>(
+            self,
+            cs: M,
+            others: &[UInt32],
+        ) -> Result<UInt32, SynthesisError>
         where
             ConstraintF: PrimeField,
             CS: ConstraintSystem<ConstraintF>,
@@ -239,47 +246,34 @@ where
         &[current_hash_value[0].clone()],
     )?;
 
-    let h1 = UInt32::addmany(
-        cs.ns(|| "new h1"),
-        &[current_hash_value[1].clone(), b],
-    )?;
+    let h1 = UInt32::addmany(cs.ns(|| "new h1"), &[current_hash_value[1].clone(), b])?;
 
-    let h2 = UInt32::addmany(
-        cs.ns(|| "new h2"),
-        &[current_hash_value[2].clone(), c],
-    )?;
+    let h2 = UInt32::addmany(cs.ns(|| "new h2"), &[current_hash_value[2].clone(), c])?;
 
-    let h3 = UInt32::addmany(
-        cs.ns(|| "new h3"),
-        &[current_hash_value[3].clone(), d],
-    )?;
+    let h3 = UInt32::addmany(cs.ns(|| "new h3"), &[current_hash_value[3].clone(), d])?;
 
     let h4 = e.compute(
         cs.ns(|| "deferred h4 computation"),
         &[current_hash_value[4].clone()],
     )?;
 
-    let h5 = UInt32::addmany(
-        cs.ns(|| "new h5"),
-        &[current_hash_value[5].clone(), f],
-    )?;
+    let h5 = UInt32::addmany(cs.ns(|| "new h5"), &[current_hash_value[5].clone(), f])?;
 
-    let h6 = UInt32::addmany(
-        cs.ns(|| "new h6"),
-        &[current_hash_value[6].clone(), g],
-    )?;
+    let h6 = UInt32::addmany(cs.ns(|| "new h6"), &[current_hash_value[6].clone(), g])?;
 
-    let h7 = UInt32::addmany(
-        cs.ns(|| "new h7"),
-        &[current_hash_value[7].clone(), h],
-    )?;
+    let h7 = UInt32::addmany(cs.ns(|| "new h7"), &[current_hash_value[7].clone(), h])?;
 
     Ok(vec![h0, h1, h2, h3, h4, h5, h6, h7])
 }
 
 /// Compute the `ch` value `(a and b) xor ((not a) and c)`
 /// during SHA256.
-pub fn sha256_ch_uint32<ConstraintF, CS>(cs: CS, a: &UInt32, b: &UInt32, c: &UInt32) -> Result<UInt32, SynthesisError>
+pub fn sha256_ch_uint32<ConstraintF, CS>(
+    cs: CS,
+    a: &UInt32,
+    b: &UInt32,
+    c: &UInt32,
+) -> Result<UInt32, SynthesisError>
 where
     ConstraintF: PrimeField,
     CS: ConstraintSystem<ConstraintF>,
@@ -296,7 +290,12 @@ where
 
 /// Compute the `maj` value (a and b) xor (a and c) xor (b and c)
 /// during SHA256.
-pub fn sha256_maj_uint32<ConstraintF, CS>(cs: CS, a: &UInt32, b: &UInt32, c: &UInt32) -> Result<UInt32, SynthesisError>
+pub fn sha256_maj_uint32<ConstraintF, CS>(
+    cs: CS,
+    a: &UInt32,
+    b: &UInt32,
+    c: &UInt32,
+) -> Result<UInt32, SynthesisError>
 where
     ConstraintF: PrimeField,
     CS: ConstraintSystem<ConstraintF>,
@@ -310,7 +309,6 @@ where
         |cs, i, a, b, c| sha256_maj_boolean(cs.ns(|| format!("maj {}", i)), a, b, c),
     )
 }
-
 
 pub fn triop<ConstraintF, CS, F, U>(
     mut cs: CS,
@@ -378,7 +376,7 @@ where
             // (false) xor (c)
             // equals
             // c
-            return Ok(c.clone());
+            return Ok(*c);
         }
         (a, &Boolean::Constant(false), c) => {
             // If b is false
@@ -432,9 +430,13 @@ where
     let ch = cs.alloc(
         || "ch",
         || {
-            ch_value
-                .get()
-                .map(|v| if v { ConstraintF::one() } else { ConstraintF::zero() })
+            ch_value.get().map(|v| {
+                if v {
+                    ConstraintF::one()
+                } else {
+                    ConstraintF::zero()
+                }
+            })
         },
     )?;
 
@@ -535,9 +537,13 @@ where
     let maj = cs.alloc(
         || "maj",
         || {
-            maj_value
-                .get()
-                .map(|v| if v { ConstraintF::one() } else { ConstraintF::zero() })
+            maj_value.get().map(|v| {
+                if v {
+                    ConstraintF::one()
+                } else {
+                    ConstraintF::zero()
+                }
+            })
         },
     )?;
 
@@ -573,12 +579,13 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use r1cs_std::{alloc::AllocGadget, boolean::AllocatedBit, test_constraint_system::TestConstraintSystem};
     use algebra::fields::bls12_381::Fr;
- 
+    use r1cs_std::{
+        alloc::AllocGadget, boolean::AllocatedBit, test_constraint_system::TestConstraintSystem,
+    };
+
     use rand::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
-
 
     #[test]
     /// Tests satisfiability of the circuit for the compression function, choosing a random
@@ -595,10 +602,9 @@ mod test {
         let input_bits: Vec<_> = (0..512)
             .map(|i| {
                 Boolean::from(
-                    AllocatedBit::alloc(
-                        cs.ns(|| format!("input bit {}", i)),
-                        || Ok(rng.next_u32() % 2 != 0),
-                    )
+                    AllocatedBit::alloc(cs.ns(|| format!("input bit {}", i)), || {
+                        Ok(rng.next_u32() % 2 != 0)
+                    })
                     .unwrap(),
                 )
             })
@@ -610,63 +616,63 @@ mod test {
         assert_eq!(cs.num_constraints() - 512, 25840);
     }
 
-    /// Tests circuit satisfiability of the compression function on a single block 
+    /// Tests circuit satisfiability of the compression function on a single block
     /// including padding
-     #[test]
-     fn native_test() {
-         use sha2::{Digest, Sha256};
+    #[test]
+    fn native_test() {
+        use sha2::{Digest, Sha256};
 
-         let mut rng = XorShiftRng::from_seed([
-             0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
-             0xbc, 0xe5,
-         ]);
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
 
-         // Do the test for all inputs of bit length a multiple of 8
-         for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
-             let mut h = Sha256::new();
-             let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
-             h.update(&data);
-             let hash_result = h.finalize();
+        // Do the test for all inputs of bit length a multiple of 8
+        for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
+            let mut h = Sha256::new();
+            let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
+            h.update(&data);
+            let hash_result = h.finalize();
 
-             let mut cs = TestConstraintSystem::<Fr>::new();
-             let mut input_bits = vec![];
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut input_bits = vec![];
 
-             for (byte_i, input_byte) in data.into_iter().enumerate() {
-                 for bit_i in (0..8).rev() {
-                     let cs = cs.ns(|| format!("input bit {} {}", byte_i, bit_i));
+            for (byte_i, input_byte) in data.into_iter().enumerate() {
+                for bit_i in (0..8).rev() {
+                    let cs = cs.ns(|| format!("input bit {} {}", byte_i, bit_i));
 
-                     input_bits.push(
-                         AllocatedBit::alloc(cs, || Ok((input_byte >> bit_i) & 1u8 == 1u8))
-                             .unwrap()
-                             .into(),
-                     );
-                 }
-             }
+                    input_bits.push(
+                        AllocatedBit::alloc(cs, || Ok((input_byte >> bit_i) & 1u8 == 1u8))
+                            .unwrap()
+                            .into(),
+                    );
+                }
+            }
 
-             let r = sha256(&mut cs, &input_bits).unwrap();
+            let r = sha256(&mut cs, &input_bits).unwrap();
 
-             assert!(cs.is_satisfied());
+            assert!(cs.is_satisfied());
 
-             let mut s = hash_result
-                 .iter()
-                 .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8));
+            let mut s = hash_result
+                .iter()
+                .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8));
 
-             for b in r {
-                 match b {
-                     Boolean::Is(b) => {
-                         assert!(s.next().unwrap() == b.get_value().unwrap());
-                     }
-                     Boolean::Not(b) => {
-                         assert!(s.next().unwrap() != b.get_value().unwrap());
-                     }
-                     Boolean::Constant(b) => {
-                         assert!(input_len == 0);
-                         assert!(s.next().unwrap() == b);
-                     }
-                 }
-             }
-         }
-     }
+            for b in r {
+                match b {
+                    Boolean::Is(b) => {
+                        assert!(s.next().unwrap() == b.get_value().unwrap());
+                    }
+                    Boolean::Not(b) => {
+                        assert!(s.next().unwrap() != b.get_value().unwrap());
+                    }
+                    Boolean::Constant(b) => {
+                        assert!(input_len == 0);
+                        assert!(s.next().unwrap() == b);
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn compare_against_test_vectors() {
@@ -683,15 +689,14 @@ mod test {
             "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
             "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1",
             "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
-            "ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c"
+            "ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c",
         ];
 
         for (test_input, test_output) in test_inputs.iter().zip(test_outputs.iter()) {
-
             let mut cs = TestConstraintSystem::<Fr>::new();
             let mut input_bits = vec![];
 
-            for (byte_i, input_byte) in test_input.as_bytes().into_iter().enumerate() {
+            for (byte_i, input_byte) in test_input.as_bytes().iter().enumerate() {
                 for bit_i in (0..8).rev() {
                     let cs = cs.ns(|| format!("input bit {} {}", byte_i, bit_i));
 
@@ -722,7 +727,7 @@ mod test {
                         assert!(s.next().unwrap() != b.get_value().unwrap());
                     }
                     Boolean::Constant(b) => {
-                        assert!(input_bits.len() == 0);
+                        assert!(input_bits.is_empty());
                         assert!(s.next().unwrap() == b);
                     }
                 }

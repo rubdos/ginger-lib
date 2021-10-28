@@ -200,7 +200,7 @@ impl R1CStoQAP {
             .zip(c)
             .for_each(|(ab_i, c_i)| *ab_i -= &c_i);
 
-        // compute quotient polynomial (a(Z)*b(Z)-c(Z))/v_H(Z) 
+        // compute quotient polynomial (a(Z)*b(Z)-c(Z))/v_H(Z)
         // from the coset evaluations
         // Note: if a(Z)*b(Z)-c(Z) is not zero on H, then this way
         // of computing the quotient might result in a polynomial
@@ -212,7 +212,7 @@ impl R1CStoQAP {
         // However, if a*b-c != 0 over H then the prover supplied
         // a variable assignment not satisfying circuit constraints.
         if ab.pop().unwrap() != zero {
-            return Err(SynthesisError::Unsatisfiable)
+            return Err(SynthesisError::Unsatisfiable);
         }
         Ok(ab)
     }

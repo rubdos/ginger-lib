@@ -1,15 +1,10 @@
-use algebra::{
-    fields::{
-        secp256k1::Fq as secp256k1Fq,
-        bn_382::Fr as BN382Fr,
-    },
-    curves::secp256k1::Secp256k1Parameters,
+use crate::groups::{
+    nonnative::short_weierstrass_jacobian::GroupAffineNonNativeGadget,
+    test::{group_test_with_incomplete_add, mul_bits_native_test},
 };
-use crate::{
-    groups::{
-        nonnative::short_weierstrass_jacobian::GroupAffineNonNativeGadget,
-        test::{group_test_with_incomplete_add, mul_bits_native_test},
-    },
+use algebra::{
+    curves::secp256k1::Secp256k1Parameters,
+    fields::{bn_382::Fr as BN382Fr, secp256k1::Fq as secp256k1Fq},
 };
 
 macro_rules! nonnative_test_individual {

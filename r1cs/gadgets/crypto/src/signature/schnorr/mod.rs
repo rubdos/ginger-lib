@@ -79,11 +79,11 @@ where
             .flat_map(|b| b.into_bits_le())
             .collect::<Vec<_>>();
         let rand_pk = {
-            let base_pow_rand = base.mul_bits(
-                &mut cs.ns(|| "Compute randomizer"),
-                randomness.iter(),
-            )?;
-            public_key.pub_key.add(cs.ns(|| "Randomize pk"), &base_pow_rand)
+            let base_pow_rand =
+                base.mul_bits(&mut cs.ns(|| "Compute randomizer"), randomness.iter())?;
+            public_key
+                .pub_key
+                .add(cs.ns(|| "Randomize pk"), &base_pow_rand)
         }?;
         Ok(SchnorrSigGadgetPk {
             pub_key: rand_pk,

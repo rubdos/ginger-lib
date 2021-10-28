@@ -252,20 +252,24 @@ impl VariableBaseMSM {
 
         #[cfg(feature = "bn_382")]
         if std::any::TypeId::of::<G>() == std::any::TypeId::of::<crate::curves::bn_382::G1Affine>()
-        || std::any::TypeId::of::<G>() == std::any::TypeId::of::<crate::curves::bn_382::G2Affine>()
-        || std::any::TypeId::of::<G>() == std::any::TypeId::of::<crate::curves::bn_382::g::Affine>()
+            || std::any::TypeId::of::<G>()
+                == std::any::TypeId::of::<crate::curves::bn_382::G2Affine>()
+            || std::any::TypeId::of::<G>()
+                == std::any::TypeId::of::<crate::curves::bn_382::g::Affine>()
         {
             return match scalars_len {
                 scalars_len if scalars_len <= 1 << 16 => c,
                 scalars_len if scalars_len <= 1 << 21 => 12,
                 scalars_len if scalars_len <= 1 << 23 => 16,
-                _ => c
-            }
+                _ => c,
+            };
         }
 
         #[cfg(feature = "tweedle")]
-        if std::any::TypeId::of::<G>() == std::any::TypeId::of::<crate::curves::tweedle::dee::Affine>()
-        || std::any::TypeId::of::<G>() == std::any::TypeId::of::<crate::curves::tweedle::dum::Affine>()
+        if std::any::TypeId::of::<G>()
+            == std::any::TypeId::of::<crate::curves::tweedle::dee::Affine>()
+            || std::any::TypeId::of::<G>()
+                == std::any::TypeId::of::<crate::curves::tweedle::dum::Affine>()
         {
             return 11;
         }
@@ -277,8 +281,8 @@ impl VariableBaseMSM {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::Rng;
     use crate::UniformRand;
+    use rand::Rng;
 
     #[allow(dead_code)]
     fn naive_var_base_msm<G: AffineCurve>(
@@ -294,10 +298,7 @@ mod test {
     }
 
     #[allow(dead_code)]
-    fn test_all_variants<G: ProjectiveCurve, R: Rng>(
-        samples: usize,
-        rng: &mut R,
-    ) {
+    fn test_all_variants<G: ProjectiveCurve, R: Rng>(samples: usize, rng: &mut R) {
         let v = (0..samples)
             .map(|_| G::ScalarField::rand(rng).into_repr())
             .collect::<Vec<_>>();
@@ -333,9 +334,9 @@ mod test {
     #[cfg(feature = "bn_382")]
     #[test]
     fn test_all_variants_bn382() {
+        use crate::curves::bn_382::g::Projective as Bn382GProjective;
         use crate::curves::bn_382::G1Projective as Bn382G1Projective;
         use crate::curves::bn_382::G2Projective as Bn382G2Projective;
-        use crate::curves::bn_382::g::Projective as Bn382GProjective;
         use rand::SeedableRng;
 
         let rng = &mut rand_xorshift::XorShiftRng::seed_from_u64(234872845u64);

@@ -31,7 +31,7 @@ impl FpParameters for FrParameters {
 
     const TWO_ADICITY: u32 = 6;
 
-    /// (p - 1)/2 = 
+    /// (p - 1)/2 =
     /// = 57896044618658097711785492504343953926418782139537452191302581570759080747168
     const MODULUS_MINUS_ONE_DIV_TWO: BigInteger = BigInteger([
         0xdfe92f46681b20a0,
@@ -40,8 +40,8 @@ impl FpParameters for FrParameters {
         0x7fffffffffffffff,
         0x0,
     ]);
-    
-    /// T = (p - 1)/2^TWO_ADICITY = 
+
+    /// T = (p - 1)/2^TWO_ADICITY =
     /// = 1809251394333065553493296640760748560200586941860545380978205674086221273349
     const T: BigInteger = BigInteger([
         0xeeff497a3340d905,
@@ -51,7 +51,7 @@ impl FpParameters for FrParameters {
         0x0,
     ]);
 
-    /// (T - 1) / 2 = 
+    /// (T - 1) / 2 =
     /// = 904632097166532776746648320380374280100293470930272690489102837043110636674
     const T_MINUS_ONE_DIV_TWO: BigInteger = BigInteger([
         0x777fa4bd19a06c82,
@@ -61,7 +61,7 @@ impl FpParameters for FrParameters {
         0x0,
     ]);
 
-    /// R = 2^320 mod q = 
+    /// R = 2^320 mod q =
     /// = 7976748203231275684456616952498544216114824026705293737984
     const R: BigInteger = BigInteger([
         0x0000000000000000,
@@ -100,5 +100,4 @@ impl FpParameters for FrParameters {
         0xd3d93fa528627010,
         0x0,
     ]);
-
 }
