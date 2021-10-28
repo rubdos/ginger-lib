@@ -1,8 +1,8 @@
-use std::marker::PhantomData;
 use algebra::Field;
 use radix_trie::Trie;
+use std::marker::PhantomData;
 
-use crate::{Index, Variable, LinearCombination, SynthesisError};
+use crate::{Index, LinearCombination, SynthesisError, Variable};
 
 /// Represents a constraint system which can have new variables
 /// allocated and constrains between them formed.
@@ -21,36 +21,36 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
     /// given `annotation` function is invoked in testing contexts in order
     /// to derive a unique name for this variable in the current namespace.
     fn alloc<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>;
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>;
 
     /// Allocate a public variable in the constraint system. The provided
     /// function is used to determine the assignment of the variable.
     fn alloc_input<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>;
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>;
 
     /// Enforce that `A` * `B` = `C`. The `annotation` function is invoked in
     /// testing contexts in order to derive a unique name for the constraint
     /// in the current namespace.
     fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
-        where
-            A: FnOnce() -> AR,
-            AR: Into<String>,
-            LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>;
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>;
 
     /// Create a new (sub)namespace and enter into it. Not intended
     /// for downstream use; use `namespace` instead.
     fn push_namespace<NR, N>(&mut self, name_fn: N)
-        where
-            NR: Into<String>,
-            N: FnOnce() -> NR;
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR;
 
     /// Exit out of the existing namespace. Not intended for
     /// downstream use; use `namespace` instead.
@@ -62,9 +62,9 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
 
     /// Begin a namespace for this constraint system.
     fn ns<'a, NR, N>(&'a mut self, name_fn: N) -> Namespace<'a, F, Self::Root>
-        where
-            NR: Into<String>,
-            N: FnOnce() -> NR,
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         self.get_root().push_namespace(name_fn);
 
@@ -73,7 +73,6 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
 
     /// Output the number of constraints in the system.
     fn num_constraints(&self) -> usize;
-
 }
 
 /// Defines debugging functionalities for a constraint system, which allow to verify which
@@ -158,10 +157,7 @@ struct DebugInfo<F: Field> {
 impl<F: Field> DebugInfo<F> {
     fn new() -> Self {
         let mut map = Trie::new();
-        map.insert(
-            "ONE".into(),
-            NamedObject::Var(ConstraintSystem::<F>::one()),
-        );
+        map.insert("ONE".into(), NamedObject::Var(ConstraintSystem::<F>::one()));
         DebugInfo {
             named_objects: map,
             current_namespace: vec![],
@@ -170,9 +166,9 @@ impl<F: Field> DebugInfo<F> {
         }
     }
     fn push_namespace<A, AR>(&mut self, name: A)
-        where
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         let name = name().into();
         self.add_named_object(NamedObject::Namespace, || name.clone());
@@ -182,15 +178,15 @@ impl<F: Field> DebugInfo<F> {
         assert!(self.current_namespace.pop().is_some());
     }
     fn add_named_object<A, AR>(&mut self, obj: NamedObject, name: A)
-        where
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         let path = self.compute_path(name().into());
         match obj {
             NamedObject::Constraint(_) => {
                 self.constraint_names.push(path.clone());
-            },
+            }
             _ => {}
         }
         self.set_named_obj(path, obj);
@@ -250,17 +246,18 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     }
     #[inline]
     fn alloc<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         let index = self.num_aux;
         self.num_aux += 1;
         let var = Variable::new_unchecked(Index::Aux(index));
 
         if self.is_in_debug_mode() {
-            self.debug_info_as_mut().add_named_object(NamedObject::Var(var.clone()), annotation);
+            self.debug_info_as_mut()
+                .add_named_object(NamedObject::Var(var.clone()), annotation);
         }
 
         if !self.is_in_setup_mode() {
@@ -271,17 +268,18 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     }
     #[inline]
     fn alloc_input<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         let index = self.num_inputs;
         self.num_inputs += 1;
         let var = Variable::new_unchecked(Index::Input(index));
 
         if self.is_in_debug_mode() {
-            self.debug_info_as_mut().add_named_object(NamedObject::Var(var.clone()), annotation);
+            self.debug_info_as_mut()
+                .add_named_object(NamedObject::Var(var.clone()), annotation);
         }
 
         if !self.is_in_setup_mode() {
@@ -292,16 +290,17 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     }
     #[inline]
     fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
-        where
-            A: FnOnce() -> AR,
-            AR: Into<String>,
-            LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
     {
         if self.is_in_debug_mode() {
             let index = self.num_constraints;
-            self.debug_info_as_mut().add_named_object(NamedObject::Constraint(index), annotation);
+            self.debug_info_as_mut()
+                .add_named_object(NamedObject::Constraint(index), annotation);
         }
 
         if self.should_construct_matrices() {
@@ -328,9 +327,9 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
         self.num_constraints += 1;
     }
     fn push_namespace<NR, N>(&mut self, name_fn: N)
-        where
-            NR: Into<String>,
-            N: FnOnce() -> NR
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         if self.is_in_debug_mode() {
             self.debug_info_as_mut().push_namespace(name_fn);
@@ -350,7 +349,7 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
 }
 
 impl<F: Field> ConstraintSystemDebugger<F> for ConstraintSystem<F> {
-    fn which_is_unsatisfied(& self) -> Option<&str> {
+    fn which_is_unsatisfied(&self) -> Option<&str> {
         for i in 0..self.num_constraints {
             let mut a = Self::eval_lc(&self.at[i], &self.input_assignment, &self.aux_assignment);
             let b = Self::eval_lc(&self.bt[i], &self.input_assignment, &self.aux_assignment);
@@ -365,8 +364,7 @@ impl<F: Field> ConstraintSystemDebugger<F> for ConstraintSystem<F> {
     }
 
     fn set(&mut self, path: &str, to: F) {
-        match self.debug_info_as_mut().named_objects.get(path)
-        {
+        match self.debug_info_as_mut().named_objects.get(path) {
             Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
                 Index::Input(index) => self.input_assignment[index] = to,
                 Index::Aux(index) => self.aux_assignment[index] = to,
@@ -434,11 +432,15 @@ impl<F: Field> ConstraintSystem<F> {
     }
 
     fn debug_info_as_mut(&mut self) -> &mut DebugInfo<F> {
-       self.debug_info.as_mut().expect("only available in Debug mode.")
+        self.debug_info
+            .as_mut()
+            .expect("only available in Debug mode.")
     }
 
     fn debug_info_as_ref(&self) -> &DebugInfo<F> {
-        self.debug_info.as_ref().expect("only available in Debug mode.")
+        self.debug_info
+            .as_ref()
+            .expect("only available in Debug mode.")
     }
 
     fn push_constraints(
@@ -453,11 +455,7 @@ impl<F: Field> ConstraintSystem<F> {
             }
         }
     }
-    fn eval_lc(
-        terms: &[(F, Index)],
-        inputs: &[F],
-        aux: &[F],
-    ) -> F {
+    fn eval_lc(terms: &[(F, Index)], inputs: &[F], aux: &[F]) -> F {
         let mut acc = F::zero();
 
         for &(ref coeff, idx) in terms {
@@ -484,10 +482,15 @@ pub struct Namespace<'a, F: Field, CS: ConstraintSystemAbstract<F>>(&'a mut CS, 
 /// both CRS generation and for proving.
 pub trait ConstraintSynthesizer<F: Field> {
     /// Drives generation of new constraints inside `CS`.
-    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(self, cs: &mut CS) -> Result<(), SynthesisError>;
+    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(), SynthesisError>;
 }
 
-impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for Namespace<'_, F, CS> {
+impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F>
+    for Namespace<'_, F, CS>
+{
     type Root = CS::Root;
 
     #[inline]
@@ -497,32 +500,32 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
 
     #[inline]
     fn alloc<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         self.0.alloc(annotation, f)
     }
 
     #[inline]
     fn alloc_input<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         self.0.alloc_input(annotation, f)
     }
 
     #[inline]
     fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
-        where
-            A: FnOnce() -> AR,
-            AR: Into<String>,
-            LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
     {
         self.0.enforce(annotation, a, b, c)
     }
@@ -533,9 +536,9 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
 
     #[inline]
     fn push_namespace<NR, N>(&mut self, _: N)
-        where
-            NR: Into<String>,
-            N: FnOnce() -> NR,
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         panic!("only the root's push_namespace should be called");
     }
@@ -556,15 +559,23 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     }
 }
 
-impl<F: Field, CS: ConstraintSystemAbstract<F> + ConstraintSystemDebugger<F>> ConstraintSystemDebugger<F> for Namespace<'_, F, CS> {
+impl<F: Field, CS: ConstraintSystemAbstract<F> + ConstraintSystemDebugger<F>>
+    ConstraintSystemDebugger<F> for Namespace<'_, F, CS>
+{
     #[inline]
-    fn which_is_unsatisfied(&self) -> Option<&str> { self.0.which_is_unsatisfied() }
+    fn which_is_unsatisfied(&self) -> Option<&str> {
+        self.0.which_is_unsatisfied()
+    }
 
     #[inline]
-    fn set(&mut self, path: &str, to: F) { self.0.set(path, to); }
+    fn set(&mut self, path: &str, to: F) {
+        self.0.set(path, to);
+    }
 
     #[inline]
-    fn get(&mut self, path: &str) -> F { self.0.get(path) }
+    fn get(&mut self, path: &str) -> F {
+        self.0.get(path)
+    }
 }
 
 impl<F: Field, CS: ConstraintSystemAbstract<F>> Drop for Namespace<'_, F, CS> {
@@ -586,41 +597,41 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
 
     #[inline]
     fn alloc<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         (**self).alloc(annotation, f)
     }
 
     #[inline]
     fn alloc_input<FN, A, AR>(&mut self, annotation: A, f: FN) -> Result<Variable, SynthesisError>
-        where
-            FN: FnOnce() -> Result<F, SynthesisError>,
-            A: FnOnce() -> AR,
-            AR: Into<String>,
+    where
+        FN: FnOnce() -> Result<F, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         (**self).alloc_input(annotation, f)
     }
 
     #[inline]
     fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
-        where
-            A: FnOnce() -> AR,
-            AR: Into<String>,
-            LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
-            LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LB: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
+        LC: FnOnce(LinearCombination<F>) -> LinearCombination<F>,
     {
         (**self).enforce(annotation, a, b, c)
     }
 
     #[inline]
     fn push_namespace<NR, N>(&mut self, name_fn: N)
-        where
-            NR: Into<String>,
-            N: FnOnce() -> NR,
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         (**self).push_namespace(name_fn)
     }
@@ -641,13 +652,21 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     }
 }
 
-impl<F: Field, CS: ConstraintSystemAbstract<F> + ConstraintSystemDebugger<F>> ConstraintSystemDebugger<F> for &mut CS {
+impl<F: Field, CS: ConstraintSystemAbstract<F> + ConstraintSystemDebugger<F>>
+    ConstraintSystemDebugger<F> for &mut CS
+{
     #[inline]
-    fn which_is_unsatisfied(&self) -> Option<&str> { (**self).which_is_unsatisfied() }
+    fn which_is_unsatisfied(&self) -> Option<&str> {
+        (**self).which_is_unsatisfied()
+    }
 
     #[inline]
-    fn set(&mut self, path: &str, to: F) { (**self).set(path, to); }
+    fn set(&mut self, path: &str, to: F) {
+        (**self).set(path, to);
+    }
 
     #[inline]
-    fn get(&mut self, path: &str) -> F { (**self).get(path) }
+    fn get(&mut self, path: &str) -> F {
+        (**self).get(path)
+    }
 }

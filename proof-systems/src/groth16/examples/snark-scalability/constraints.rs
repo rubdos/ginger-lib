@@ -1,10 +1,12 @@
 use algebra::Field;
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, LinearCombination, SynthesisError};
+use r1cs_core::{
+    ConstraintSynthesizer, ConstraintSystemAbstract, LinearCombination, SynthesisError,
+};
 use std::marker::PhantomData;
 
 pub struct Benchmark<F: Field> {
     num_constraints: usize,
-    _engine:         PhantomData<F>,
+    _engine: PhantomData<F>,
 }
 
 impl<F: Field> Benchmark<F> {

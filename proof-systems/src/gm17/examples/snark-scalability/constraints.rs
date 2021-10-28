@@ -1,10 +1,12 @@
 use algebra::Field;
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, LinearCombination, SynthesisError};
+use r1cs_core::{
+    ConstraintSynthesizer, ConstraintSystemAbstract, LinearCombination, SynthesisError,
+};
 use std::marker::PhantomData;
 
 pub struct Benchmark<F: Field> {
     num_constraints: usize,
-    _engine:         PhantomData<F>,
+    _engine: PhantomData<F>,
 }
 
 impl<F: Field> Benchmark<F> {
@@ -17,7 +19,10 @@ impl<F: Field> Benchmark<F> {
 }
 
 impl<F: Field> ConstraintSynthesizer<F> for Benchmark<F> {
-    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(), SynthesisError> {
         let mut assignments = Vec::new();
 
         let mut a_val = F::one();

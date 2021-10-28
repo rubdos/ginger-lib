@@ -1,7 +1,7 @@
 use algebra::fft::domain::get_best_evaluation_domain;
 use algebra::{Field, PairingEngine};
 
-use r1cs_core::{Index, SynthesisError, ConstraintSystem};
+use r1cs_core::{ConstraintSystem, Index, SynthesisError};
 
 use rayon::prelude::*;
 use std::ops::{AddAssign, SubAssign};
@@ -233,7 +233,9 @@ impl R1CStoSAP {
         domain.ifft_in_place(&mut c);
         domain.coset_fft_in_place(&mut c);
 
-        aa.par_iter_mut().zip(c).for_each(|(aa_i, c_i)| *aa_i -= &c_i);
+        aa.par_iter_mut()
+            .zip(c)
+            .for_each(|(aa_i, c_i)| *aa_i -= &c_i);
 
         domain.divide_by_vanishing_poly_on_coset_in_place(&mut aa);
         domain.coset_ifft_in_place(&mut aa);

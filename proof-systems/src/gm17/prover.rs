@@ -1,20 +1,15 @@
 use rand::Rng;
 use rayon::prelude::*;
 
-use algebra::{
-    UniformRand, AffineCurve, PairingEngine, PrimeField, ProjectiveCurve,
-};
 use algebra::msm::VariableBaseMSM;
+use algebra::{AffineCurve, PairingEngine, PrimeField, ProjectiveCurve, UniformRand};
 
-use crate::gm17::{Parameters, Proof};
 use crate::gm17::r1cs_to_sap::R1CStoSAP;
+use crate::gm17::{Parameters, Proof};
 
-use r1cs_core::{ConstraintSynthesizer, SynthesisError, ConstraintSystem, SynthesisMode};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError, SynthesisMode};
 
-use std::{
-    ops::AddAssign,
-    sync::Arc,
-};
+use std::{ops::AddAssign, sync::Arc};
 
 pub fn create_random_proof<E, C, R>(
     circuit: C,
@@ -45,7 +40,9 @@ where
     C: ConstraintSynthesizer<E::Fr>,
 {
     let prover_time = start_timer!(|| "Prover");
-    let mode = SynthesisMode::Prove{construct_matrices: true};
+    let mode = SynthesisMode::Prove {
+        construct_matrices: true,
+    };
     let mut prover = ConstraintSystem::<E::Fr>::new(mode);
 
     // Synthesize the circuit.

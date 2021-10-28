@@ -58,11 +58,12 @@ pub mod to_field_gadget_vec;
 pub mod prelude {
     pub use crate::{
         alloc::*,
-        bits::{boolean::Boolean, uint32::UInt32, uint8::UInt8, ToBitsGadget, FromBitsGadget, ToBytesGadget},
-        eq::*,
-        fields::{
-            FieldGadget, quadratic_extension::*, cubic_extension::*,
+        bits::{
+            boolean::Boolean, uint32::UInt32, uint8::UInt8, FromBitsGadget, ToBitsGadget,
+            ToBytesGadget,
         },
+        eq::*,
+        fields::{cubic_extension::*, quadratic_extension::*, FieldGadget},
         groups::GroupGadget,
         pairing::PairingGadget,
         select::*,
@@ -86,5 +87,8 @@ impl<T> Assignment<T> for Option<T> {
 }
 
 pub trait FromGadget<T, ConstraintF: Field>: Sized {
-    fn from<CS: ConstraintSystemAbstract<ConstraintF>>(other: T, cs: CS) -> Result<Self, SynthesisError>;
+    fn from<CS: ConstraintSystemAbstract<ConstraintF>>(
+        other: T,
+        cs: CS,
+    ) -> Result<Self, SynthesisError>;
 }

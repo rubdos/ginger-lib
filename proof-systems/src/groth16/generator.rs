@@ -1,12 +1,8 @@
-use algebra::{groups::Group, Field, PairingEngine, PrimeField, ProjectiveCurve, UniformRand};
+use algebra::fft::domain::{get_best_evaluation_domain, sample_element_outside_domain};
 use algebra::msm::FixedBaseMSM;
-use algebra::fft::domain::{
-    get_best_evaluation_domain, sample_element_outside_domain
-};
+use algebra::{groups::Group, Field, PairingEngine, PrimeField, ProjectiveCurve, UniformRand};
 
-use r1cs_core::{
-    ConstraintSynthesizer, ConstraintSystem, SynthesisError, SynthesisMode,
-};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError, SynthesisMode};
 use rand::Rng;
 use rayon::prelude::*;
 
@@ -18,10 +14,10 @@ pub fn generate_random_parameters<E, C, R>(
     circuit: C,
     rng: &mut R,
 ) -> Result<Parameters<E>, SynthesisError>
-    where
-        E: PairingEngine,
-        C: ConstraintSynthesizer<E::Fr>,
-        R: Rng,
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
+    R: Rng,
 {
     let alpha = E::Fr::rand(rng);
     let beta = E::Fr::rand(rng);
@@ -43,10 +39,10 @@ pub fn generate_parameters<E, C, R>(
     delta: E::Fr,
     rng: &mut R,
 ) -> Result<Parameters<E>, SynthesisError>
-    where
-        E: PairingEngine,
-        C: ConstraintSynthesizer<E::Fr>,
-        R: Rng,
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
+    R: Rng,
 {
     let mut assembly = ConstraintSystem::<E::Fr>::new(SynthesisMode::Setup);
 
@@ -187,8 +183,8 @@ pub fn generate_parameters<E, C, R>(
 
     let vk = VerifyingKey::<E> {
         alpha_g1_beta_g2,
-        gamma_g2:           gamma_g2.into_affine(),
-        delta_g2:           delta_g2.into_affine(),
+        gamma_g2: gamma_g2.into_affine(),
+        delta_g2: delta_g2.into_affine(),
         gamma_abc_g1: gamma_abc_g1
             .par_iter()
             .map(|p| p.into_affine())

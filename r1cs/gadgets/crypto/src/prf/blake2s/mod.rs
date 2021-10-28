@@ -389,7 +389,7 @@ impl<ConstraintF: PrimeField> EqGadget<ConstraintF> for Blake2sOutputGadget {
     fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
-        other: &Self
+        other: &Self,
     ) -> Result<Boolean, SynthesisError> {
         self.0.is_eq(cs, &other.0)
     }
@@ -478,7 +478,10 @@ impl<ConstraintF: PrimeField> AllocGadget<[u8; 32], ConstraintF> for Blake2sOutp
 impl<ConstraintF: PrimeField> PRFGadget<Blake2s, ConstraintF> for Blake2sGadget {
     type OutputGadget = Blake2sOutputGadget;
 
-    fn new_seed<CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, seed: &[u8; 32]) -> Vec<UInt8> {
+    fn new_seed<CS: ConstraintSystemAbstract<ConstraintF>>(
+        mut cs: CS,
+        seed: &[u8; 32],
+    ) -> Vec<UInt8> {
         UInt8::alloc_vec(&mut cs.ns(|| "alloc_seed"), seed).unwrap()
     }
 
@@ -507,19 +510,19 @@ impl<ConstraintF: PrimeField> PRFGadget<Blake2s, ConstraintF> for Blake2sGadget 
 
 #[cfg(test)]
 mod test {
+    use crate::prf::blake2s::blake2s_gadget;
     use algebra::fields::bls12_377::fr::Fr;
+    use blake2::Blake2s;
     use digest::{Digest, FixedOutput};
+    use primitives::prf::blake2s::Blake2s as B2SPRF;
+    use r1cs_core::{
+        ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
+    };
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use primitives::prf::blake2s::Blake2s as B2SPRF;
-    use crate::prf::blake2s::blake2s_gadget;
-    use blake2::Blake2s;
-    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystemDebugger, ConstraintSystem, SynthesisMode};
 
     use super::Blake2sGadget;
-    use r1cs_std::{
-        boolean::AllocatedBit, prelude::*,
-    };
+    use r1cs_std::{boolean::AllocatedBit, prelude::*};
 
     #[test]
     fn test_blake2s_constraints() {
@@ -538,8 +541,8 @@ mod test {
 
     #[test]
     fn test_blake2s_prf() {
-        use primitives::prf::PRF;
         use crate::prf::PRFGadget;
+        use primitives::prf::PRF;
         use rand::Rng;
 
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
@@ -652,14 +655,14 @@ mod test {
                     match b {
                         Boolean::Is(b) => {
                             assert!(s.next().unwrap() == b.get_value().unwrap());
-                        },
+                        }
                         Boolean::Not(b) => {
                             assert!(s.next().unwrap() != b.get_value().unwrap());
-                        },
+                        }
                         Boolean::Constant(b) => {
                             assert!(input_len == 0);
                             assert!(s.next().unwrap() == b);
-                        },
+                        }
                     }
                 }
             }

@@ -11,12 +11,11 @@ use crate::{boolean::AllocatedBit, prelude::*, Assignment};
 
 #[derive(Debug)]
 pub struct FpGadget<F: PrimeField> {
-    pub value:    Option<F>,
+    pub value: Option<F>,
     pub variable: ConstraintVar<F>,
 }
 
 impl<F: PrimeField> FpGadget<F> {
-
     #[inline]
     pub fn from<CS: ConstraintSystemAbstract<F>>(mut cs: CS, value: &F) -> Self {
         Self::alloc(cs.ns(|| "from"), || Ok(*value)).unwrap()
@@ -39,9 +38,11 @@ impl<F: PrimeField> FpGadget<F> {
     ) -> Result<Vec<Boolean>, SynthesisError> {
         let num_bits = F::Params::MODULUS_BITS;
         let bit_values = match self.value {
-            Some(value) => {
-                value.write_bits().iter().map(|b| Some(*b)).collect::<Vec<_>>()
-            },
+            Some(value) => value
+                .write_bits()
+                .iter()
+                .map(|b| Some(*b))
+                .collect::<Vec<_>>(),
             None => vec![None; num_bits as usize],
         };
 
@@ -72,7 +73,7 @@ impl<F: PrimeField> FpGadget<F> {
     pub fn to_bytes_with_length_restriction<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
-        to_skip: usize
+        to_skip: usize,
     ) -> Result<Vec<UInt8>, SynthesisError> {
         let mut byte_values = match self.value {
             Some(value) => to_bytes![&value.into_repr()]?
@@ -83,10 +84,12 @@ impl<F: PrimeField> FpGadget<F> {
                 let default = F::default();
                 let default_len = to_bytes![&default].unwrap().len();
                 vec![None; default_len]
-            },
+            }
         };
 
-        for _ in 0..to_skip {byte_values.pop();}
+        for _ in 0..to_skip {
+            byte_values.pop();
+        }
 
         let bytes = UInt8::alloc_vec(cs.ns(|| "Alloc bytes"), &byte_values)?;
 
@@ -96,15 +99,15 @@ impl<F: PrimeField> FpGadget<F> {
         for bit in bytes
             .iter()
             .flat_map(|byte_gadget| byte_gadget.bits.clone())
-            {
-                match bit {
-                    Boolean::Is(bit) => {
-                        lc = lc + (coeff, bit.get_variable());
-                        coeff.double_in_place();
-                    },
-                    Boolean::Constant(_) | Boolean::Not(_) => unreachable!(),
+        {
+            match bit {
+                Boolean::Is(bit) => {
+                    lc = lc + (coeff, bit.get_variable());
+                    coeff.double_in_place();
                 }
+                Boolean::Constant(_) | Boolean::Not(_) => unreachable!(),
             }
+        }
 
         lc = &self.variable - lc;
 
@@ -112,7 +115,6 @@ impl<F: PrimeField> FpGadget<F> {
 
         Ok(bytes)
     }
-
 }
 
 impl<F: PrimeField> FieldGadget<F, F> for FpGadget<F> {
@@ -364,7 +366,9 @@ impl<F: PrimeField> FieldGadget<F, F> for FpGadget<F> {
         1
     }
 
-    fn cost_of_mul_equals() -> usize { 1 }
+    fn cost_of_mul_equals() -> usize {
+        1
+    }
 
     fn cost_of_inv() -> usize {
         1
@@ -380,7 +384,11 @@ impl<F: PrimeField> PartialEq for FpGadget<F> {
 impl<F: PrimeField> Eq for FpGadget<F> {}
 
 impl<F: PrimeField> EqGadget<F> for FpGadget<F> {
-    fn is_eq<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
+    fn is_eq<CS: ConstraintSystemAbstract<F>>(
+        &self,
+        mut cs: CS,
+        other: &Self,
+    ) -> Result<Boolean, SynthesisError> {
         // The Boolean we want to constrain.
         let v = Boolean::alloc(cs.ns(|| "alloc verdict"), || {
             let self_val = self.get_value().get()?;
@@ -394,8 +402,7 @@ impl<F: PrimeField> EqGadget<F> for FpGadget<F> {
             let v_val = v.get_value().get()?;
             if v_val {
                 Ok(F::one()) //Just one random value
-            }
-            else {
+            } else {
                 let self_val = self.get_value().get()?;
                 let other_val = other.get_value().get()?;
                 Ok((self_val - &other_val).inverse().get()?)
@@ -444,9 +451,7 @@ impl<F: PrimeField> EqGadget<F> for FpGadget<F> {
         other: &Self,
         should_enforce: &Boolean,
     ) -> Result<(), SynthesisError> {
-        let multiplier = Self::alloc(
-            cs.ns(|| "alloc multiplier"),
-            || {
+        let multiplier = Self::alloc(cs.ns(|| "alloc multiplier"), || {
             if should_enforce.get_value().get()? {
                 (self.value.get()? - &other.value.get()?).inverse().get()
             } else {
@@ -457,7 +462,7 @@ impl<F: PrimeField> EqGadget<F> for FpGadget<F> {
             || "conditional enforce not equal",
             |lc| &self.variable - &other.variable + lc,
             |lc| &multiplier.variable + lc,
-            |lc| lc + &should_enforce.lc(CS::one(), F::one())
+            |lc| lc + &should_enforce.lc(CS::one(), F::one()),
         );
         Ok(())
     }
@@ -466,7 +471,10 @@ impl<F: PrimeField> EqGadget<F> for FpGadget<F> {
 impl<F: PrimeField> ToBitsGadget<F> for FpGadget<F> {
     /// Outputs the binary representation of the value in `self` in *big-endian*
     /// form.
-    fn to_bits<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS) -> Result<Vec<Boolean>, SynthesisError> {
+    fn to_bits<CS: ConstraintSystemAbstract<F>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Vec<Boolean>, SynthesisError> {
         self.to_bits_with_length_restriction(&mut cs, 0)
     }
 
@@ -482,8 +490,10 @@ impl<F: PrimeField> ToBitsGadget<F> for FpGadget<F> {
 }
 
 impl<F: PrimeField> FromBitsGadget<F> for FpGadget<F> {
-    fn from_bits<CS: ConstraintSystemAbstract<F>>(mut cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError> {
-
+    fn from_bits<CS: ConstraintSystemAbstract<F>>(
+        mut cs: CS,
+        bits: &[Boolean],
+    ) -> Result<Self, SynthesisError> {
         //A malicious prover may pass a bigger input so we enforce considering exactly
         //CAPACITY bits in the linear combination calculation.
         let bits = bits.chunks(F::Params::CAPACITY as usize).next().unwrap();
@@ -494,26 +504,18 @@ impl<F: PrimeField> FromBitsGadget<F> for FpGadget<F> {
         // Need to reverse in order to reconstruct the field element, because we
         // assume having a *big_endian* bit representation of `Self`.
         for (j, bit) in bits.iter().rev().enumerate() {
-
             // Use a support FpGadget to hold the linear combination (needed because
             // the allocated bit won't have a value until proving time.
-            num = num.conditionally_add_constant(
-                cs.ns(|| format!("add_bit_{}", j)),
-                bit,
-                coeff,
-            )?;
+            num = num.conditionally_add_constant(cs.ns(|| format!("add_bit_{}", j)), bit, coeff)?;
 
             coeff.double_in_place();
         }
 
         //Alloc the field gadget with the value resulting from bit linear combination
-        let variable = Self::alloc(
-            cs.ns(|| "variable"),
-            || {
-                let value = num.get_value().get()?;
-                Ok(value)
-            }
-        )?;
+        let variable = Self::alloc(cs.ns(|| "variable"), || {
+            let value = num.get_value().get()?;
+            Ok(value)
+        })?;
 
         // num * 1 = variable
         cs.enforce(
@@ -527,7 +529,10 @@ impl<F: PrimeField> FromBitsGadget<F> for FpGadget<F> {
 }
 
 impl<F: PrimeField> ToBytesGadget<F> for FpGadget<F> {
-    fn to_bytes<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS) -> Result<Vec<UInt8>, SynthesisError> {
+    fn to_bytes<CS: ConstraintSystemAbstract<F>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Vec<UInt8>, SynthesisError> {
         self.to_bytes_with_length_restriction(&mut cs, 0)
     }
 
@@ -621,26 +626,21 @@ impl<F: PrimeField> TwoBitLookupGadget<F> for FpGadget<F> {
         Ok(result)
     }
 
-    fn two_bit_lookup_lc<CS: ConstraintSystemAbstract<F>>
-    (   mut cs: CS,
+    fn two_bit_lookup_lc<CS: ConstraintSystemAbstract<F>>(
+        mut cs: CS,
         precomp: &Boolean,
         b: &[Boolean],
-        c: &[Self::TableConstant]
+        c: &[Self::TableConstant],
     ) -> Result<Self, SynthesisError> {
-
         let result = Self::zero(cs.ns(|| "alloc result"))?
-            .conditionally_add_constant(cs.ns(|| "add constant"),
-                                        &Boolean::constant(true),
-                                        c[0])?
-            .conditionally_add_constant(cs.ns(|| "add b0"),
-                                        &b[0],
-                                        c[1] - &c[0])?
-            .conditionally_add_constant(cs.ns(|| "add b1"),
-                                        &b[1],
-                                        c[2] - &c[0])?
-            .conditionally_add_constant(cs.ns(|| "add b0 AND b1"),
-                                        &precomp,
-                                        c[3] + &c[0] - &c[1] - &c[2])?;
+            .conditionally_add_constant(cs.ns(|| "add constant"), &Boolean::constant(true), c[0])?
+            .conditionally_add_constant(cs.ns(|| "add b0"), &b[0], c[1] - &c[0])?
+            .conditionally_add_constant(cs.ns(|| "add b1"), &b[1], c[2] - &c[0])?
+            .conditionally_add_constant(
+                cs.ns(|| "add b0 AND b1"),
+                &precomp,
+                c[3] + &c[0] - &c[1] - &c[2],
+            )?;
 
         Ok(result)
     }
@@ -699,7 +699,7 @@ impl<F: PrimeField> ThreeBitCondNegLookupGadget<F> for FpGadget<F> {
 impl<F: PrimeField> Clone for FpGadget<F> {
     fn clone(&self) -> Self {
         Self {
-            value:    self.value.clone(),
+            value: self.value.clone(),
             variable: self.variable.clone(),
         }
     }
@@ -757,13 +757,8 @@ impl<F: PrimeField> AllocGadget<F, F> for FpGadget<F> {
 }
 
 impl<F: PrimeField> ConstantGadget<F, F> for FpGadget<F> {
-
     #[inline]
-    fn from_value<CS: ConstraintSystemAbstract<F>>(
-        _cs: CS,
-        value: &F,
-    ) -> Self
-    {
+    fn from_value<CS: ConstraintSystemAbstract<F>>(_cs: CS, value: &F) -> Self {
         let value = *value;
         FpGadget {
             value: Some(value),

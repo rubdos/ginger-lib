@@ -6,18 +6,19 @@
 #![deny(unused_attributes, unused_imports, unused_mut, missing_docs)]
 #![deny(renamed_and_removed_lints, stable_features, unused_allocation)]
 #![deny(unused_comparisons, bare_trait_objects, unused_must_use, const_err)]
-
 #![forbid(unsafe_code)]
 
 mod constraint_system;
 mod error;
-mod impl_lc;
 mod impl_constraint_var;
+mod impl_lc;
 
-pub use constraint_system::{ConstraintSystemAbstract, ConstraintSynthesizer, Namespace,
-                            ConstraintSystem, SynthesisMode, ConstraintSystemDebugger};
-pub use error::SynthesisError;
 pub use algebra::ToConstraintField;
+pub use constraint_system::{
+    ConstraintSynthesizer, ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger,
+    Namespace, SynthesisMode,
+};
+pub use error::SynthesisError;
 
 use algebra::Field;
 use smallvec::SmallVec as StackVec;
@@ -69,14 +70,12 @@ impl Ord for Index {
     }
 }
 
-
 /// This represents a linear combination of some variables, with coefficients
 /// in the field `F`.
 /// The `(coeff, var)` pairs in a `LinearCombination` are kept sorted according
 /// to the index of the variable in its constraint system.
 #[derive(Debug, Clone)]
 pub struct LinearCombination<F: Field>(pub SmallVec<F>);
-
 
 /// Either a `Variable` or a `LinearCombination`.
 #[derive(Clone, Debug)]
@@ -91,7 +90,9 @@ pub enum ConstraintVar<F: Field> {
 /// If the circuit is satisfied, return `Ok(None)`.
 /// If there are unsatisfied constraints, return `Ok(Some(name))`,
 /// where `name` is the name of the first unsatisfied constraint.
-pub fn debug_circuit<F: Field, C: ConstraintSynthesizer<F>>(circuit: C) -> Result<Option<String>, SynthesisError> {
+pub fn debug_circuit<F: Field, C: ConstraintSynthesizer<F>>(
+    circuit: C,
+) -> Result<Option<String>, SynthesisError> {
     let mut cs = ConstraintSystem::<F>::new(SynthesisMode::Debug);
     circuit.generate_constraints(&mut cs)?;
     let unsatisfied_constraint = cs.which_is_unsatisfied();
@@ -103,9 +104,9 @@ pub fn debug_circuit<F: Field, C: ConstraintSynthesizer<F>>(circuit: C) -> Resul
 
 #[cfg(test)]
 mod test {
-    use algebra::Field;
+    use crate::{debug_circuit, ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError};
     use algebra::fields::tweedle::fr::Fr;
-    use crate::{ConstraintSynthesizer, ConstraintSystemAbstract, debug_circuit, SynthesisError};
+    use algebra::Field;
     use rand;
 
     struct MyCircuit<F: Field> {
@@ -115,11 +116,19 @@ mod test {
     }
 
     impl<F: Field> ConstraintSynthesizer<F> for MyCircuit<F> {
-        fn generate_constraints<CS: ConstraintSystemAbstract<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
+            self,
+            cs: &mut CS,
+        ) -> Result<(), SynthesisError> {
             let a = cs.alloc(|| "a", || self.a.ok_or(SynthesisError::AssignmentMissing))?;
             let b = cs.alloc(|| "b", || self.b.ok_or(SynthesisError::AssignmentMissing))?;
             let c = cs.alloc(|| "c", || self.c.ok_or(SynthesisError::AssignmentMissing))?;
-            cs.enforce(||"multiplication constraint", |lc| lc + a, |lc| lc + b, |lc| lc + c);
+            cs.enforce(
+                || "multiplication constraint",
+                |lc| lc + a,
+                |lc| lc + b,
+                |lc| lc + c,
+            );
             Ok(())
         }
     }
@@ -130,12 +139,11 @@ mod test {
         let b: Fr = rand::random();
         let mut c = a.clone();
         c *= &b;
-        let circuit =
-            MyCircuit {
-                a: Some(a),
-                b: Some(b),
-                c: Some(c)
-            };
+        let circuit = MyCircuit {
+            a: Some(a),
+            b: Some(b),
+            c: Some(c),
+        };
         let unsatisfied_constraint = debug_circuit(circuit).unwrap();
         assert!(unsatisfied_constraint.is_none());
     }
@@ -147,12 +155,11 @@ mod test {
         let mut c = a.clone();
         c *= &b;
         c += &b;
-        let circuit =
-            MyCircuit {
-                a: Some(a),
-                b: Some(b),
-                c: Some(c)
-            };
+        let circuit = MyCircuit {
+            a: Some(a),
+            b: Some(b),
+            c: Some(c),
+        };
         let unsatisfied_constraint = debug_circuit(circuit).unwrap();
         assert!(unsatisfied_constraint.is_some());
         assert_eq!(unsatisfied_constraint.unwrap(), "multiplication constraint");

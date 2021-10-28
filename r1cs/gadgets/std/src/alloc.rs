@@ -7,15 +7,24 @@ where
     Self: Sized,
     V: ?Sized,
 {
-    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
+        cs: CS,
+        f: F,
+    ) -> Result<Self, SynthesisError>
     where
         F: FnOnce() -> Result<T, SynthesisError>,
         T: Borrow<V>;
 
-    fn alloc_without_check<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
-        where
-            F: FnOnce() -> Result<T, SynthesisError>,
-            T: Borrow<V>, { Self::alloc(cs, f) }
+    fn alloc_without_check<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
+        cs: CS,
+        f: F,
+    ) -> Result<Self, SynthesisError>
+    where
+        F: FnOnce() -> Result<T, SynthesisError>,
+        T: Borrow<V>,
+    {
+        Self::alloc(cs, f)
+    }
 
     fn alloc_checked<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
@@ -126,14 +135,11 @@ impl<I, ConstraintF: Field, A: AllocGadget<I, ConstraintF>> AllocGadget<[I], Con
 /// Get a Gadget from the corresponding constant. At low level, the constant
 /// will be the coefficient of the CS::one() variable.
 pub trait ConstantGadget<V, ConstraintF: Field>
-    where
-        Self: Sized,
-        V: Sized ,
+where
+    Self: Sized,
+    V: Sized,
 {
-    fn from_value<CS: ConstraintSystemAbstract<ConstraintF>>(
-        cs: CS,
-        value: &V
-    ) -> Self;
+    fn from_value<CS: ConstraintSystemAbstract<ConstraintF>>(cs: CS, value: &V) -> Self;
 
     fn get_constant(&self) -> V;
 }

@@ -1,17 +1,14 @@
 use rand::Rng;
 use rayon::prelude::*;
 
-use algebra::{
-    groups::Group, AffineCurve, Field, PairingEngine, PrimeField,
-    ProjectiveCurve, UniformRand,
-};
 use algebra::msm::VariableBaseMSM;
+use algebra::{
+    groups::Group, AffineCurve, Field, PairingEngine, PrimeField, ProjectiveCurve, UniformRand,
+};
 
 use crate::groth16::{r1cs_to_qap::R1CStoQAP, Parameters, Proof};
 
-use r1cs_core::{
-    ConstraintSynthesizer, ConstraintSystem, SynthesisError, SynthesisMode,
-};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError, SynthesisMode};
 
 use std::{
     ops::{AddAssign, SubAssign},
@@ -38,9 +35,9 @@ pub fn create_proof_no_zk<E, C>(
     circuit: C,
     params: &Parameters<E>,
 ) -> Result<Proof<E>, SynthesisError>
-    where
-        E: PairingEngine,
-        C: ConstraintSynthesizer<E::Fr>,
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
 {
     create_proof::<E, C>(circuit, params, E::Fr::zero(), E::Fr::zero())
 }
@@ -56,7 +53,9 @@ where
     C: ConstraintSynthesizer<E::Fr>,
 {
     let prover_time = start_timer!(|| "Prover");
-    let mode = SynthesisMode::Prove{construct_matrices: true};
+    let mode = SynthesisMode::Prove {
+        construct_matrices: true,
+    };
     let mut prover = ConstraintSystem::<E::Fr>::new(mode);
 
     // Synthesize the circuit.
@@ -76,7 +75,8 @@ where
     );
 
     let aux_assignment = Arc::new(
-        prover.aux_assignment
+        prover
+            .aux_assignment
             .into_par_iter()
             .map(|s| s.into_repr())
             .collect::<Vec<_>>(),
@@ -108,7 +108,6 @@ where
     } else {
         <E::G1Projective as ProjectiveCurve>::zero()
     };
-
 
     // Compute B in G2
     let b_g2_acc_time = start_timer!(|| "Compute B in G2");
