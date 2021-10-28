@@ -699,6 +699,67 @@ impl Boolean {
 
         Ok(())
     }
+
+    /// Enforces that `bits` is less than or equal to `element`,
+    /// when both are interpreted as (little-endian) integers.
+    pub fn enforce_smaller_or_equal_than_le<ConstraintF, CS>(
+        mut cs: CS,
+        bits: &[Self],
+        element: impl AsRef<[u64]>,
+    ) -> Result<Vec<Self>, SynthesisError> 
+        where
+            ConstraintF: Field,
+            CS: ConstraintSystem<ConstraintF>,
+    {
+        let b: &[u64] = element.as_ref();
+
+        let mut bits_iter = bits.iter().rev(); // Iterate in big-endian
+
+        // Runs of ones in r
+        let mut last_run = Boolean::constant(true);
+        let mut current_run = vec![];
+
+        let mut element_num_bits = 0;
+        for _ in BitIterator::without_leading_zeros(b) {
+            element_num_bits += 1;
+        }
+
+        if bits.len() > element_num_bits {
+            let mut or_result = Boolean::constant(false);
+            for (i, should_be_zero) in bits[element_num_bits..].into_iter().enumerate() {
+                or_result = Boolean::or(cs.ns(|| format!("or {} {}", should_be_zero.get_value().unwrap(), i)), &or_result, should_be_zero)?;
+                let _ = bits_iter.next().unwrap();
+            }
+            or_result.enforce_equal(cs.ns(|| "enforce equal"), &Boolean::constant(false))?;
+        }
+
+        for (i, (b, a)) in BitIterator::without_leading_zeros(b).zip(bits_iter.by_ref()).enumerate() {
+            if b {
+                // This is part of a run of ones.
+                current_run.push(a.clone());
+            } else {
+                if !current_run.is_empty() {
+                    // This is the start of a run of zeros, but we need
+                    // to k-ary AND against `last_run` first.
+
+                    current_run.push(last_run.clone());
+                    last_run = Self::kary_and(cs.ns(|| format!("kary and {}", i)), &current_run)?;
+                    current_run.truncate(0);
+                }
+
+                // If `last_run` is true, `a` must be false, or it would
+                // not be in the field.
+                //
+                // If `last_run` is false, `a` can be true or false.
+                //
+                // Ergo, at least one of `last_run` and `a` must be false.
+                Self::enforce_nand(cs.ns(|| format!("enforce nand {}", i)), &[last_run.clone(), a.clone()])?;
+            }
+        }
+        assert!(bits_iter.next().is_none());
+
+        Ok(current_run)
+    }    
 }
 
 impl PartialEq for Boolean {
@@ -2097,6 +2158,56 @@ mod test {
         //     assert!(!cs.is_satisfied());
         // }
     }
+
+    #[test]
+    fn test_smaller_than_or_equal_to() {
+        let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
+        for i in 0..1000 {
+            let mut r = Fr::rand(&mut rng);
+            let mut s = Fr::rand(&mut rng);
+            if r > s {
+                core::mem::swap(&mut r, &mut s)
+            }
+
+            let mut cs = TestConstraintSystem::<Fr>::new();
+
+            let native_bits_be: Vec<_> = BitIterator::new(r.into_repr()).collect();
+            let native_bits = native_bits_be.into_iter().rev().collect::<Vec<_>>();
+            //let bits = Vec::alloc(&mut cs.ns(|| "alloc bits"), || Ok(native_bits)).unwrap();
+            let bits = Vec::alloc(&mut cs.ns(|| format!("alloc bits {}",i)), || Ok(native_bits)).unwrap();
+            Boolean::enforce_smaller_or_equal_than_le(cs.ns(|| format!("enforce_smaller_or_equal_than_le {}",i)), &bits, s.into_repr()).unwrap();
+
+            if !cs.is_satisfied(){
+                println!("{:?}", cs.which_is_unsatisfied());
+            }
+            assert!(cs.is_satisfied());
+        }
+
+        for i in 0..1000 {
+            let r = Fr::rand(&mut rng);
+            if r == -Fr::one() {
+                continue;
+            }
+            let s = r + Fr::one();
+            let s2 = r.double();
+            let mut cs = TestConstraintSystem::<Fr>::new();
+
+            let native_bits_be: Vec<_> = BitIterator::new(r.into_repr()).collect();
+            let native_bits = native_bits_be.into_iter().rev().collect::<Vec<_>>();
+            let bits = Vec::alloc(&mut cs.ns(|| format!("alloc bits {}",i)), || Ok(native_bits)).unwrap();
+            Boolean::enforce_smaller_or_equal_than_le(cs.ns(|| format!("enforce_smaller_or_equal_than_le s {}",i)), &bits, s.into_repr()).unwrap();
+
+            if r < s2 {
+                Boolean::enforce_smaller_or_equal_than_le(cs.ns(|| format!("enforce_smaller_or_equal_than_le s2 {}",i)), &bits, s2.into_repr()).unwrap();
+            }
+
+            if !cs.is_satisfied(){
+                println!("{:?}", cs.which_is_unsatisfied());
+            }
+            assert!(cs.is_satisfied());
+        }
+    }
+
 
     #[test]
     fn test_enforce_nand() {

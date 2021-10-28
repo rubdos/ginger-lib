@@ -14,6 +14,7 @@ pub mod fp6_3over2;
 pub mod fp6_2over3;
 pub mod quadratic_extension;
 pub mod cubic_extension;
+pub mod cmp;
 
 pub trait FieldGadget<F: Field, ConstraintF: Field>:
     Sized
