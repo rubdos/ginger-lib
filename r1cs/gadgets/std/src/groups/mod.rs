@@ -445,11 +445,12 @@ pub(crate) fn scalar_bits_to_constant_length<
 
 #[cfg(test)]
 pub(crate) mod test {
-    use algebra::{Field, PrimeField, FpParameters, BigInteger, Group, UniformRand, ToBits};
+    use algebra::{Field, PrimeField, FpParameters, BigInteger, Group, UniformRand, ToBits, EndoMulCurve, ProjectiveCurve};
     use r1cs_core::ConstraintSystem;
 
     use crate::{prelude::*, test_constraint_system::TestConstraintSystem};
     use rand::thread_rng;
+    use crate::groups::EndoMulCurveGadget;
 
     #[allow(dead_code)]
     pub(crate) fn group_test<
@@ -730,5 +731,33 @@ pub(crate) mod test {
             mul_bits_native_test::<ConstraintF, G, GG>();
             mul_bits_additivity_test::<ConstraintF, G, GG>();
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn endo_mul_test<
+        ConstraintF: Field + PrimeField,
+        G: ProjectiveCurve<Affine = GE>,
+        GG: EndoMulCurveGadget<G, ConstraintF, Value = G>,
+        GE: EndoMulCurve<Projective = G>,
+    >()
+    {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+        let a_native_proj = G::rand(&mut thread_rng());
+        let a_native: GE = a_native_proj.into_affine();
+        let a = GG::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native_proj)).unwrap();
+
+        let scalar: G::ScalarField = u128::rand(&mut thread_rng()).into();
+
+        let b_native = scalar.into_repr().to_bits().as_slice()[0..128].to_vec();
+        let b = b_native
+            .iter()
+            .map(|&bit| Boolean::constant(bit))
+            .collect::<Vec<_>>();
+
+        let r_native = a_native.endo_mul(b_native).unwrap();
+        let r = a.endo_mul(cs.ns(|| "endo mul"), &b).unwrap().get_value().unwrap();
+
+        assert_eq!(r_native, r);
     }
 }
