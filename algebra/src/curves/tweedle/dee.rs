@@ -1,7 +1,13 @@
-use crate::{biginteger::BigInteger256, curves::{
-    models::short_weierstrass_jacobian::{GroupAffine, GroupProjective},
-    ModelParameters, SWModelParameters
-}, Field, field_new, fields::tweedle::*, EndoMulParameters};
+use crate::field_new;
+use crate::{
+    biginteger::BigInteger256,
+    curves::{
+        models::short_weierstrass_jacobian::{GroupAffine, GroupProjective},
+        ModelParameters, SWModelParameters, EndoMulParameters
+    },
+    fields::tweedle::*,
+    Field,
+};
 
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub struct TweedledeeParameters;

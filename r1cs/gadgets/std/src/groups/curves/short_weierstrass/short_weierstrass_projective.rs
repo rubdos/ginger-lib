@@ -1,6 +1,7 @@
 use algebra::{AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, EndoMulParameters, curves::short_weierstrass_projective::{GroupAffine as SWAffine, GroupProjective as SWProjective}};
 use r1cs_core::{ConstraintSystem, SynthesisError};
-use std::{borrow::Borrow, marker::PhantomData, ops::{Add, Mul, Neg}};
+use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
+use std::ops::{Add, Mul};
 
 use crate::{Assignment, groups::{check_mul_bits_fixed_base_inputs, check_mul_bits_inputs, EndoMulCurveGadget}, prelude::*};
 
@@ -24,7 +25,6 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         P: SWModelParameters,
         ConstraintF: PrimeField,
         F: FieldGadget<P::BaseField, ConstraintF>,
-
 {
     pub fn new(x: F, y: F, infinity: Boolean) -> Self {
         Self {
@@ -132,7 +132,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
     ) -> Result<Self, SynthesisError>
     {
         // The double-and-add sum P_4 = P_3 + P_1, where P_3 = P_1 + P_2,
-        // under the above presumptions on P_1 and P_2 is enforced by just 5
+        // under the above presumptions on P_1 and P_2 is enforced by just 5 
         // constraints
         //      1. (x2 - x1) * lambda_1 = y2 - y1;
         //      2. lambda_1^2 = x1 +  x2 + x3;
@@ -140,10 +140,10 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
         //      4. lambda_2^2 =   x1 + x3 + x4;
         //      5. lambda_2 * (x1 - x4) = y_1 + y_4;
         // Note that 3. is the result of adding the two equations
-        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3
+        //      3a. (x_1 - x_3) * lambda_1 = y_1 + y_3 
         //      3b. (x_1 - x_3) * lambda_2 = y_1 - y_3.
-        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely
-        // determines lambda_1, and thus x3 is determined by 2.
+        // This reduction is valid as x_2 - x_1 is non-zero and hence 1. uniquely 
+        // determines lambda_1, and thus x3 is determined by 2. 
         // Again, since x_1-x_3 is non-zero equation 3. uniquely determines lambda_2
         // and hence being of the same unique value as enforced by 3a. and 3b.
         let x2_minus_x1 = other.x.sub(cs.ns(|| "x2 - x1"), &self.x)?;
@@ -152,7 +152,7 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
 
         // Allocate lambda_1
         let lambda_1 = if safe {
-            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget
+            // Enforce the extra constraint for x_2 - x_1 != 0 by using the inverse gadget 
             let inv_1 = x2_minus_x1.inverse(cs.ns(|| "enforce inv 1"))?;
             F::alloc(cs.ns(|| "lambda_1"), || {
                 Ok(y2_minus_y1.get_value().get()? * &inv_1.get_value().get()?)
@@ -179,9 +179,9 @@ impl<P, ConstraintF, F> AffineGadget<P, ConstraintF, F>
             .add(cs.ns(|| "x3 + x1"), &self.x)?
             .add(cs.ns(|| "x3 + x1 + x2"), &other.x)?;
         lambda_1.mul_equals(cs.ns(|| "check x3"), &lambda_1, &x3_plus_x1_plus_x2)?;
-
+        
         // Allocate lambda_2.
-        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?;
+        let x1_minus_x3 = &self.x.sub(cs.ns(|| "x1 - x3"), &x_3)?; 
         let two_y1 = self.y.double(cs.ns(|| "2y1"))?;
 
         let lambda_2 = if safe {
@@ -541,7 +541,6 @@ for AffineGadget<P, ConstraintF, F>
         };
 
         let mut bits = bits.cloned().collect::<Vec<Boolean>>();
-
         if self.get_value().is_some() && bits.iter().all(|b| b.get_value().is_some()) {
             check_mul_bits_inputs(
                 &self.get_value().unwrap(),
@@ -556,7 +555,7 @@ for AffineGadget<P, ConstraintF, F>
             cs.ns(|| "scalar bits to constant length"),
             bits
         )?;
-     
+
         let t = self.clone();
 
         // Acc := [3] T = [2]*T + T
@@ -633,12 +632,12 @@ for AffineGadget<P, ConstraintF, F>
         // This output is equal to 0 (and hence causes an exception in the 
         // last add when processing bits[2]) iff 
         //    
-        //     [bit[n], bits[n-1],....,bits[2], 1] = p,
+        //     [bits[n], bits[n-1],....,bits[2], 1] = p,
         //
         // or equivalently [bit[n],...,bits[2],bits[1]] = {p or p-1}.
         // This corresponds to
         //     scalar + p  = 2 * {p or p-1} + bits[0] 
-        // or  scalar being from {p-2, p-1, p, p + 1}. 
+        // or  scalar being from {p-2, p-1, p, p + 1}.
         // A more detailed exploration shows that this set is the complete set
         // of exceptions.
         double_and_add_step(
@@ -659,7 +658,7 @@ for AffineGadget<P, ConstraintF, F>
         //
         // which is 0 iff 
         //   
-        //     [bit[n], bits[n-1],....,bits[2],bits[1], 1] = p,
+        //     [bits[n], bits[n-1],....,bits[2],bits[1], 1] = p,
         //
         // or equivalently [bit[n],...,bits[2],bits[1],bits[0]] = {p or p-1}.
         // These cases corresponds to 
@@ -707,8 +706,10 @@ for AffineGadget<P, ConstraintF, F>
             &acc,
             &acc_minus_t
         )?;
+
         Ok(result)
     }
+
 
     /// Fixed base scalar multiplication as mentioned by [Hopwood] using a signed 
     /// digit representation. Takes roughly 2 constraints per scalar bit.
@@ -723,8 +724,8 @@ for AffineGadget<P, ConstraintF, F>
         base: &'a SWProjective<P>,
         mut cs: CS,
         bits: &[Boolean],
-    ) -> Result<Self, SynthesisError>{
-        
+    ) -> Result<Self, SynthesisError>{ 
+
         // bits must not exceed the length the scalar field modulus
         if bits.len() > P::ScalarField::size_in_bits() {
             return Err(SynthesisError::Other(format!("Input bits size: {}, max allowed size: {}", bits.len(), P::ScalarField::size_in_bits())));
@@ -768,7 +769,7 @@ for AffineGadget<P, ConstraintF, F>
                 bits.iter().rev().map(|b| b.get_value().unwrap()).collect()
             )?;
         };
-
+        
         let num_chunks = bits.len()/2;
 
         for (i, bits) in bits.chunks(2).enumerate() {

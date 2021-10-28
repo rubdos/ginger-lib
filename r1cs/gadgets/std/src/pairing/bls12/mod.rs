@@ -3,7 +3,7 @@ use r1cs_core::{ConstraintSystem, SynthesisError};
 use super::PairingGadget as PG;
 
 use crate::{
-    fields::{fp::FpGadget, fp12::Fp12Gadget, fp2::Fp2Gadget, FieldGadget, quadratic_extension::*},
+    fields::{fp::FpGadget, fp12::Fp12Gadget, fp2::Fp2Gadget, quadratic_extension::*, FieldGadget},
     groups::bls12::{G1Gadget, G1PreparedGadget, G2Gadget, G2PreparedGadget},
 };
 use algebra::{
@@ -30,15 +30,15 @@ impl<P: Bls12Parameters> PairingGadget<P> {
             TwistType::M => {
                 let c0 = coeffs.0.clone();
                 let mut c1 = coeffs.1.clone();
-                let c2 = Fp2G::<P>::new(p.y.clone(), zero.clone());
+                let c2 = Fp2G::<P>::new(p.y.clone(), zero);
 
                 c1.c0 = c1.c0.mul(cs.ns(|| "mul c1.c0"), &p.x)?;
                 c1.c1 = c1.c1.mul(cs.ns(|| "mul c1.c1"), &p.x)?;
                 *f = f.mul_by_014(cs.ns(|| "sparse mul f"), &c0, &c1, &c2)?;
                 Ok(())
-            },
+            }
             TwistType::D => {
-                let c0 = Fp2G::<P>::new(p.y.clone(), zero.clone());
+                let c0 = Fp2G::<P>::new(p.y.clone(), zero);
                 let mut c1 = coeffs.0.clone();
                 let c2 = coeffs.1.clone();
 
@@ -46,7 +46,7 @@ impl<P: Bls12Parameters> PairingGadget<P> {
                 c1.c1 = c1.c1.mul(cs.ns(|| "mul c1.c1"), &p.x)?;
                 *f = f.mul_by_034(cs.ns(|| "sparse mul f"), &c0, &c1, &c2)?;
                 Ok(())
-            },
+            }
         }
     }
 
@@ -62,8 +62,7 @@ impl<P: Bls12Parameters> PairingGadget<P> {
     }
 }
 
-impl<P: Bls12Parameters> PG<Bls12<P>, P::Fp> for PairingGadget<P>
-{
+impl<P: Bls12Parameters> PG<Bls12<P>, P::Fp> for PairingGadget<P> {
     type G1Gadget = G1Gadget<P>;
     type G2Gadget = G2Gadget<P>;
     type G1PreparedGadget = G1PreparedGadget<P>;
@@ -76,7 +75,7 @@ impl<P: Bls12Parameters> PG<Bls12<P>, P::Fp> for PairingGadget<P>
         qs: &[Self::G2PreparedGadget],
     ) -> Result<Self::GTGadget, SynthesisError> {
         let mut pairs = vec![];
-        for (p, q) in ps.into_iter().zip(qs.into_iter()) {
+        for (p, q) in ps.iter().zip(qs.iter()) {
             pairs.push((p, q.ell_coeffs.iter()));
         }
         let mut f = Self::GTGadget::one(cs.ns(|| "one"))?;
@@ -134,12 +133,18 @@ impl<P: Bls12Parameters> PG<Bls12<P>, P::Fp> for PairingGadget<P>
 
             // Hard part of the final exponentation is below:
             // From https://eprint.iacr.org/2016/130.pdf, Table 1
-            let mut y0 = Fp12ParamsWrapper::<P::Fp12Params>::cyclotomic_square_gadget(cs.ns(|| "cyclotomic_sq 1"), &r)?;
+            let mut y0 = Fp12ParamsWrapper::<P::Fp12Params>::cyclotomic_square_gadget(
+                cs.ns(|| "cyclotomic_sq 1"),
+                &r,
+            )?;
             y0.conjugate_in_place(&mut cs.ns(|| "conjugate 2"))?;
 
             let mut y5 = Self::exp_by_x(&mut cs.ns(|| "exp_by_x 1"), &r)?;
 
-            let mut y1 = Fp12ParamsWrapper::<P::Fp12Params>::cyclotomic_square_gadget(cs.ns(|| "square 1"), &y5)?;
+            let mut y1 = Fp12ParamsWrapper::<P::Fp12Params>::cyclotomic_square_gadget(
+                cs.ns(|| "square 1"),
+                &y5,
+            )?;
             let mut y3 = y0.mul(&mut cs.ns(|| "mul 1"), &y5)?;
             y0 = Self::exp_by_x(cs.ns(|| "exp_by_x 2"), &y3)?;
             let y2 = Self::exp_by_x(cs.ns(|| "exp_by_x 3"), &y0)?;

@@ -1,10 +1,10 @@
-use algebra::{fields::tweedle::{Fq, Fr}, curves::tweedle::{
-    dee::TweedledeeParameters,
-    dum::TweedledumParameters,
-}};
 use crate::{
     groups::curves::short_weierstrass::short_weierstrass_jacobian::AffineGadget,
     instantiated::tweedle::{FqGadget, FrGadget},
+};
+use algebra::{
+    curves::tweedle::{dee::TweedledeeParameters, dum::TweedledumParameters},
+    fields::tweedle::{Fq, Fr},
 };
 
 pub type TweedleDeeGadget = AffineGadget<TweedledeeParameters, Fq, FqGadget>;

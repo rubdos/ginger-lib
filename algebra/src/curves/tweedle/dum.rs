@@ -4,8 +4,9 @@ use crate::{
         models::short_weierstrass_jacobian::{GroupAffine, GroupProjective},
         ModelParameters, SWModelParameters, EndoMulParameters
     },
-    Field, field_new,
-    fields::tweedle::*
+    field_new,
+    fields::tweedle::*,
+    Field,
 };
 
 #[derive(Copy, Clone, Default, PartialEq, Eq)]

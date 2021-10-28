@@ -32,6 +32,17 @@
     unsafe_code
 )]
 #![forbid(unsafe_code)]
+#![allow(
+    clippy::upper_case_acronyms,
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::try_err,
+    clippy::map_collect_result_unit,
+    clippy::not_unsafe_ptr_arg_deref,
+    clippy::suspicious_op_assign_impl,
+    clippy::suspicious_arithmetic_impl,
+    clippy::assertions_on_constants
+)]
 
 #[macro_use]
 extern crate algebra;
@@ -60,11 +71,12 @@ pub mod to_field_gadget_vec;
 pub mod prelude {
     pub use crate::{
         alloc::*,
-        bits::{boolean::Boolean, uint32::UInt32, uint8::UInt8, ToBitsGadget, FromBitsGadget, ToBytesGadget},
-        eq::*,
-        fields::{
-            FieldGadget, quadratic_extension::*, cubic_extension::*,
+        bits::{
+            boolean::Boolean, uint32::UInt32, uint8::UInt8, FromBitsGadget, ToBitsGadget,
+            ToBytesGadget,
         },
+        eq::*,
+        fields::{cubic_extension::*, quadratic_extension::*, FieldGadget},
         groups::GroupGadget,
         pairing::PairingGadget,
         select::*,
