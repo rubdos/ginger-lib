@@ -1,9 +1,20 @@
 # The following Sage script check the consistency of the following curves parameters:
 #
+<<<<<<< HEAD
+#   1) P=(GENERATOR_X,GENERATOR_Y)      must belongs to the curve of equation E: y^2 = x^3 + Ax + B   
+#   2) P                                must have order equal to the MODULUS of the scalar field
+#   3) COFACTOR                         must be equal to Order(E)/Order(P)
+#   4) COFACTOR_INV                     must be the inverse of COFACTOR in the scalar Field
+#   5) ENDO_COEFF                       must be a cube root in the base field.
+#   6) ENDO_SCALAR                      must be a cube root in the scalar field and satisfy ENDO_SCALAR * (X, Y) == (ENDO_COEFF * X, Y)        
+#   7) The intersection of the plane lattice spanned by {(1, ENDO_SCALAR), (0, SCALAR_FIELD_MODULUS)} with the square [-A,A]^2 must be empty,
+#       where A = 2^65 + 2^64 + 1.                         
+=======
 #   1) P=(GENERATOR_X,GENERATOR_Y)  must belongs to the curve of equation E: y^2 = x^3 + Ax + B   
 #   2) P                                must have order equal to the MODULUS of the scalar field
 #   3) COFACTOR                         must be equal to Order(E)/Order(P)
 #   4) COFACTOR_INV                     must be the inverse of COFACTOR in the scalar Field
+>>>>>>> development
 # Open Sage Shell in the corresponding folder and run the command 
 #       "sage check_curve_paramaters sage [file_path_curve] [file_path_basefield] [file_path_scalarfield]".
 
@@ -65,10 +76,17 @@ scalar_field_name = re.findall(pattern, readfile)[0]
 fn = "(?:" + base_field_name + "|" + scalar_field_name + ")" #fn = field name = "(:?Fr|Fq)". Useful declaration for the pattern
 
 #### Reading the big integers list and extracting names and values
+<<<<<<< HEAD
+pattern = "const\s+(\w+)[:\w\s]*=\s*field_new!\([\s\w,]*\(\s*\[" + "([0-9a-fA-Fxu\s,]+)\s*" + "\]\s*\)"
+big_int_ls = re.findall(pattern,readfile)    #####list of couples of the form ('[VARIABLE_NAME]',"[u64],..,[u64]")
+
+big_int_names = [b[0] for b in big_int_ls]
+=======
 pattern = "const\s+(\w+):\s*" + fn + "\s*=\s*field_new!\(\s*" + fn + "\s*,\s*BigInteger\d*\s*\(\s*\[" + "([0-9a-fA-Fxu\s,]+)\s*" + "\]\s*\)"
 big_int_ls = re.findall(pattern,readfile)    #####list of couples of the form ('[VARIABLE_NAME]',"[u64],..,[u64]")
 
 big_int_names = [b[0] for b in big_int_ls] 
+>>>>>>> development
 big_int_values = [BigInteger_to_number(b[1]) for b in big_int_ls]
 
 BigIntegerLen = BigInteger_len(big_int_ls[0][1])
@@ -163,4 +181,64 @@ else:
 if Fr(COFACTOR) * Fr(COFACTOR_INV) == Fr(SCALAR_FIELD_R):
     print("Correct. COFACTOR_INV is the inverse of COFACTOR in the the scalar field.")
 else:
+<<<<<<< HEAD
     print("WARNING! COFACTOR_INV IS NOT THE INVERSE OF COFACTOR IN THE SCALAR FIELD!")
+####### Checking the correctness of ENDO_COEFF and ENDO_FACTOR ############
+endo_mul_is_used = False
+if 'ENDO_COEFF' in locals() and 'ENDO_SCALAR' in locals():
+    zeta_q = Fq(ENDO_COEFF) * Fq(BASE_FIELD_R)**(-1)
+    if zeta_q**2 + zeta_q == Fq(-1):
+        endo_mul_is_used = True
+        print("Correct. ENDO_COEFF is a primitive cube root of unity.")
+    else:
+        print("WARNING! ENDO_COEFF IS NOT A PRIMITIVE CUBE ROOT OF UNITY.")
+    zeta_r = Fr(ENDO_SCALAR) * Fr(SCALAR_FIELD_R)**(-1)
+    if zeta_r**2 + zeta_r == Fr(-1):
+        print("Correct. ENDO_SCALAR is a primitive cube root of unity.")
+    else:
+        print("WARNING! ENDO_SCALAR IS NOT A PRIMITIVE CUBE ROOT OF UNITY.")
+
+
+####### Checking the consistency of ENDO_COEFF and ENDO_SCALAR #############
+if endo_mul_is_used:
+    Q = int(zeta_r) * P
+    if Q == E([zeta_q * X, Y]):
+        print("Correct. ENDO_COEFF and ENDO_SCALAR are consistent.")
+    else:
+        print("WARNING! ENDO_COEFF AND ENDO_SCALAR ARE NOT CONSISTENT!")
+
+
+########## Checking that shortest vector in the lattice ([1,zeta_r),[0,r]) is long enough #########
+## The Halo paper (https://eprint.iacr.org/2019/1021.pdf) proves the injectivity of the endo_mul map.
+## The injectivity of the map (a,b) |-> a\zeta + b for a,b in [0,A] (essential for using add_unsafe)
+## is equivalent the lattice condition below.
+## a*zeta + b = a'*zeta_r + b' mod r   for a,a',b,b' in [0,A] 
+## is equivalent to the fact that there are non-zero solutions to 
+##      a * zeta_r = b mod r      for a,b in [-A,A].
+## Then it would exists c such that
+##      b = a * zeta_r + c * r.
+## Any such solution correspond to a point of the lattice spanned by (1, zeta_r) and (0, r).
+##      (a, b) = (a, c) * (1  zeta_r)
+##                        (0    r )
+## The injectivity is equivalent to the fact that the intersection between this lattice and [-A, A]^2
+## is trivial. To verify this we first compute a LLL reduced basis {v,w} and
+## then check if at least one of v, w, v + w, v - w is belongs to such a square.
+## If not, there can't be other lattice points in the square.
+if endo_mul_is_used:
+    A = 2**65 + 2**64 
+    L = Matrix([[1,Integer(zeta_r)],[0,SCALAR_FIELD_MODULUS]])
+    Lred = L.LLL()
+    set = [Lred.row(0), Lred.row(1), Lred.row(0) - Lred.row(1), Lred.row(0) + Lred.row(1)]
+    add_unsafe = True
+    for v in set:
+        if abs(v[0]) <= A and abs(v[1]) <= A:
+            add_unsafe = False
+    if add_unsafe:
+        print("We can use add_unsafe for endo_mul.")
+    else:
+        print("WARNING! WE CAN'T USE add_unsafe FOR endo_mul!")
+else:
+    print("endo_mul is not used for this curve.")
+=======
+    print("WARNING! COFACTOR_INV IS NOT THE INVERSE OF COFACTOR IN THE SCALAR FIELD!")
+>>>>>>> development

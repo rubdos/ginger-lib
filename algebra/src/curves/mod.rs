@@ -321,6 +321,16 @@ pub trait AffineCurve:
     fn mul_by_cofactor_inv(&self) -> Self;
 }
 
+pub trait EndoMulCurve: AffineCurve {
+    /// An efficiently computable endomorphism of the curve (if any).
+    fn apply_endomorphism(&self) -> Self;
+
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Result<Self::ScalarField, Error>;
+
+    /// Performs scalar multiplication of this element with mixed addition.
+    fn endo_mul(&self, bits: Vec<bool>) -> Result<Self::Projective, Error>;
+}
+
 impl<C: ProjectiveCurve> Group for C {
     type ScalarField = C::ScalarField;
     #[must_use]
