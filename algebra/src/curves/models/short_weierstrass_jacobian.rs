@@ -344,7 +344,8 @@ impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
         Ok(a.mul(P::ENDO_SCALAR) + &b)
     }
 
-    /// Performs scalar multiplication of this element with mixed addition.
+    /// Endomorphism-based multiplication of a curve point 
+    /// with a scalar in little-endian endomorphism representation.
     fn endo_mul(&self, bits: Vec<bool>) -> Result<Self::Projective, Error> {
 
         let self_neg = self.neg();

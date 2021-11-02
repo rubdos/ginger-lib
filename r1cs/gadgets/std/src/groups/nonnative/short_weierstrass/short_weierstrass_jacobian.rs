@@ -506,12 +506,12 @@ impl<P, ConstraintF, SimulationF> EndoMulCurveGadget<SWProjective<P>, Constraint
         ))
     }
 
-    /// The endomorphism-based scalar multiplication circuit from [Halo],taking only
-    /// 3.5 constraints per "scalar" bit. Assumes that `ENDO_SCALAR` satisfies the minimal
-    /// distance property as mentioned in `SWModelParameters`.
+    /// The endomorphism-based scalar multiplication circuit from [Halo] in non-native 
+    /// arithmetics. Assumes that `ENDO_SCALAR` satisfies the minimal distance property as 
+    /// mentioned in `SWModelParameters`.
     /// Given any non-trivial point `P= &self` of the prime order r subgroup, and a slice
     /// of an even number of at most `lambda` Booleans `bits`, enforces that the result equals
-    ///     phi(bits) * P,
+    ///     `phi(bits) * P`,
     /// where `phi(bits)` is the equivalent scalar representation of `bits`.
     ///
     /// [Halo]: https://eprint.iacr.org/2019/1021
