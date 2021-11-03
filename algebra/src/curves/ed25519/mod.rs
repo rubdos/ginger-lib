@@ -6,6 +6,7 @@ use crate::{
         twisted_edwards_extended::{GroupAffine, GroupProjective},
     },
     fields::ed25519::{fq::Fq, fr::Fr},
+    Field,
 };
 use std::str::FromStr;
 
@@ -98,10 +99,10 @@ impl TEModelParameters for Ed25519Parameters {
     const COEFF_D: Fq = field_new!(
         Fq,
         BigInteger256([
-            0x8a14b235eca6874a,
-            0xff8ff5b2bebe2754,
-            0x7338bf8688861767,
-            0x2dfc9311d490018c,                                  
+            0x80ed8bfedf47e9fa,
+            0x10a18777afc62973,
+            0xe5939207bc188690,
+            0x2c822b5a729fc526,                                  
         ])
     );
 
@@ -159,12 +160,14 @@ impl MontgomeryModelParameters for Ed25519Parameters {
 
 impl SWModelParameters for Ed25519Parameters {
     /// COEFF_A = 0
-    const COEFF_A: Fq = field_new!(Fq, BigInteger256([
-        0x98e77b38ebeb72af,
-        0xfd6b11cfe08460c3,
-        0x5c8b67fc784b2dd3,
-        0x59ada76a9992562b,
-    ));
+    const COEFF_A: Fq = field_new!(
+        Fq, BigInteger256([
+            0x98e77b38ebeb72af,
+            0xfd6b11cfe08460c3,
+            0x5c8b67fc784b2dd3,
+            0x59ada76a9992562b,
+        ])
+    );
 
     /// COEFF_B = 5
     const COEFF_B: Fq = field_new!(
