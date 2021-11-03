@@ -177,6 +177,20 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
     fn cost_of_double() -> usize;
 }
 
+pub trait EndoMulCurveGadget<G: Group, ConstraintF: Field>: GroupGadget<G, ConstraintF> {
+
+    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        cs: CS,
+    ) -> Result<Self, SynthesisError>;
+
+    fn endo_mul<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        cs: CS,
+        bits: &[Boolean],
+    ) -> Result<Self, SynthesisError>;
+}
+
 /// Pre-checks for vbSM with incomplete arithmetic using Hopwood algorithm (https://github.com/zcash/zcash/issues/3924) :
 /// - 'self' must be non-trivial and in the prime order subgroup
 /// - 'bits', in little endian, must be of length <= than the scalar field modulus.
@@ -454,11 +468,12 @@ pub(crate) fn scalar_bits_to_constant_length<
 
 #[cfg(test)]
 pub(crate) mod test {
-    use algebra::{BigInteger, Field, FpParameters, Group, PrimeField, ToBits, UniformRand};
+    use algebra::{Field, PrimeField, FpParameters, BigInteger, Group, UniformRand, ToBits, EndoMulCurve, ProjectiveCurve};
     use r1cs_core::ConstraintSystem;
 
     use crate::{prelude::*, test_constraint_system::TestConstraintSystem};
     use rand::thread_rng;
+    use crate::groups::EndoMulCurveGadget;
 
     #[allow(dead_code)]
     pub(crate) fn group_test<
@@ -526,11 +541,11 @@ pub(crate) mod test {
     >() {
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
-        let a: G = UniformRand::rand(&mut thread_rng());
-        let b: G = UniformRand::rand(&mut thread_rng());
+        let a_native: G = UniformRand::rand(&mut thread_rng());
+        let b_native: G = UniformRand::rand(&mut thread_rng());
 
-        let a = GG::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-        let b = GG::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
+        let a = GG::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native)).unwrap();
+        let b = GG::alloc(&mut cs.ns(|| "generate_b"), || Ok(b_native)).unwrap();
 
         let _zero = GG::zero(cs.ns(|| "Zero")).unwrap();
 
@@ -773,5 +788,34 @@ pub(crate) mod test {
             mul_bits_native_test::<ConstraintF, G, GG>();
             mul_bits_additivity_test::<ConstraintF, G, GG>();
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn endo_mul_test<
+        ConstraintF: Field,
+        G: ProjectiveCurve,
+        GG: EndoMulCurveGadget<G, ConstraintF, Value = G>,
+    >()
+    where
+        <G as ProjectiveCurve>::Affine: EndoMulCurve
+    {
+        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+
+        let a_native_proj = G::rand(&mut thread_rng());
+        let a_native = a_native_proj.into_affine();
+        let a = GG::alloc(&mut cs.ns(|| "generate_a"), || Ok(a_native_proj)).unwrap();
+
+        let scalar: G::ScalarField = u128::rand(&mut thread_rng()).into();
+
+        let b_native = scalar.into_repr().to_bits().as_slice()[0..128].to_vec();
+        let b = b_native
+            .iter()
+            .map(|&bit| Boolean::constant(bit))
+            .collect::<Vec<_>>();
+
+        let r_native = a_native.endo_mul(b_native).unwrap();
+        let r = a.endo_mul(cs.ns(|| "endo mul"), &b).unwrap().get_value().unwrap();
+
+        assert_eq!(r_native, r);
     }
 }

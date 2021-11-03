@@ -7,7 +7,7 @@ use crate::{
         models::{ModelParameters, SWModelParameters},
     },
     fields::{
-        bls12_381::{Fq, Fq2, Fr},
+        bls12_381::*,
         Field,
     },
 };
