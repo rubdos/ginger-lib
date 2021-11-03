@@ -7,7 +7,7 @@
 #   5) ENDO_COEFF                       must be a cube root in the base field.
 #   6) ENDO_SCALAR                      must be a cube root in the scalar field and satisfy ENDO_SCALAR * (X, Y) == (ENDO_COEFF * X, Y)        
 #   7) The intersection of the plane lattice spanned by {(1, ENDO_SCALAR), (0, SCALAR_FIELD_MODULUS)} with the square [-A,A]^2 must be empty,
-#       where A = 2^65 + 2^64 + 1.                         
+#       where A = 2^(LAMBDA/2 + 1) + 2^(LAMBDA/2) + 1.                         
 # Open Sage Shell in the corresponding folder and run the command 
 #       "sage check_curve_paramaters sage [file_path_curve] [file_path_basefield] [file_path_scalarfield]".
 
@@ -90,6 +90,10 @@ for s in big_int_names:
 ####Reading the value of COFACTOR
 pattern =  "const\s+COFACTOR:\s*&'static\s*\[u64\]\s*=\s*&\[([0-9a-fA-Fxu\s,]+)\]\s*;"
 COFACTOR = BigInteger_to_number(re.findall(pattern,readfile)[0])
+
+####Reading the value of LAMBDA
+pattern =  "const\s+LAMBDA[:\w\s]*=\s*([\d]+)\s*;"
+LAMBDA = int(re.findall(pattern,readfile)[0])
 
 #######################################Reading the values from the file containing the Base Field parameters########################
 filename = sys.argv[2]
@@ -210,7 +214,7 @@ if endo_mul_is_used:
 ## then check if at least one of v, w, v + w, v - w is belongs to such a square.
 ## If not, there can't be other lattice points in the square.
 if endo_mul_is_used:
-    A = 2**65 + 2**64 
+    A = 2**(LAMBDA//2 + 1) + 2**(LAMBDA//2) + 1 
     L = Matrix([[1,Integer(zeta_r)],[0,SCALAR_FIELD_MODULUS]])
     Lred = L.LLL()
     set = [Lred.row(0), Lred.row(1), Lred.row(0) - Lred.row(1), Lred.row(0) + Lred.row(1)]
