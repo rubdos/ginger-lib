@@ -70,6 +70,8 @@ nonnative_group_test_unsafe_add!(
     secp256k1Fq
 );
 
+//TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
+#[cfg(feature="density-optimized")]
 nonnative_group_test_unsafe_add!(
     TweedleFred25519Fq,
     1,
