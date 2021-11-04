@@ -1,20 +1,20 @@
-use crate::field_new;
+use crate::{field_new, short_weierstrass_jacobian, twisted_edwards_extended};
 use crate::{
     biginteger::BigInteger256,
     curves::{
         models::{ModelParameters, MontgomeryModelParameters, TEModelParameters, SWModelParameters},
-        twisted_edwards_extended::{GroupAffine, GroupProjective},
     },
     fields::ed25519::{fq::Fq, fr::Fr},
-    Field,
 };
 use std::str::FromStr;
 
 #[cfg(test)]
 mod tests;
 
-pub type Ed25519Affine = GroupAffine<Ed25519Parameters>;
-pub type Ed25519Projective = GroupProjective<Ed25519Parameters>;
+pub type TEEd25519Affine = twisted_edwards_extended::GroupAffine<Ed25519Parameters>;
+pub type TEEd25519Projective = twisted_edwards_extended::GroupProjective<Ed25519Parameters>;
+pub type SWEd25519Affine = short_weierstrass_jacobian::GroupAffine<Ed25519Parameters>;
+pub type SWEd25519Projective = short_weierstrass_jacobian::GroupProjective<Ed25519Parameters>;
 
 //Generator in the short Weierstrass model
 const GENERATOR_X: Fq = field_new!(
@@ -197,14 +197,9 @@ impl SWModelParameters for Ed25519Parameters {
     /// AFFINE_GENERATOR_COEFFS = (G1_GENERATOR_X, G1_GENERATOR_Y)
     const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField) =
         (GENERATOR_X, GENERATOR_Y);
-
-    #[inline(always)]
-    fn mul_by_a(_: &Self::BaseField) -> Self::BaseField {
-        Self::BaseField::zero()
-    }
 }
 
-impl FromStr for Ed25519Affine {
+impl FromStr for TEEd25519Affine {
     type Err = ();
 
     fn from_str(mut s: &str) -> Result<Self, Self::Err> {
@@ -227,7 +222,7 @@ impl FromStr for Ed25519Affine {
         if point.len() != 2 {
             return Err(());
         }
-        let point = Ed25519Affine::new(point[0], point[1]);
+        let point = TEEd25519Affine::new(point[0], point[1]);
 
         if !point.is_on_curve() {
             Err(())
