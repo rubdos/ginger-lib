@@ -184,15 +184,12 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
 
     #[inline]
     fn group_membership_test(&self) -> bool {
-        //let is_on_curve = self.is_on_curve();
-        assert!(self.is_on_curve(), "On curve check failed");
-        assert!(self.is_in_correct_subgroup_assuming_on_curve(), "Prime check failed");
-        true
-            /*&& if !self.is_zero() {
+        self.is_on_curve()
+            && if !self.is_zero() {
                 self.is_in_correct_subgroup_assuming_on_curve()
             } else {
                 true
-            }*/
+            }
     }
 
     fn add_points(to_add: &mut [Vec<Self>]) {
