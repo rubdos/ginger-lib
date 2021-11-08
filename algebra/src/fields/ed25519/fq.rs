@@ -24,36 +24,21 @@ impl FpParameters for FqParameters {
     const CAPACITY: u32 = Self::MODULUS_BITS - 1;
 
     const REPR_SHAVE_BITS: u32 = 1;
-    
+
     // R = 2^256 mod MODULUS
-    const R: BigInteger = BigInteger([
-        0x26,
-        0x0,
-        0x0,
-        0x0,
-    ]);
-    
+    const R: BigInteger = BigInteger([0x26, 0x0, 0x0, 0x0]);
+
     // R2 = R^2 mod MODULUS
-    const R2: BigInteger = BigInteger([
-        0x5a4,
-        0x0,
-        0x0,
-        0x0,
-    ]);
-    
+    const R2: BigInteger = BigInteger([0x5a4, 0x0, 0x0, 0x0]);
+
     // INV = (-MODULUS)^(-1) mod 2^64
     const INV: u64 = 0x86bca1af286bca1b;
 
     // 2 in Montgomery form
-    const GENERATOR: BigInteger = BigInteger([
-        0x4c,
-        0x0,
-        0x0,
-        0x0,
-    ]);
+    const GENERATOR: BigInteger = BigInteger([0x4c, 0x0, 0x0, 0x0]);
 
     const TWO_ADICITY: u32 = 2;
-    
+
     // 2^((MODULUS -1)/4)
     const ROOT_OF_UNITY: BigInteger = BigInteger([
         0x3b5807d4fe2bdb04,

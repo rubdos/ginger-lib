@@ -178,7 +178,6 @@ pub trait GroupGadget<G: Group, ConstraintF: Field>:
 }
 
 pub trait EndoMulCurveGadget<G: Group, ConstraintF: Field>: GroupGadget<G, ConstraintF> {
-
     fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
         &self,
         cs: CS,
@@ -468,12 +467,15 @@ pub(crate) fn scalar_bits_to_constant_length<
 
 #[cfg(test)]
 pub(crate) mod test {
-    use algebra::{Field, PrimeField, FpParameters, BigInteger, Group, UniformRand, ToBits, EndoMulCurve, ProjectiveCurve};
+    use algebra::{
+        BigInteger, EndoMulCurve, Field, FpParameters, Group, PrimeField, ProjectiveCurve, ToBits,
+        UniformRand,
+    };
     use r1cs_core::ConstraintSystem;
 
+    use crate::groups::EndoMulCurveGadget;
     use crate::{prelude::*, test_constraint_system::TestConstraintSystem};
     use rand::thread_rng;
-    use crate::groups::EndoMulCurveGadget;
 
     #[allow(dead_code)]
     pub(crate) fn group_test<
@@ -631,8 +633,7 @@ pub(crate) mod test {
             );
             assert!(
                 native_result[expected_len - 1]
-                    || (!native_result[expected_len - 1]
-                        && native_result[expected_len - 2]),
+                    || (!native_result[expected_len - 1] && native_result[expected_len - 2]),
                 "unexpected value of native result"
             );
 
@@ -797,7 +798,7 @@ pub(crate) mod test {
         GG: EndoMulCurveGadget<G, ConstraintF, Value = G>,
     >()
     where
-        <G as ProjectiveCurve>::Affine: EndoMulCurve
+        <G as ProjectiveCurve>::Affine: EndoMulCurve,
     {
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
@@ -814,7 +815,11 @@ pub(crate) mod test {
             .collect::<Vec<_>>();
 
         let r_native = a_native.endo_mul(b_native).unwrap();
-        let r = a.endo_mul(cs.ns(|| "endo mul"), &b).unwrap().get_value().unwrap();
+        let r = a
+            .endo_mul(cs.ns(|| "endo mul"), &b)
+            .unwrap()
+            .get_value()
+            .unwrap();
 
         assert_eq!(r_native, r);
     }

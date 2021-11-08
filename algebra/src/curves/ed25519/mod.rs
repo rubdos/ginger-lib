@@ -1,11 +1,11 @@
-use crate::{field_new, short_weierstrass_jacobian, twisted_edwards_extended};
 use crate::{
     biginteger::BigInteger256,
-    curves::{
-        models::{ModelParameters, MontgomeryModelParameters, TEModelParameters, SWModelParameters},
+    curves::models::{
+        ModelParameters, MontgomeryModelParameters, SWModelParameters, TEModelParameters,
     },
     fields::ed25519::{fq::Fq, fr::Fr},
 };
+use crate::{field_new, short_weierstrass_jacobian, twisted_edwards_extended};
 use std::str::FromStr;
 
 #[cfg(test)]
@@ -23,7 +23,7 @@ const GENERATOR_X: Fq = field_new!(
         0x08bbc702597f82c2,
         0x32af7b1bfc787efa,
         0xa1b73a6fe2cce7a9,
-        0x4df0d058e6887a99,              
+        0x4df0d058e6887a99,
     ])
 );
 const GENERATOR_Y: Fq = field_new!(
@@ -32,7 +32,7 @@ const GENERATOR_Y: Fq = field_new!(
         0x13d744368a8c51dc,
         0xca98ee7910cd5515,
         0x3eb8da8cc4097750,
-        0x336e309b8e6612f0,        
+        0x336e309b8e6612f0,
     ])
 );
 
@@ -43,7 +43,7 @@ const TE_X: Fq = field_new!(
         0xe2cabc553f9da287,
         0x9ca598562396e489,
         0x9879936bade4b5b7,
-        0x759e23707e6077d0,        
+        0x759e23707e6077d0,
     ])
 );
 const TE_Y: Fq = field_new!(
@@ -69,11 +69,10 @@ const TE_Y: Fq = field_new!(
 ///      sqrt(236841848896)·y² = x³ + 486662·x² + x
 /// via the equivalence described here:
 /// https://en.wikipedia.org/wiki/Montgomery_curve#Equivalence_with_twisted_Edwards_curves    
-/// 
+///
 /// Recall that any Montgomery curve B·y² = x³ + A·x² + x
-/// is equivalent to a Weierstrass curve via the isomorphism describe here: 
+/// is equivalent to a Weierstrass curve via the isomorphism describe here:
 /// https://en.wikipedia.org/wiki/Montgomery_curve#Equivalence_with_Weierstrass_curves
-
 
 #[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub struct Ed25519Parameters;
@@ -102,7 +101,7 @@ impl TEModelParameters for Ed25519Parameters {
             0x80ed8bfedf47e9fa,
             0x10a18777afc62973,
             0xe5939207bc188690,
-            0x2c822b5a729fc526,                                  
+            0x2c822b5a729fc526,
         ])
     );
 
@@ -135,15 +134,7 @@ impl TEModelParameters for Ed25519Parameters {
 
 impl MontgomeryModelParameters for Ed25519Parameters {
     /// COEFF_A = 0x76d06
-    const COEFF_A: Fq = field_new!(
-        Fq,
-        BigInteger256([
-            0x11a2ee4,
-            0x0,
-            0x0,
-            0x0,
-        ])
-    );
+    const COEFF_A: Fq = field_new!(Fq, BigInteger256([0x11a2ee4, 0x0, 0x0, 0x0,]));
     /// COEFF_B = 0x7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff892e5
     const COEFF_B: Fq = field_new!(
         Fq,
@@ -161,7 +152,8 @@ impl MontgomeryModelParameters for Ed25519Parameters {
 impl SWModelParameters for Ed25519Parameters {
     /// COEFF_A = 0
     const COEFF_A: Fq = field_new!(
-        Fq, BigInteger256([
+        Fq,
+        BigInteger256([
             0x98e77b38ebeb72af,
             0xfd6b11cfe08460c3,
             0x5c8b67fc784b2dd3,
@@ -195,8 +187,7 @@ impl SWModelParameters for Ed25519Parameters {
     );
 
     /// AFFINE_GENERATOR_COEFFS = (G1_GENERATOR_X, G1_GENERATOR_Y)
-    const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField) =
-        (GENERATOR_X, GENERATOR_Y);
+    const AFFINE_GENERATOR_COEFFS: (Self::BaseField, Self::BaseField) = (GENERATOR_X, GENERATOR_Y);
 }
 
 impl FromStr for TEEd25519Affine {

@@ -9,6 +9,9 @@ use poly_commit::{
     PCUniversalParams, PolynomialCommitment,
 };
 
+#[cfg(test)]
+pub mod csw_prototype;
+
 pub mod final_darlin;
 pub mod simple_marlin;
 

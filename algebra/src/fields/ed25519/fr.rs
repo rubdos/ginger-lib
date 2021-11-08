@@ -29,18 +29,18 @@ impl FpParameters for FrParameters {
         0xd6ec31748d98951d,
         0xc6ef5bf4737dcf70,
         0xfffffffffffffffe,
-        0xfffffffffffffff,     
+        0xfffffffffffffff,
     ]);
 
     const R2: BigInteger = BigInteger([
         0xa40611e3449c0f01,
         0xd00e1ba768859347,
         0xceec73d217f5be65,
-        0x399411b7c309a3d,        
+        0x399411b7c309a3d,
     ]);
 
     const INV: u64 = 0xd2b51da312547e1b;
-    
+
     // GENERATOR = 2 (Representend in Montgomery form)
     const GENERATOR: BigInteger = BigInteger([
         0x55c5ffcebe3b564d,
@@ -63,7 +63,7 @@ impl FpParameters for FrParameters {
         0x0a6f7cef517bce6b,
         0x0000000000000000,
         0x800000000000000,
-        ]);
+    ]);
 
     const T: BigInteger = BigInteger([
         0x960498c6973d74fb,

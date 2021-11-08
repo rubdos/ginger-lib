@@ -209,6 +209,9 @@ where
             P::matrix_mix(state);
         }
 
+        println!("Primitive values after first set of full rounds: {:?}", state);
+        println!("*************************************************************");
+
         // Partial rounds
         for _i in 0..P::R_P {
             // Add the round constants to the state vector
@@ -219,6 +222,10 @@ where
 
             // Perform matrix mix
             P::matrix_mix(state);
+
+            println!("Primitive values after partial round {}: {:?}", _i, state);
+            println!("*************************************************************");
+
         }
 
         // Second full rounds
