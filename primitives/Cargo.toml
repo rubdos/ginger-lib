@@ -23,8 +23,8 @@ edition = "2018"
 algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development_tmp", features = ["parallel"] }
 bench-utils = { path = "../bench-utils" }
 
-digest = { version = "0.7", optional = true }
-blake2 = { version = "0.7", optional = true }
+digest = { version = "0.8", optional = true }
+blake2 = { version = "0.8", optional = true }
 
 rand = { version = "0.7" }
 derivative = "1"
@@ -33,7 +33,6 @@ hex = "0.4.0"
 
 
 serde = { version = "1.0.117", features = ["derive"]}
-rocksdb = { version = "0.14.0", optional = true }
 
 [features]
 llvm_asm = ["algebra/llvm_asm"]
