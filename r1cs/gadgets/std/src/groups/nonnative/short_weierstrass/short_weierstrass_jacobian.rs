@@ -472,7 +472,7 @@ where
                 Some(SWAffine::<P>::new(x, y, infinity).into_projective())
             }
             (None, None, None) => None,
-            _ => None,
+            _ => unreachable!(),
         }
     }
 
