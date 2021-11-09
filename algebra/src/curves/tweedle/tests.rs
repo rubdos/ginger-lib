@@ -1,7 +1,8 @@
 use crate::{
     biginteger::BigInteger,
     curves::{
-        models::SWModelParameters, tests::curve_tests, tweedle::*, AffineCurve, ProjectiveCurve, EndoMulCurve,
+        models::SWModelParameters, tests::curve_tests, tweedle::*, AffineCurve, EndoMulCurve,
+        ProjectiveCurve,
     },
     fields::{tweedle::*, Field, PrimeField, SquareRootField},
     groups::tests::group_test,
@@ -13,7 +14,7 @@ use crate::curves::tests::sw_jacobian_tests;
 use crate::curves::tweedle::dee::TweedledeeParameters;
 use crate::curves::tweedle::dum::TweedledumParameters;
 use crate::UniformRand;
-use rand::{Rng, SeedableRng, thread_rng};
+use rand::{thread_rng, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
 #[test]
@@ -216,9 +217,7 @@ fn test_dum_addition_correctness() {
 
 #[test]
 fn test_dee_endo_mul() {
-
     for _ in 0..100 {
-
         let p = dee::Projective::rand(&mut thread_rng()).into_affine();
 
         let scalar: Fq = u128::rand(&mut thread_rng()).into();
@@ -233,9 +232,7 @@ fn test_dee_endo_mul() {
 
 #[test]
 fn test_dum_endo_mul() {
-
     for _ in 0..100 {
-
         let p = dum::Projective::rand(&mut thread_rng()).into_affine();
 
         let scalar: Fq = u128::rand(&mut thread_rng()).into();

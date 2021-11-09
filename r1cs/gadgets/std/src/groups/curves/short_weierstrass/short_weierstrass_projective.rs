@@ -2,7 +2,8 @@ use algebra::{
     curves::short_weierstrass_projective::{
         GroupAffine as SWAffine, GroupProjective as SWProjective,
     },
-    AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, EndoMulParameters,
+    AffineCurve, BitIterator, EndoMulParameters, Field, PrimeField, ProjectiveCurve,
+    SWModelParameters,
 };
 use r1cs_core::{ConstraintSystem, SynthesisError};
 use std::ops::{Add, Mul};
@@ -918,11 +919,12 @@ where
     }
 }
 
-impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for AffineGadget<P, ConstraintF, F>
-    where
-        P: EndoMulParameters,
-        ConstraintF: PrimeField,
-        F: FieldGadget<P::BaseField, ConstraintF>,
+impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF>
+    for AffineGadget<P, ConstraintF, F>
+where
+    P: EndoMulParameters,
+    ConstraintF: PrimeField,
+    F: FieldGadget<P::BaseField, ConstraintF>,
 {
     /// Given an arbitrary curve element `&self`, applies the endomorphism
     /// defined by `ENDO_COEFF`.
@@ -933,7 +935,7 @@ impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for Aff
         Ok(Self::new(
             self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
             self.y.clone(),
-            self.infinity
+            self.infinity,
         ))
     }
 
@@ -951,14 +953,15 @@ impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for Aff
         mut cs: CS,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
-
         let mut bits = bits.to_vec();
         if bits.len() % 2 == 1 {
             bits.push(Boolean::constant(false));
         }
 
         if bits.len() > P::LAMBDA {
-            Err(SynthesisError::Other("Endo mul bits length exceeds LAMBDA".to_owned()))?
+            Err(SynthesisError::Other(
+                "Endo mul bits length exceeds LAMBDA".to_owned(),
+            ))?
         }
 
         let endo_self = self.apply_endomorphism(cs.ns(|| "endo self"))?;
@@ -969,7 +972,6 @@ impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for Aff
         acc.double_in_place(cs.ns(|| "double"))?;
 
         for i in (0..(bits.len() / 2)).rev() {
-
             // Conditional select between (-1)^b_0 * Phi^{b_1}(&self), according
             // to [b_1,b_0] = bits[2i+1, 2i].
             // Takes 2 constraints.
@@ -986,7 +988,7 @@ impl<P, ConstraintF, F> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for Aff
                     &self.y,
                     &self_y_neg,
                 )?,
-                self.infinity
+                self.infinity,
             );
 
             // The unsafe double and add, takes 5 constraints.
