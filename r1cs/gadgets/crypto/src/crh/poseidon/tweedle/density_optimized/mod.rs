@@ -90,30 +90,9 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
         for k in 0..num_rounds_to_process - 1 {
             let mut new_state_pow_5 = Vec::with_capacity(P::T);
 
-            // Precompute MDS*state_pow_5[j] val and LC
-            let mut mds_times_state_pow_5_val_vec = Vec::with_capacity(P::T);
-            let mut mds_times_state_pow_5_lc_vec = Vec::with_capacity(P::T);
-
             for j in 0..P::T {
                 let round_cst = P::ROUND_CST[*round_idx * P::T + j];
                 let mds_start_idx = P::T * j;
-
-                // Compute MDS*state_pow_5[j] val =
-                // (MDS[j,0]·state_pow_5[0] + MDS[j,1]·state_pow_5[1] +MDS[j,2]·state_pow_5[2] + round_cst)
-                let mds_times_state_pow_5_val = FpGadget::<Fr>::alloc(
-                    cs.ns(|| format!("compute_mds_times_state_pow_5_val_{}_{}", j, k)),
-                    || {
-                        let mut val = Fr::zero();
-
-                        for t in 0..P::T {
-                            val +=
-                                P::MDS_CST[mds_start_idx + t] * state_pow_5[t].get_value().get()?;
-                        }
-                        val += round_cst;
-                        Ok(val)
-                    },
-                )?;
-                mds_times_state_pow_5_val_vec.push(mds_times_state_pow_5_val);
 
                 // Compute MDS*state_pow_5[j] LC =
                 // (MDS[j,0]·state_pow_5[0] + MDS[j,1]·state_pow_5[1] +MDS[j,2]·state_pow_5[2] + round_cst)
@@ -128,23 +107,29 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
                     }
                     temp
                 };
-                mds_times_state_pow_5_lc_vec.push(mds_times_state_pow_5_lc)
-            }
 
-            for j in 0..P::T {
                 // Update state_pow_2_elems
                 {
                     // new_state_elem = mds_times_state_pow_5_val^2
                     let new_state_elem = FpGadget::<Fr>::alloc(
                         cs.ns(|| format!("update_state_pow_2_elem_{}_{}", j, k)),
-                        || Ok(mds_times_state_pow_5_val_vec[j].get_value().get()?.square()),
+                        || {
+                            let mut val = Fr::zero();
+
+                            for t in 0..P::T {
+                                val += P::MDS_CST[mds_start_idx + t]
+                                    * state_pow_5[t].get_value().get()?;
+                            }
+                            val += round_cst;
+                            Ok(val.square())
+                        },
                     )?;
 
                     // mds_times_state_pow_5_lc * mds_times_state_pow_5_lc == new_state_elem
                     cs.enforce(
                         || format!("check_updated_state_pow_2_elem_{}_{}", j, k),
-                        |lc| &mds_times_state_pow_5_lc_vec[j] + lc,
-                        |lc| &mds_times_state_pow_5_lc_vec[j] + lc,
+                        |lc| &mds_times_state_pow_5_lc + lc,
+                        |lc| &mds_times_state_pow_5_lc + lc,
                         |lc| new_state_elem.get_variable() + lc,
                     );
                     state_pow_2[j] = new_state_elem;
@@ -165,15 +150,21 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
                     let new_state_elem = FpGadget::<Fr>::alloc(
                         cs.ns(|| format!("compute_new_state_pow_5_elem_{}_{}", j, k)),
                         || {
-                            Ok(mds_times_state_pow_5_val_vec[j].get_value().get()?
-                                * state_pow_4[j].get_value().get()?)
+                            let mut val = Fr::zero();
+
+                            for t in 0..P::T {
+                                val += P::MDS_CST[mds_start_idx + t]
+                                    * state_pow_5[t].get_value().get()?;
+                            }
+                            val += round_cst;
+                            Ok(val * state_pow_4[j].get_value().get()?)
                         },
                     )?;
 
                     // mds_times_state_pow_5_lc * state_pow_4[j] == new_state_elem
                     cs.enforce(
                         || format!("check_new_state_pow_5_elem_{}_{}", j, k),
-                        |lc| &mds_times_state_pow_5_lc_vec[j] + lc,
+                        |lc| &mds_times_state_pow_5_lc + lc,
                         |lc| state_pow_4[j].get_variable() + lc,
                         |lc| new_state_elem.get_variable() + lc,
                     );
@@ -432,7 +423,7 @@ impl FieldBasedHashGadget<TweedleFrPoseidonHash, Fr>
         mut cs: CS,
         input: &[Self::DataGadget],
     ) -> Result<Self::DataGadget, SynthesisError>
-    // Assumption:
+// Assumption:
     //     capacity c = 1
     {
         assert!(P::R_F % 2 == 0);
