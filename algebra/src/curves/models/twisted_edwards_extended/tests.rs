@@ -1,4 +1,4 @@
-use crate::{MontgomeryModelParameters, SWModelParameters, TEModelParameters, fields::Field};
+use crate::{fields::Field, MontgomeryModelParameters, SWModelParameters, TEModelParameters};
 
 #[allow(dead_code)]
 pub(crate) fn montgomery_conversion_test<P>()
