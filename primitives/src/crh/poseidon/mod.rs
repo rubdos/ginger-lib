@@ -209,7 +209,10 @@ where
             P::matrix_mix(state);
         }
 
-        println!("Primitive values after first set of full rounds: {:?}", state);
+        println!(
+            "Primitive values after first set of full rounds: {:?}",
+            state
+        );
         println!("*************************************************************");
 
         // Partial rounds
@@ -225,7 +228,6 @@ where
 
             println!("Primitive values after partial round {}: {:?}", _i, state);
             println!("*************************************************************");
-
         }
 
         // Second full rounds

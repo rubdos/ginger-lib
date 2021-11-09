@@ -38,7 +38,10 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
             {
                 // (state[j] + round_cst) * (state[j] + round_cst) == new_state_elem
                 let new_state_elem = state[j]
-                    .add_constant(cs.ns(|| format!("compute_state_pow_2_elem_{}_add_round_cst", j)), &round_cst)?
+                    .add_constant(
+                        cs.ns(|| format!("compute_state_pow_2_elem_{}_add_round_cst", j)),
+                        &round_cst,
+                    )?
                     .square(cs.ns(|| format!("compute_state_pow_2_elem_{}_square", j)))?;
 
                 state_pow_2.push(new_state_elem);
@@ -47,9 +50,8 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
             // Enforce new state_pow_4 elems
             {
                 // state_pow_2[j] * state_pow_2[j] == new_state_elem
-                let new_state_elem = state_pow_2[j].square(
-                    cs.ns(|| format!("compute_check_state_pow_4_elem_{}", j)),
-                )?;
+                let new_state_elem = state_pow_2[j]
+                    .square(cs.ns(|| format!("compute_check_state_pow_4_elem_{}", j)))?;
 
                 state_pow_4.push(new_state_elem);
             }
@@ -151,9 +153,8 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
                 // Update state_pow_4_elems
                 {
                     // state_pow_2[j] * state_pow_2[j] == new_state_elem
-                    let new_state_elem = state_pow_2[j].square(
-                        cs.ns(|| format!("update_check_state_pow_4_elem_{}_{}", j, k)),
-                    )?;
+                    let new_state_elem = state_pow_2[j]
+                        .square(cs.ns(|| format!("update_check_state_pow_4_elem_{}_{}", j, k)))?;
 
                     state_pow_4[j] = new_state_elem;
                 }
@@ -195,8 +196,7 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
                     let mut val = Fr::zero();
 
                     for t in 0..P::T {
-                        val +=
-                            P::MDS_CST[mds_start_idx + t] * state_pow_5[t].get_value().get()?;
+                        val += P::MDS_CST[mds_start_idx + t] * state_pow_5[t].get_value().get()?;
                     }
 
                     Ok(val)
@@ -235,41 +235,45 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
         state: &mut [FpGadget<Fr>],
         num_rounds_to_process: usize,
         round_idx: &mut usize,
-    ) -> Result<(), SynthesisError> 
-    {
+    ) -> Result<(), SynthesisError> {
         let mut x = vec![FpGadget::<Fr>::zero(cs.ns(|| "zero"))?; num_rounds_to_process + 1];
-        x[0] = state[0].clone(); 
+        x[0] = state[0].clone();
 
         for j in 0..num_rounds_to_process {
             let round_cst = P::ROUND_CST[3 * (*round_idx + j)];
-            
+
             let x_2 = x[j]
-                .add_constant(cs.ns(|| format!("compute_x2_{}_add_round_cst", j)), &round_cst)?
+                .add_constant(
+                    cs.ns(|| format!("compute_x2_{}_add_round_cst", j)),
+                    &round_cst,
+                )?
                 .square(cs.ns(|| format!("compute_x2_{}_square", j)))?;
-            
+
             let x_4 = x_2.square(cs.ns(|| format!("compute_x4_{}", j)))?;
 
             // Compute new state[0] elem
             {
                 // x[j+1] = LC[j,0]·state[1] + LC[j,1]·state[2] + sum(k=1..j) LC[j,1+k]·x[k] + alpha[round_idx][j] +
                 //          (x[j] + round_cst)*(MDS[0,0]·x4)
-                let new_state_elem = FpGadget::<Fr>::alloc(
-                    cs.ns(|| format!("compute new x elem {}", j)),
-                    || {
-                        let mut val = LC[j][0] * state[1].get_value().get()? + LC[j][1] * state[2].get_value().get()?;
+                let new_state_elem =
+                    FpGadget::<Fr>::alloc(cs.ns(|| format!("compute new x elem {}", j)), || {
+                        let mut val = LC[j][0] * state[1].get_value().get()?
+                            + LC[j][1] * state[2].get_value().get()?;
                         for k in 1..=j {
                             val += LC[j][k + 1] * x[k].get_value().get()?;
                         }
-                        val += ALPHA[*round_idx][j] + ((x[j].get_value().get()? + round_cst) * (P::MDS_CST[0] * x_4.get_value().get()?));
+                        val += ALPHA[*round_idx][j]
+                            + ((x[j].get_value().get()? + round_cst)
+                                * (P::MDS_CST[0] * x_4.get_value().get()?));
 
                         Ok(val)
-                    }
-                )?;
+                    })?;
 
                 // new_state_lc = x[j+1] - LC[j,0]·state[1] - LC[j,1]·state[2] -sum(k=1..j)(LC[j,1+k]·x[k]) - alpha[round_idx][j]
                 let new_state_lc = {
-                    let mut t = new_state_elem.get_variable() +
-                    (-LC[j][0], &state[1].get_variable()) + (-LC[j][1], &state[2].get_variable());
+                    let mut t = new_state_elem.get_variable()
+                        + (-LC[j][0], &state[1].get_variable())
+                        + (-LC[j][1], &state[2].get_variable());
 
                     for k in 1..=j {
                         t = t + (-LC[j][k + 1], &x[k].get_variable());
@@ -297,25 +301,25 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
         let new_state_1 = {
             // Let n = num_rounds_to_process
             // y_val = b[n]·state[1] + c[n]·state[2] +sum(k=0..n-1)(a[k]·x[n-k]) + beta[round_idx][n]
-            let y_val = FpGadget::<Fr>::alloc(
-                cs.ns(|| "alloc y val"),
-                || {
-                    let mut val = B[num_rounds_to_process] * state[1].get_value().get()?
-                        + C[num_rounds_to_process] * state[2].get_value().get()?
-                        + BETA[*round_idx][num_rounds_to_process];
-                    
-                    for k in 0..num_rounds_to_process {
-                        val += A[k] * x[num_rounds_to_process - k].get_value().unwrap();
-                    }
-                    
-                    Ok(val)
+            let y_val = FpGadget::<Fr>::alloc(cs.ns(|| "alloc y val"), || {
+                let mut val = B[num_rounds_to_process] * state[1].get_value().get()?
+                    + C[num_rounds_to_process] * state[2].get_value().get()?
+                    + BETA[*round_idx][num_rounds_to_process];
+
+                for k in 0..num_rounds_to_process {
+                    val += A[k] * x[num_rounds_to_process - k].get_value().unwrap();
                 }
-            )?;
-            
+
+                Ok(val)
+            })?;
+
             // y_lc = b[n]·state[1] + c[n]·state[2] +sum(k=0..n-1)(a[k]·x[n-k]) + beta[round_idx][n]
             let y_lc = {
-                let mut t: ConstraintVar<Fr> = (B[num_rounds_to_process], state[1].get_variable()).into();
-                t = t + (C[num_rounds_to_process], &state[2].get_variable()) + (BETA[*round_idx][num_rounds_to_process], CS::one());
+                let mut t: ConstraintVar<Fr> =
+                    (B[num_rounds_to_process], state[1].get_variable()).into();
+                t = t
+                    + (C[num_rounds_to_process], &state[2].get_variable())
+                    + (BETA[*round_idx][num_rounds_to_process], CS::one());
 
                 for k in 0..num_rounds_to_process {
                     t = t + (A[k], &x[num_rounds_to_process - k].get_variable())
@@ -328,7 +332,7 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
                 || "enforce y",
                 |lc| lc + CS::one(),
                 |_| y_lc,
-                |lc| y_val.get_variable() + lc 
+                |lc| y_val.get_variable() + lc,
             );
 
             y_val
@@ -338,25 +342,25 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
         let new_state_2 = {
             // Let n = num_rounds_to_process
             // z_val = e[n]·state[1] + f[n]·state[2] +sum(k=0..n-1)(d[k]·x[n-k]) + gamma[round_idx][n]
-            let z_val = FpGadget::<Fr>::alloc(
-                cs.ns(|| "alloc z val"),
-                || {
-                    let mut val = E[num_rounds_to_process] * state[1].get_value().get()?
-                        + F[num_rounds_to_process] * state[2].get_value().get()?
-                        + GAMMA[*round_idx][num_rounds_to_process];
-                    
-                    for k in 0..num_rounds_to_process {
-                        val += D[k] * x[num_rounds_to_process - k].get_value().unwrap();
-                    }
-                    
-                    Ok(val)
+            let z_val = FpGadget::<Fr>::alloc(cs.ns(|| "alloc z val"), || {
+                let mut val = E[num_rounds_to_process] * state[1].get_value().get()?
+                    + F[num_rounds_to_process] * state[2].get_value().get()?
+                    + GAMMA[*round_idx][num_rounds_to_process];
+
+                for k in 0..num_rounds_to_process {
+                    val += D[k] * x[num_rounds_to_process - k].get_value().unwrap();
                 }
-            )?;
-            
+
+                Ok(val)
+            })?;
+
             // z_lc = e[n]·state[1] + f[n]·state[2] +sum(k=0..n-1)(d[k]·x[n-k]) + gamma[round_idx][n]
             let z_lc = {
-                let mut t: ConstraintVar<Fr> = (E[num_rounds_to_process], state[1].get_variable()).into();
-                t = t + (F[num_rounds_to_process], &state[2].get_variable()) + (GAMMA[*round_idx][num_rounds_to_process], CS::one());
+                let mut t: ConstraintVar<Fr> =
+                    (E[num_rounds_to_process], state[1].get_variable()).into();
+                t = t
+                    + (F[num_rounds_to_process], &state[2].get_variable())
+                    + (GAMMA[*round_idx][num_rounds_to_process], CS::one());
 
                 for k in 0..num_rounds_to_process {
                     t = t + (D[k], &x[num_rounds_to_process - k].get_variable())
@@ -369,7 +373,7 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
                 || "enforce z",
                 |lc| lc + CS::one(),
                 |_| z_lc,
-                |lc| z_val.get_variable() + lc 
+                |lc| z_val.get_variable() + lc,
             );
 
             z_val
@@ -397,9 +401,6 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
             &mut round_idx,
         )?;
 
-        println!("Circuit values after first set of full rounds: {:?}", state);
-        println!("*************************************************************");
-
         for i in 0..P::R_P / MULTIPLE_PARTIAL_ROUNDS_LEN {
             Self::enforce_multiple_partial_rounds(
                 cs.ns(|| format!("enforce set {} of partial rounds", i)),
@@ -407,9 +408,6 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
                 MULTIPLE_PARTIAL_ROUNDS_LEN as usize,
                 &mut round_idx,
             )?;
-
-            println!("Circuit values after partial round {}: {:?}", i, state);
-            println!("*************************************************************");
         }
 
         Self::enforce_multiple_full_rounds(
@@ -434,7 +432,7 @@ impl FieldBasedHashGadget<TweedleFrPoseidonHash, Fr>
         mut cs: CS,
         input: &[Self::DataGadget],
     ) -> Result<Self::DataGadget, SynthesisError>
-// Assumption:
+    // Assumption:
     //     capacity c = 1
     {
         assert!(P::R_F % 2 == 0);
@@ -515,7 +513,10 @@ impl FieldBasedHashGadget<TweedleFrPoseidonHash, Fr>
 
 #[cfg(test)]
 mod test {
-    use crate::{crh::test::constant_length_field_based_hash_gadget_native_test, poseidon::test::generate_inputs};
+    use crate::{
+        crh::test::constant_length_field_based_hash_gadget_native_test,
+        poseidon::test::generate_inputs,
+    };
 
     use super::*;
 
@@ -523,9 +524,11 @@ mod test {
     fn test_native_density_optimized_tweedle_fr_poseidon_hash() {
         for ins in 1..=3 {
             println!("Test num inputs: {}", ins);
-            constant_length_field_based_hash_gadget_native_test::<_, _, TweedleFrDensityOptimizedPoseidonHashGadget>(
-                generate_inputs(ins),
-            );
+            constant_length_field_based_hash_gadget_native_test::<
+                _,
+                _,
+                TweedleFrDensityOptimizedPoseidonHashGadget,
+            >(generate_inputs(ins));
         }
     }
 }

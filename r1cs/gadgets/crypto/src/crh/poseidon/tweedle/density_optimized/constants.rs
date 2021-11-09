@@ -98,15 +98,6 @@ pub(crate) const B: &[TweedleFr] = &[
             0x2a98a42c2dbaeeee,
         ])
     ),
-    field_new!(
-        TweedleFr,
-        BigInteger([
-            0x647482c177aa4cdd,
-            0x2b234e5740efe250,
-            0xe9a36ac2f2f097c4,
-            0x0b268b90a8db2a2c,
-        ])
-    ),
 ];
 
 pub(crate) const C: &[TweedleFr] = &[
@@ -153,15 +144,6 @@ pub(crate) const C: &[TweedleFr] = &[
             0xde6215e8701d9269,
             0x229e5e73c722f91f,
             0x07d5f0141dba4394,
-        ])
-    ),
-    field_new!(
-        TweedleFr,
-        BigInteger([
-            0xeb176cddf6ca01b9,
-            0xf7bf40b1b39c3734,
-            0x5b1da5c1d2a05494,
-            0x095cb73a42ec9b63,
         ])
     ),
 ];
@@ -260,15 +242,6 @@ pub(crate) const E: &[TweedleFr] = &[
             0x2ea346883e43d69b,
         ])
     ),
-    field_new!(
-        TweedleFr,
-        BigInteger([
-            0x6a48f8efbe573b1d,
-            0x9e8de6fc4885f197,
-            0xb4af9162c4a9bc03,
-            0x15ded8f921f03e61,
-        ])
-    ),
 ];
 
 pub(crate) const F: &[TweedleFr] = &[
@@ -315,15 +288,6 @@ pub(crate) const F: &[TweedleFr] = &[
             0xcb3353ba6db95674,
             0xa48e2c65dc61269d,
             0x216baec01907e312,
-        ])
-    ),
-    field_new!(
-        TweedleFr,
-        BigInteger([
-            0x6b0c743e82c795ca,
-            0xc18f3cba472f4f3f,
-            0x89828f61a2b5bac6,
-            0x1af92bc81b1807c0,
         ])
     ),
 ];
@@ -375,15 +339,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x0b414a6d7777cd53,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x74a9fbaafbc92c12,
-                0x8e79ea59e2bc15d4,
-                0x543c159805e68a7f,
-                0x2d4ce018e9819f7b,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -429,15 +384,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2141b2b58e7f84e6,
                 0x5e2f5b9494859d57,
                 0x391b12a38a1f2bac,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xd76b001d2fd4b353,
-                0x9a233a6467b0a19e,
-                0xbfa35292fca7959d,
-                0x0df5a222416d4d37,
             ])
         ),
     ],
@@ -487,15 +433,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x1316e8ccbd951166,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xe7410433870cee36,
-                0xfa2fc59a61f0b43a,
-                0xdcb94b006c4cef0d,
-                0x27bc78c3072cadb1,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -541,15 +478,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xa427eb2697f7e7ee,
                 0x6d998e385c5003f6,
                 0x2f014a6ed461f520,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xc2f46f0cb32df994,
-                0xee08ff3645c01944,
-                0x38e164c1b10279c3,
-                0x0addb4f85135ba92,
             ])
         ),
     ],
@@ -599,15 +527,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2c5645ff927fdc68,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x02ec25cbc9ed42e5,
-                0xed2391db26f767a5,
-                0xf83f4e011294078b,
-                0x258ed3dc715fcd08,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -653,15 +572,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xf44e1e10f08062fe,
                 0xa6c83f7c2624465d,
                 0x3bec88a1ba5ce4b9,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x32313f9af3ead8a3,
-                0x353617302bca28ad,
-                0xa36f22a712340ab6,
-                0x1ae14d6fa98ead47,
             ])
         ),
     ],
@@ -711,15 +621,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x06a28ac63d47bd02,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xaa7b4b605305219c,
-                0xa92b9d02ad989726,
-                0xdde6c79f8ffb5b01,
-                0x2b719a711ddd2272,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -765,15 +666,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xa4ae752091e79812,
                 0xa7e478f1d3a3d629,
                 0x09802bcaabc48e8e,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x0bb2f776ff3c8ce7,
-                0x8afcf951bc3caa01,
-                0x0f343e121ce7e436,
-                0x06db7da1d9999b43,
             ])
         ),
     ],
@@ -823,15 +715,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x280a41aef38a3d20,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x5d573ea33f16df4e,
-                0x4feda032d55d4781,
-                0xfe31f70526e78aa4,
-                0x156498775471e2b6,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -877,15 +760,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x0a55a59928692190,
                 0xe0716489b22209fa,
                 0x201a9e787a63832b,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x12bf18d2fb394a1b,
-                0xafa5dce674f1a987,
-                0x36a952cf0202b1a6,
-                0x1af28c66ca14b2bd,
             ])
         ),
     ],
@@ -935,15 +809,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x009a20e6c25b0f86,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x8db08e9149d3d232,
-                0xe8fc50666d771036,
-                0x2821c29ce5c3e5a0,
-                0x0f7ce98c7e764eeb,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -989,15 +854,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x94e3660fccfc7c3d,
                 0x6948faa63e1b7cb4,
                 0x0490c7d67a47864b,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x23e4ed5f59f2af5f,
-                0xf2618e0842690f1a,
-                0x54c63b643f7b0258,
-                0x081d3df3a2f4b4c9,
             ])
         ),
     ],
@@ -1047,15 +903,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x02a42d11d48cf2d2,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x98848ba323bc13be,
-                0xd692799485134e8a,
-                0x17fe5c454a27c045,
-                0x2122ece45ed8b895,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1101,15 +948,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xbd88735d07843abb,
                 0x37de551f4261b97e,
                 0x248d548fbcf95cdc,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xb2640038a29ca685,
-                0xf37326203ec80a97,
-                0xd533b35980a667d7,
-                0x0328f14b3353e590,
             ])
         ),
     ],
@@ -1159,15 +997,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x10ca31394fa8b611,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x4ec351556938a208,
-                0x3f78e37ea0f3d77c,
-                0xd4efc98d09029ac7,
-                0x0c9377f0e2507457,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1213,15 +1042,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xadf071460b6558c0,
                 0x0263fe19c0e3f2fe,
                 0x02f92846ccc30053,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xb849b1c4c89c28b4,
-                0x68611ded6124fc59,
-                0x56542962354c394d,
-                0x25ef7fbaad34fc68,
             ])
         ),
     ],
@@ -1271,15 +1091,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x0f8cf668444ee3ce,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x3275bb742123c6e9,
-                0x30d2a4fedd079622,
-                0x03d8d247e315bbc6,
-                0x26630bde1247768f,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1325,15 +1136,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xf955df3f6ded8929,
                 0x47d9aea3ca7d0e4f,
                 0x3841ef4abbe25998,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x4e65346c160a5b0b,
-                0x39127ba3649da5a9,
-                0x6645514e7897fa39,
-                0x3c16ab3c678a1267,
             ])
         ),
     ],
@@ -1383,15 +1185,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2ae269198b9abf3c,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x082d6e3e97c20244,
-                0xa95941740337fc7c,
-                0xe463f01201b4d9a9,
-                0x01f117ee4199a173,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1437,15 +1230,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x7ba9657c5d0de071,
                 0x341d88fb3f9cb85a,
                 0x06fe855c8de5037b,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xde9d8526b394ac14,
-                0x3d49c751d46a19eb,
-                0x96a9e6d8c10c0e2f,
-                0x057e17ba01402804,
             ])
         ),
     ],
@@ -1495,15 +1279,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2d850b79eacd238a,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xc6f9f0e8c3f327f6,
-                0x089e004db7099ffe,
-                0x1071bc7d178f1ad0,
-                0x0865b6afd440c8ef,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1549,15 +1324,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xb132b17737c7af72,
                 0x409cffa10a79e5c6,
                 0x168c53fd10f77a97,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x79b9f7374039c5fd,
-                0xa0e709eecdf0b383,
-                0x069e159f71ba6709,
-                0x29d6db3ad2026e4d,
             ])
         ),
     ],
@@ -1607,15 +1373,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x045cc42c18074c9b,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x5cbfef0753bec662,
-                0x55b79f4342cb7068,
-                0x390c3aa07222ac52,
-                0x0255b070ee223eb1,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1661,15 +1418,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x9e1a45a2f255dc6c,
                 0xa6416cd6f1b92eb2,
                 0x091a366081343961,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x573f0c743d10c2a6,
-                0xe9b22f8d37a09468,
-                0xaac0f762040fcef0,
-                0x08d948a1a50df8f0,
             ])
         ),
     ],
@@ -1719,15 +1467,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2fbfd283181f5914,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xca502620c94d8616,
-                0x0050d714cc4b8335,
-                0xc39750905cbb0e7d,
-                0x1737ab866f12250d,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1773,15 +1512,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xa38cbc76764e15e7,
                 0x46cc72ba1fe8ec9c,
                 0x32c94a0079c17e25,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xb72b200347fa395f,
-                0x2363443065e2ca7c,
-                0x28133303d1028d54,
-                0x272fbde87607ef9b,
             ])
         ),
     ],
@@ -1831,15 +1561,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2816abdc4baa7938,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xf8c74fbaa84c22a4,
-                0xfcc6dfa3c9e53481,
-                0x3afbd11cbf6c7914,
-                0x3c99a853909b9110,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1885,15 +1606,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x401c7ee3867afec6,
                 0xffcff408fd83e8a6,
                 0x3d6d6232de4d9af6,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x6779c995c4f26918,
-                0x333f51335cd732f9,
-                0xab9b446efba7fdd1,
-                0x15d8b940cfa219e8,
             ])
         ),
     ],
@@ -1943,15 +1655,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x0328a41c101bd567,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xf6d11583eb32a89f,
-                0x96fe314d98870b61,
-                0x563ae0abc486f0e4,
-                0x0595834b620d8b2b,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -1997,15 +1700,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x00f315d96b8caa30,
                 0x14b5f3072861ff9c,
                 0x27b751385b82b4a6,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x5e15bc82f59b345d,
-                0xec779e1f9ca65b30,
-                0x3ffc4b92694039e6,
-                0x158f6fa197eefbc0,
             ])
         ),
     ],
@@ -2055,15 +1749,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x3e1c1fe0491c0844,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x1bc2cd523b007556,
-                0x9c02630b7226faca,
-                0x1c7e07cd29bf496d,
-                0x0a5d127aabfe709a,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2109,15 +1794,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x97f095a04eca282a,
                 0x767ba7e419c64cec,
                 0x388fb99a2153efe6,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x553c0792d2b4c671,
-                0xe605c0ededccecdf,
-                0x8c44b631e754f7c1,
-                0x3f2502e2e3217550,
             ])
         ),
     ],
@@ -2167,15 +1843,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x30b2381741a4126d,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x8cab7f5efe36e62b,
-                0xc4371c6790700c69,
-                0xd4fc2de92c72f860,
-                0x2538a484a3a74f12,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2221,15 +1888,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x5d448730ad6881ff,
                 0xc4bee883d92befe6,
                 0x058c239089d22bad,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x1415d978693b8b94,
-                0x7215c47b2d2b8b50,
-                0x169eeac10aab5581,
-                0x07844aabcdd6c255,
             ])
         ),
     ],
@@ -2279,15 +1937,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2b1323230cd999c5,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xabf4b9e5111f698b,
-                0xc131943cf4e6b4fb,
-                0x50873434e498418e,
-                0x09538e23f3e3416f,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2333,15 +1982,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x5d7157707c796c05,
                 0x6c21379016b750a1,
                 0x33436e58bc0102d1,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x332e9a6c63572b60,
-                0x01c195067ca9fbaf,
-                0xdd62ff4596a6af47,
-                0x0246708b3e2270d9,
             ])
         ),
     ],
@@ -2391,15 +2031,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x05fe6fb19cd8475f,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xf412f71d864fa5d3,
-                0xb4f618a1b1f6f6a4,
-                0x0805a3a8178f0cec,
-                0x2f3b5c3f5448c781,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2445,15 +2076,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x8dc43709f6668c55,
                 0x9f34bf5b492e5f19,
                 0x170d010f71787cf9,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x7f59de4447474f28,
-                0x744afc4ca4b66a60,
-                0x57f57049d10744ef,
-                0x2c2571b1ed49f553,
             ])
         ),
     ],
@@ -2503,15 +2125,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x06af277fcf4f262a,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x933c510bb67cf263,
-                0xf2209db230a8e5b1,
-                0xc2284c7c364e507a,
-                0x281f3b2cd14b4b56,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2557,15 +2170,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xba7ac3e3de1d3a98,
                 0x79bfb2ee9689245c,
                 0x172f13b14d0df178,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xed45ddcd49ad6e0f,
-                0x5aefb7fd6808f479,
-                0xa8f479f5ed72bc58,
-                0x0adfad3539020b34,
             ])
         ),
     ],
@@ -2615,15 +2219,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x3d6352ac5a543aff,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xdad9200a92117984,
-                0xe64b91be80b548c6,
-                0xc56597d0dff979cf,
-                0x28b54b58a9b65b87,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2669,15 +2264,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x7f15f78432cce529,
                 0xe967753d748562ea,
                 0x03eaecc31757faa6,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x8f9f39249d34a94f,
-                0x724c269f4009c46c,
-                0xf1c8030c9b7e9710,
-                0x163ee0d1ee0ce4d0,
             ])
         ),
     ],
@@ -2727,15 +2313,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x31adf147d28bf60b,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xb971ce199ea0f855,
-                0x6a5afabcc19dbc13,
-                0x86ae820dd7f3927f,
-                0x1279cba4cafa046b,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2781,15 +2358,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x6f56a0df702aa4e8,
                 0x71cd8b5cb7de3c9b,
                 0x1938cf4225740b4c,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x8d294cd0a7ff696f,
-                0x9a14aa77087535c2,
-                0x2d361b61058dc982,
-                0x3f02d29e94b9a44d,
             ])
         ),
     ],
@@ -2839,15 +2407,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x39915ebfc9baa74c,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xbce4adeb22ab62ef,
-                0x7ebdecfd863f5f7f,
-                0xd607874e42b6bd8b,
-                0x05440206e6b3079a,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -2893,15 +2452,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xd15e4fead8eaf5f2,
                 0xc33d3ef52192cd80,
                 0x0ee33d0898b022bf,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x458043c696de649b,
-                0x1f847dc52efdc542,
-                0xf557d53424fadb77,
-                0x373e0aee24d17c23,
             ])
         ),
     ],
@@ -2951,15 +2501,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x068b16b8fd070c42,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x0f99218c837dba07,
-                0xa598031a49ba62bc,
-                0x2d0d378d5b564e50,
-                0x3a0328bbf0b34cb7,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -3005,15 +2546,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2226e5d964c9509c,
                 0x130c4094c3450f7c,
                 0x3cd1e201af56d30a,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x44e4f6640bbcf4a8,
-                0xf7698ddd6ab6ef3c,
-                0xb508ff3c07a155cd,
-                0x113f89f673e1b020,
             ])
         ),
     ],
@@ -3063,15 +2595,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x3c32f887ff81e1f1,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x3715c0e31b5a3c73,
-                0x18172e10c2f70019,
-                0x46b7f08fcabce00e,
-                0x17ba415dc2031c93,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -3117,15 +2640,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xb709555cb61d9627,
                 0xfc1afdf24448c29d,
                 0x23c647834e1229d7,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x2e3401f83e8e1702,
-                0xd8cd39d0818e3718,
-                0x3a7c08eff450690f,
-                0x3b3e8cf9d9196e6e,
             ])
         ),
     ],
@@ -3175,15 +2689,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x1cf4072eaac2ed48,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x0f58dcd6f332a04a,
-                0xba01be6a63bf0cec,
-                0xf4d434c4af756c22,
-                0x29efc589958207f1,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -3229,15 +2734,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x744db2cb5861a879,
                 0xc7e04b5be899df99,
                 0x05e492bbb8ee2e39,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xdb87b614c5222728,
-                0x404c93de7df2d528,
-                0x69773a23028e0295,
-                0x03a8dc08b9b6ae9d,
             ])
         ),
     ],
@@ -3287,15 +2783,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x037ea78898bd499d,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x7ab3eaee58494b7c,
-                0xecc85481cc86e854,
-                0xd362d5de3dd68176,
-                0x37b660427a6658b2,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -3341,15 +2828,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0xe63930cebf76fcd5,
                 0x6a512eb0acd36d50,
                 0x08082914a059d05d,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xb1a782f519d3abe9,
-                0x4428f8ee047c2d69,
-                0xe611f59c63ced16a,
-                0x331446877d54ff08,
             ])
         ),
     ],
@@ -3399,15 +2877,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x0a3819c929a8e7d8,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xae7a30e7ba77b15c,
-                0x03107db9d10a4cfd,
-                0xd1b1fc0334e724ff,
-                0x2b1c51f82be6639e,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -3453,15 +2922,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x337f1e3884ab152e,
                 0x71eee5dd7f45dee1,
                 0x1979b80cadbf8002,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x7fb663edd344492c,
-                0xa986e8cefa98d5ac,
-                0x2510ecd95ae682e8,
-                0x210d352bd29814fb,
             ])
         ),
     ],
@@ -3511,15 +2971,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x2f3c6110df50412c,
             ])
         ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x59b8ace04e296406,
-                0xa1027496d7d47949,
-                0xef24ef33e16b851c,
-                0x0a9d5a50890a7fb9,
-            ])
-        ),
     ],
     &[
         field_new!(
@@ -3565,15 +3016,6 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x6309561bd7b5f05e,
                 0x5d1ff614aafa4471,
                 0x2b58aa322de8a72f,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x3488ce35fd9b031c,
-                0x616724ab73b7e4d3,
-                0x76efb86640471767,
-                0x0f4ff757cf896e27,
             ])
         ),
     ],
@@ -3623,13 +3065,51 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
                 0x35fe1a36d9082dff,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xfb427739846526ef,
-                0x7a1aa0676809347f,
-                0xa846b8b3a0e20d54,
-                0x18994930c445981d,
+                0xf9111432cd715b30,
+                0xdec6e6f989267f8d,
+                0xc7bd167d84b404e8,
+                0x3b8aade4abd4b8f2,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x4739c74479e1d5e9,
+                0xa0757ceecb5dd88f,
+                0x675ff8ea2956913c,
+                0x2fc5a17e9dca2941,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x595897324f1e9695,
+                0x10048e5bc34b5309,
+                0x03a7ada9a6645d87,
+                0x0d11e677f959912d,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x3b75b00bd1148567,
+                0xd2c46d1f9d775112,
+                0xa21f540ff74c5277,
+                0x02c148c3e813ed25,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x2e2981df9bf3fdea,
+                0xc7f08340cbb7d489,
+                0x00d3cf9f460d0877,
+                0x02b1771045ea2441,
             ])
         ),
     ],
@@ -3637,6 +3117,15 @@ pub(crate) const ALPHA: &[&[TweedleFr]] = &[
 
 pub(crate) const BETA: &[&[TweedleFr]] = &[
     &[
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0xb7bd5eebb8c7f36e,
+                0x317c577095490cf5,
+                0x733c6b12bfeb57a0,
+                0x1b44bb0e80b281c2,
+            ])
+        ),
         field_new!(
             TweedleFr,
             BigInteger([
@@ -3673,17 +3162,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3816abc779aec8a2,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xb7bd5eebb8c7f36e,
-                0x317c577095490cf5,
-                0x733c6b12bfeb57a0,
-                0x1b44bb0e80b281c2,
+                0xf1a9a1ffca260ac4,
+                0x511a6ab45f7296c4,
+                0x43ba2abfdbc5bd9d,
+                0x1f8dde5d21fc0685,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -3720,17 +3209,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x38ded2cad934820b,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xf1a9a1ffca260ac4,
-                0x511a6ab45f7296c4,
-                0x43ba2abfdbc5bd9d,
-                0x1f8dde5d21fc0685,
+                0xd21524abf26d8f50,
+                0xe1f8fe053b697e51,
+                0x588161f341a827be,
+                0x3544d7e795bd6ef0,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -3767,17 +3256,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x34cced8e61d65cae,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xd21524abf26d8f50,
-                0xe1f8fe053b697e51,
-                0x588161f341a827be,
-                0x3544d7e795bd6ef0,
+                0xe7e9e7dc2c7e25b0,
+                0x1ec8308e529b3542,
+                0x227da1dac918dcf2,
+                0x2016d32778c6ba34,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -3814,17 +3303,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x34dae96b6b15f207,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xe7e9e7dc2c7e25b0,
-                0x1ec8308e529b3542,
-                0x227da1dac918dcf2,
-                0x2016d32778c6ba34,
+                0xb19f59bb30651c40,
+                0x4582a97587f113be,
+                0x41c291f94ae2f6c0,
+                0x1ff49c56d735d3b4,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -3861,17 +3350,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x1efb7087b1d356f6,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xb19f59bb30651c40,
-                0x4582a97587f113be,
-                0x41c291f94ae2f6c0,
-                0x1ff49c56d735d3b4,
+                0xd8d02bbbfb8ab62c,
+                0x8ed469276df55a57,
+                0x155e03e64e1d5d7a,
+                0x086fba61d7ad39a4,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -3908,17 +3397,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x34677ce52e28e45d,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xd8d02bbbfb8ab62c,
-                0x8ed469276df55a57,
-                0x155e03e64e1d5d7a,
-                0x086fba61d7ad39a4,
+                0x6613069a0b269d15,
+                0x43f4d8a1b429b3c6,
+                0x11ff0810819c1979,
+                0x210348b235b2ad6b,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -3955,17 +3444,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x1cdd233152de2bc4,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x6613069a0b269d15,
-                0x43f4d8a1b429b3c6,
-                0x11ff0810819c1979,
-                0x210348b235b2ad6b,
+                0x176167d9b9323c2c,
+                0x25b3898c2e0a1e54,
+                0x1fe721f84ddbe83e,
+                0x088b090248c9c7e3,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4002,17 +3491,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x01a6a660779a8150,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x176167d9b9323c2c,
-                0x25b3898c2e0a1e54,
-                0x1fe721f84ddbe83e,
-                0x088b090248c9c7e3,
+                0xf99bc4a5f3b2f43d,
+                0xebc3e2a44d18b09d,
+                0xde6842203e0e0065,
+                0x367c3ef11ec3a0d0,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4049,17 +3538,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x24473c0390ee61bf,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xf99bc4a5f3b2f43d,
-                0xebc3e2a44d18b09d,
-                0xde6842203e0e0065,
-                0x367c3ef11ec3a0d0,
+                0x5f1b1be3d583d1d8,
+                0x9dc9813b5808a4ce,
+                0x5fc0f463dc73bab3,
+                0x3233f21a2f9dd03f,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4096,17 +3585,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x2b177a0136925cc4,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x5f1b1be3d583d1d8,
-                0x9dc9813b5808a4ce,
-                0x5fc0f463dc73bab3,
-                0x3233f21a2f9dd03f,
+                0xae88943e75794088,
+                0xf3c2d375c0c5a05d,
+                0x9b163f1f57a1132f,
+                0x2b63e8d51242464e,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4143,17 +3632,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x12d652e4dfa888cd,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xae88943e75794088,
-                0xf3c2d375c0c5a05d,
-                0x9b163f1f57a1132f,
-                0x2b63e8d51242464e,
+                0x3fdf93c7aaba1359,
+                0xc54ba2606f0567c4,
+                0x7bf4373c0e42e0c9,
+                0x22f39568dac7ebe9,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4190,17 +3679,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x0b0f4156d6c698a7,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3fdf93c7aaba1359,
-                0xc54ba2606f0567c4,
-                0x7bf4373c0e42e0c9,
-                0x22f39568dac7ebe9,
+                0x3ae79f8c5f9a9a0c,
+                0x2200ffea09dc4aeb,
+                0xe35f13a74a07807a,
+                0x0634d5700c6ffea4,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4237,17 +3726,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x0ea420aedcaba3ea,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3ae79f8c5f9a9a0c,
-                0x2200ffea09dc4aeb,
-                0xe35f13a74a07807a,
-                0x0634d5700c6ffea4,
+                0xd279808278fa8265,
+                0x09fbdaec8dac2667,
+                0x3b62749af2c09ac9,
+                0x1510be4441d31454,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4284,17 +3773,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x17313d7c1620183e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xd279808278fa8265,
-                0x09fbdaec8dac2667,
-                0x3b62749af2c09ac9,
-                0x1510be4441d31454,
+                0x3499c9ba9710fc87,
+                0x8660e72ad2b0f6d3,
+                0x281e6bcd26d43c45,
+                0x1d36eadd8d684c69,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4331,17 +3820,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x0953f407f36ded6e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3499c9ba9710fc87,
-                0x8660e72ad2b0f6d3,
-                0x281e6bcd26d43c45,
-                0x1d36eadd8d684c69,
+                0x9955c5655c146a4a,
+                0xa533e74f2d3bd8eb,
+                0xea33adf4459af718,
+                0x282ab56de17f1a2e,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4378,17 +3867,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3d9922587d5b93ab,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x9955c5655c146a4a,
-                0xa533e74f2d3bd8eb,
-                0xea33adf4459af718,
-                0x282ab56de17f1a2e,
+                0x34c1b98e655ff127,
+                0xdb0deaa441fe885e,
+                0x27c26fa2935d1730,
+                0x11ba045bfc54f795,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4425,17 +3914,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3068d303bd8d0656,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x34c1b98e655ff127,
-                0xdb0deaa441fe885e,
-                0x27c26fa2935d1730,
-                0x11ba045bfc54f795,
+                0x7809ba2836eb14bc,
+                0xeb4ba0a73dcfa898,
+                0xc600dc24dc3fbb46,
+                0x200467ee17a21713,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4472,17 +3961,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x12cd3b03d2e8f9d4,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x7809ba2836eb14bc,
-                0xeb4ba0a73dcfa898,
-                0xc600dc24dc3fbb46,
-                0x200467ee17a21713,
+                0x8d13b6138debee5d,
+                0x744e30554686e17c,
+                0xa313887fffd65e94,
+                0x0e9c10fdacbb2c1f,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4519,17 +4008,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x23cb0dc005072d8d,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x8d13b6138debee5d,
-                0x744e30554686e17c,
-                0xa313887fffd65e94,
-                0x0e9c10fdacbb2c1f,
+                0x9037eebc1f2c5b82,
+                0xab57a0381fa3451a,
+                0x98a4327170a48aee,
+                0x28480072bf6d366a,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4566,17 +4055,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x04a9155410df9ed8,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x9037eebc1f2c5b82,
-                0xab57a0381fa3451a,
-                0x98a4327170a48aee,
-                0x28480072bf6d366a,
+                0xf4d3a6a6f20bd100,
+                0x96b79f8161a35371,
+                0xb474412e9e8e83a7,
+                0x2a02d38eec931c0f,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4613,17 +4102,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3078d0f2f70b0641,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xf4d3a6a6f20bd100,
-                0x96b79f8161a35371,
-                0xb474412e9e8e83a7,
-                0x2a02d38eec931c0f,
+                0x54b4680bd06fac65,
+                0x481ad5486add6301,
+                0x16ea42a07bd559c7,
+                0x1dfd46d67e6f05af,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4660,17 +4149,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x30d36866368649b8,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x54b4680bd06fac65,
-                0x481ad5486add6301,
-                0x16ea42a07bd559c7,
-                0x1dfd46d67e6f05af,
+                0x854af75a00f68fb9,
+                0xe0220f5136727003,
+                0xe8d7f51548230fc7,
+                0x0bed46c991e36b05,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4707,17 +4196,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x14850b3c59e6b648,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x854af75a00f68fb9,
-                0xe0220f5136727003,
-                0xe8d7f51548230fc7,
-                0x0bed46c991e36b05,
+                0xd250811fb6a3526f,
+                0xf3c4a7467bd62999,
+                0x661c139fe16845d1,
+                0x293fdda52e55f644,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4754,17 +4243,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x38526737618e8afa,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xd250811fb6a3526f,
-                0xf3c4a7467bd62999,
-                0x661c139fe16845d1,
-                0x293fdda52e55f644,
+                0x07c3e1ae81435c9e,
+                0x67e450f2cb51b029,
+                0xc933b328a0d40432,
+                0x29746f733dbe7451,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4801,17 +4290,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x38eac1b80ea37395,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x07c3e1ae81435c9e,
-                0x67e450f2cb51b029,
-                0xc933b328a0d40432,
-                0x29746f733dbe7451,
+                0xee5a28038a6acac0,
+                0x3460154e06ccf005,
+                0x35cfb6f31919d4da,
+                0x2d15818407c6f395,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4848,17 +4337,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x0a0f1ef1bb6fe5fb,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xee5a28038a6acac0,
-                0x3460154e06ccf005,
-                0x35cfb6f31919d4da,
-                0x2d15818407c6f395,
+                0xfa852352b17e37f8,
+                0x5878bbe24776bfe6,
+                0x26b6d195d2f232ea,
+                0x29a7146ad20beabf,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4895,17 +4384,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3fdd59d9e7e42fc0,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xfa852352b17e37f8,
-                0x5878bbe24776bfe6,
-                0x26b6d195d2f232ea,
-                0x29a7146ad20beabf,
+                0x2bcfe1ccd9838d37,
+                0xdd5fa2e72fe37327,
+                0xbc4feee490d508b2,
+                0x355dbf78386d55b2,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4942,17 +4431,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x2b234f6cfb14922b,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x2bcfe1ccd9838d37,
-                0xdd5fa2e72fe37327,
-                0xbc4feee490d508b2,
-                0x355dbf78386d55b2,
+                0xa2dde42bb020f638,
+                0x9556bf59e0033752,
+                0x3b9e5e40fa534afc,
+                0x01dd6c5c6cf17172,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -4989,17 +4478,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x2b03372d20a2b93f,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xa2dde42bb020f638,
-                0x9556bf59e0033752,
-                0x3b9e5e40fa534afc,
-                0x01dd6c5c6cf17172,
+                0x670a1d32f8445a52,
+                0xce878f9430e57067,
+                0x52843c320b77d731,
+                0x100e8c9abcab2510,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5036,17 +4525,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3ddb74464a978f54,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x670a1d32f8445a52,
-                0xce878f9430e57067,
-                0x52843c320b77d731,
-                0x100e8c9abcab2510,
+                0xc167ae5f42afb7a0,
+                0xc7e14058360ad711,
+                0x86b3c41091f6fb5e,
+                0x3851fed46fabbaa2,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5083,17 +4572,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x00901129d7b6c966,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xc167ae5f42afb7a0,
-                0xc7e14058360ad711,
-                0x86b3c41091f6fb5e,
-                0x3851fed46fabbaa2,
+                0x70f12bab685ec198,
+                0xcd05f2c3aa2c7fd3,
+                0xe42d2f78801576b5,
+                0x25a066303d1c9151,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5130,17 +4619,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x07e3f879ba68584e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x70f12bab685ec198,
-                0xcd05f2c3aa2c7fd3,
-                0xe42d2f78801576b5,
-                0x25a066303d1c9151,
+                0x2ab074110b9a449c,
+                0xc16a243134830789,
+                0x8a3d5a19eac0b134,
+                0x3f83548d4ce68f48,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5177,17 +4666,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x34cfc1fcc1a9f355,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x2ab074110b9a449c,
-                0xc16a243134830789,
-                0x8a3d5a19eac0b134,
-                0x3f83548d4ce68f48,
+                0x8b3af1058f4e70dd,
+                0x9cce5e9d7fef2359,
+                0x4bcb844020e9634a,
+                0x29c511cfcd6ffc79,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5224,17 +4713,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x0226c70bbd539d72,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x8b3af1058f4e70dd,
-                0x9cce5e9d7fef2359,
-                0x4bcb844020e9634a,
-                0x29c511cfcd6ffc79,
+                0x1b088ae1123496c6,
+                0x5f48417268b8dbb8,
+                0x9bd2372011f240a4,
+                0x164a329e6bd76570,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5271,17 +4760,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x0a8a1b3ff9552f2c,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x1b088ae1123496c6,
-                0x5f48417268b8dbb8,
-                0x9bd2372011f240a4,
-                0x164a329e6bd76570,
+                0xc113311814788480,
+                0x673cbd25a5aaaa82,
+                0xf2b606be9d74f97a,
+                0x0ccfa2561a4e7abd,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5318,17 +4807,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x1434cbebc7693433,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xc113311814788480,
-                0x673cbd25a5aaaa82,
-                0xf2b606be9d74f97a,
-                0x0ccfa2561a4e7abd,
+                0x7c6ecb44c2199cfc,
+                0x784a3f66d928d2c9,
+                0xdf97d6f641a0949a,
+                0x2ad994315770d7c4,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5365,17 +4854,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x2b0b0ed482e5c2f5,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x7c6ecb44c2199cfc,
-                0x784a3f66d928d2c9,
-                0xdf97d6f641a0949a,
-                0x2ad994315770d7c4,
+                0xed26a892c3b4e9a2,
+                0x954f9e3acee8b7ed,
+                0x32576e66844d4ce8,
+                0x348630d49c7bcada,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5412,17 +4901,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x017a94179f985bf1,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xed26a892c3b4e9a2,
-                0x954f9e3acee8b7ed,
-                0x32576e66844d4ce8,
-                0x348630d49c7bcada,
+                0xc96d555e7a973c2f,
+                0xc030aaffd088150a,
+                0xc0060d28d76adead,
+                0x3fe6d63c35a4d57a,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5459,17 +4948,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x176089194f7ef112,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xc96d555e7a973c2f,
-                0xc030aaffd088150a,
-                0xc0060d28d76adead,
-                0x3fe6d63c35a4d57a,
+                0xc798cf3cec181718,
+                0x76b4863215fa65ab,
+                0x76d321584407a121,
+                0x33edcd97056a7dc3,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5506,17 +4995,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x369ef395546a8d28,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xc798cf3cec181718,
-                0x76b4863215fa65ab,
-                0x76d321584407a121,
-                0x33edcd97056a7dc3,
+                0xe16a7e5004ce2c23,
+                0x0cba96895cece757,
+                0x5c2e755daab874ad,
+                0x31bd37f564577e34,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5553,17 +5042,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x2bdfcd8c11d7b8a1,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xe16a7e5004ce2c23,
-                0x0cba96895cece757,
-                0x5c2e755daab874ad,
-                0x31bd37f564577e34,
+                0x2d1d3cc094258955,
+                0xb8851baad2f21414,
+                0x30f27e1496aca885,
+                0x30188fd4d7fc15f6,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5600,17 +5089,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x12ecd1a415f1b10a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x2d1d3cc094258955,
-                0xb8851baad2f21414,
-                0x30f27e1496aca885,
-                0x30188fd4d7fc15f6,
+                0x29f39cf2198d03f2,
+                0x2ec6e08921d8f0ea,
+                0xd8ffb3e467e643cd,
+                0x16d91dab283b0747,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5647,17 +5136,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x052b5fc1b65506c2,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x29f39cf2198d03f2,
-                0x2ec6e08921d8f0ea,
-                0xd8ffb3e467e643cd,
-                0x16d91dab283b0747,
+                0x69871f3e27d18e37,
+                0x35000f93e170d7f0,
+                0xf041d48c7bc1d48a,
+                0x076ba28831f3dc1d,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5694,17 +5183,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3a790b4dc902141a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x69871f3e27d18e37,
-                0x35000f93e170d7f0,
-                0xf041d48c7bc1d48a,
-                0x076ba28831f3dc1d,
+                0x8859fda7d42dcc81,
+                0x9674b149bcbffc6e,
+                0xd41bb60bc5e1b1fc,
+                0x091ea9a1b14c35a7,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5741,17 +5230,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x079b90f07f0f5f6a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x8859fda7d42dcc81,
-                0x9674b149bcbffc6e,
-                0xd41bb60bc5e1b1fc,
-                0x091ea9a1b14c35a7,
+                0x1f115beaa93c5986,
+                0x4a36aec3c3b0babd,
+                0xca2a17141c593316,
+                0x3a7e983b88d2243f,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5788,17 +5277,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x068c0e674cb2e4f2,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x1f115beaa93c5986,
-                0x4a36aec3c3b0babd,
-                0xca2a17141c593316,
-                0x3a7e983b88d2243f,
+                0xef6867361212c45c,
+                0x9b2bc09bdbcece42,
+                0x43536074452ef99a,
+                0x0c14238e9eb64127,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5835,17 +5324,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x0887581e26d13956,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xef6867361212c45c,
-                0x9b2bc09bdbcece42,
-                0x43536074452ef99a,
-                0x0c14238e9eb64127,
+                0x44ad049eb544c731,
+                0x33a9fde8422b59a0,
+                0x165d09839675b209,
+                0x1591d9c387235306,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5882,17 +5371,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x1362a6408215b2c3,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x44ad049eb544c731,
-                0x33a9fde8422b59a0,
-                0x165d09839675b209,
-                0x1591d9c387235306,
+                0x1625313c319f0d89,
+                0xfc127a3e0eed271f,
+                0xee5ffc792234807f,
+                0x1ea8db9688b6d2af,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5929,17 +5418,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x234aa4e0ca22b7fa,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x1625313c319f0d89,
-                0xfc127a3e0eed271f,
-                0xee5ffc792234807f,
-                0x1ea8db9688b6d2af,
+                0xa4be8203da57842f,
+                0xee91d1e900233909,
+                0x31824694611df3b5,
+                0x2896c2d689163b7d,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -5976,17 +5465,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x1f983258ee7020d5,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xa4be8203da57842f,
-                0xee91d1e900233909,
-                0x31824694611df3b5,
-                0x2896c2d689163b7d,
+                0xaa1b100ee8ba796b,
+                0x5f2b88fc116708e6,
+                0xfb4194acd20944ce,
+                0x2afbbd3727e42dd4,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6023,17 +5512,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x27a91a8a0ef4868c,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xaa1b100ee8ba796b,
-                0x5f2b88fc116708e6,
-                0xfb4194acd20944ce,
-                0x2afbbd3727e42dd4,
+                0x69dd0c5b8dd46338,
+                0x3ddac4390b647f7d,
+                0x73e93331b56359bf,
+                0x0cb7bc15d0ab102b,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6070,17 +5559,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x02794dc42192ff0e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x69dd0c5b8dd46338,
-                0x3ddac4390b647f7d,
-                0x73e93331b56359bf,
-                0x0cb7bc15d0ab102b,
+                0xe6a02433a5b9d84e,
+                0xc07bc806fff215f9,
+                0x1ea95a6d57a070ea,
+                0x175667df581c3191,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6117,17 +5606,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x1fd924ea1e1d43b0,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xe6a02433a5b9d84e,
-                0xc07bc806fff215f9,
-                0x1ea95a6d57a070ea,
-                0x175667df581c3191,
+                0x028206bd1ef85fa2,
+                0x28dc5317a90acecb,
+                0xde2b9e41c9aef7f8,
+                0x0a3edbdf99a43131,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6164,17 +5653,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x31612cbd464634bd,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x028206bd1ef85fa2,
-                0x28dc5317a90acecb,
-                0xde2b9e41c9aef7f8,
-                0x0a3edbdf99a43131,
+                0xf222c0ebb36124e6,
+                0x74cbb48a7c32f3a3,
+                0x9bb1325eeb497600,
+                0x292e9153c78893f7,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6211,17 +5700,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x11b7ef483a56f60b,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xf222c0ebb36124e6,
-                0x74cbb48a7c32f3a3,
-                0x9bb1325eeb497600,
-                0x292e9153c78893f7,
+                0x7bd7d666f045c293,
+                0x680c5ddf5ec4f83d,
+                0x038277d267523691,
+                0x330513b0908da3ef,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6258,17 +5747,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x329a3c3bd60d892b,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x7bd7d666f045c293,
-                0x680c5ddf5ec4f83d,
-                0x038277d267523691,
-                0x330513b0908da3ef,
+                0xce14145aa95263bc,
+                0x900db0d9a55f0647,
+                0x0733c0c77590bd9c,
+                0x3d8c2f74eb5479f7,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6305,17 +5794,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x3004317bbb68d1dd,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xce14145aa95263bc,
-                0x900db0d9a55f0647,
-                0x0733c0c77590bd9c,
-                0x3d8c2f74eb5479f7,
+                0x3744d283979a0a1e,
+                0xf71fae4d19765121,
+                0x03177564b4e9189c,
+                0x3c106c7de36b52df,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6352,17 +5841,17 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x2aa6e33550970016,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3744d283979a0a1e,
-                0xf71fae4d19765121,
-                0x03177564b4e9189c,
-                0x3c106c7de36b52df,
+                0x6f488a9c5b34b774,
+                0x7a40eeeaecc349c9,
+                0x17137e837157bb33,
+                0x156938bfd37042c5,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6399,13 +5888,51 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
                 0x256c82611dc1a116,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x6f488a9c5b34b774,
-                0x7a40eeeaecc349c9,
-                0x17137e837157bb33,
-                0x156938bfd37042c5,
+                0x1d7f9a8f52e39373,
+                0x3c08c095c4148bea,
+                0xa35aa64603af574b,
+                0x26ec8ed1578b55dc,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x72cd1b018b510eef,
+                0xdb2bbaf532bddd69,
+                0xa9a2574bdfa98d0e,
+                0x075a88578c6c3cc1,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x4695ce34cec177a2,
+                0x7ab9e4a19e30d96e,
+                0x34fe8cc002f72e18,
+                0x2e3c059b86efaf11,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0xfbbe2b6288ba91ea,
+                0x69a700862fed8462,
+                0xcc1b616b4e78b117,
+                0x2ca7993a96183988,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0xaf2a479064dee07b,
+                0xb45141b2e9e96403,
+                0x920033b8cad74eb6,
+                0x03dac038ea04de02,
             ])
         ),
     ],
@@ -6413,6 +5940,15 @@ pub(crate) const BETA: &[&[TweedleFr]] = &[
 
 pub(crate) const GAMMA: &[&[TweedleFr]] = &[
     &[
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0xc2955d584470ccf8,
+                0xda9c1b769dcce416,
+                0x9c2055913e656e1d,
+                0x0eb260bdb6b73a9a,
+            ])
+        ),
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6449,17 +5985,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x30827c6ced9bdb45,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xc2955d584470ccf8,
-                0xda9c1b769dcce416,
-                0x9c2055913e656e1d,
-                0x0eb260bdb6b73a9a,
+                0xde219abc0cef3364,
+                0x92d78e3a6f98019e,
+                0x2b16b62249c925f1,
+                0x200ef7feee59d9ce,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6496,17 +6032,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x347632a356364068,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xde219abc0cef3364,
-                0x92d78e3a6f98019e,
-                0x2b16b62249c925f1,
-                0x200ef7feee59d9ce,
+                0xf6ea168722f47192,
+                0x2189690638dfdb09,
+                0xecc00b7392a1d089,
+                0x20caa2f0d16ed6c9,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6543,17 +6079,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x24cad63e71a13a43,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xf6ea168722f47192,
-                0x2189690638dfdb09,
-                0xecc00b7392a1d089,
-                0x20caa2f0d16ed6c9,
+                0x97106557d2cc2ec6,
+                0xf0166139870b98eb,
+                0x8e03e52692995814,
+                0x04e328c28540c0ec,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6590,17 +6126,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x28652e1de9126a44,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x97106557d2cc2ec6,
-                0xf0166139870b98eb,
-                0x8e03e52692995814,
-                0x04e328c28540c0ec,
+                0x3c555fd48ea5d35e,
+                0x2482e244be7eee7c,
+                0x74eb68f3a2bfd4b8,
+                0x0381c6a904ad8b10,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6637,17 +6173,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x15cfc07b772d69fa,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3c555fd48ea5d35e,
-                0x2482e244be7eee7c,
-                0x74eb68f3a2bfd4b8,
-                0x0381c6a904ad8b10,
+                0xbe9088fe570061b4,
+                0x1b53298221ba3de3,
+                0xa6fa64c65fe8992c,
+                0x2b309696443792d0,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6684,17 +6220,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x3c76439bcb7e18aa,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xbe9088fe570061b4,
-                0x1b53298221ba3de3,
-                0xa6fa64c65fe8992c,
-                0x2b309696443792d0,
+                0x15442a5cc66e5277,
+                0x31a0279a20529b3e,
+                0x93d7e696dc708e47,
+                0x0c4721be4be9a1c5,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6731,17 +6267,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0fc4459c995938e4,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x15442a5cc66e5277,
-                0x31a0279a20529b3e,
-                0x93d7e696dc708e47,
-                0x0c4721be4be9a1c5,
+                0x95eb7317f6e30b47,
+                0xab7c10dda582bd54,
+                0xd60fe6f0701b7c96,
+                0x1d34941eedb11707,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6778,17 +6314,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2cd1f8639722e8f4,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x95eb7317f6e30b47,
-                0xab7c10dda582bd54,
-                0xd60fe6f0701b7c96,
-                0x1d34941eedb11707,
+                0xe040f14c97074e14,
+                0xdfcfa5a9832403da,
+                0x26c2ac6d20725dcb,
+                0x04f9df37bbd0b089,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6825,17 +6361,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x27dd236609c26743,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xe040f14c97074e14,
-                0xdfcfa5a9832403da,
-                0x26c2ac6d20725dcb,
-                0x04f9df37bbd0b089,
+                0x64ac37884ec23cbc,
+                0xbe85ac77bb7eda8e,
+                0x51b6ae651b631ff2,
+                0x34ae3d31924ee3d7,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6872,17 +6408,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0aff845d03f72945,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x64ac37884ec23cbc,
-                0xbe85ac77bb7eda8e,
-                0x51b6ae651b631ff2,
-                0x34ae3d31924ee3d7,
+                0x0558c989067384f3,
+                0x65a3eb564762ba85,
+                0x7bbed4571a13a77d,
+                0x080e4d068986f6bf,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6919,17 +6455,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0c30a155ee691fff,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x0558c989067384f3,
-                0x65a3eb564762ba85,
-                0x7bbed4571a13a77d,
-                0x080e4d068986f6bf,
+                0x39bbd9ba8f463b26,
+                0x23fd3885833596fa,
+                0xde56b6005b0d1e76,
+                0x1feb9436e23ee4f6,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -6966,17 +6502,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x129f473c3b199714,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x39bbd9ba8f463b26,
-                0x23fd3885833596fa,
-                0xde56b6005b0d1e76,
-                0x1feb9436e23ee4f6,
+                0x063768fe5c4dea13,
+                0x0e17836032b38e1d,
+                0x628329617c2d936c,
+                0x19c3aae23f2a8aab,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7013,17 +6549,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x20819a7ac67c5c33,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x063768fe5c4dea13,
-                0x0e17836032b38e1d,
-                0x628329617c2d936c,
-                0x19c3aae23f2a8aab,
+                0x198b5f12814e02a4,
+                0xcde6d22d4f19d653,
+                0xaffd5eb7393674b1,
+                0x3495f20d672b8daa,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7060,17 +6596,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x24c7fbddc1b429eb,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x198b5f12814e02a4,
-                0xcde6d22d4f19d653,
-                0xaffd5eb7393674b1,
-                0x3495f20d672b8daa,
+                0xa7a8b54b367fc999,
+                0x0a2ebc25c7cbfac7,
+                0x0af07d4a9a3bfdee,
+                0x1beb511395ddd545,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7107,17 +6643,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x3d79cc5b43d19e1a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xa7a8b54b367fc999,
-                0x0a2ebc25c7cbfac7,
-                0x0af07d4a9a3bfdee,
-                0x1beb511395ddd545,
+                0x3360076580acc7af,
+                0xcc743f2ff29aa33a,
+                0x7d0626092ea8379a,
+                0x0fc0cedff33dc061,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7154,17 +6690,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x1f17b6178e1002e1,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3360076580acc7af,
-                0xcc743f2ff29aa33a,
-                0x7d0626092ea8379a,
-                0x0fc0cedff33dc061,
+                0x9b40062a616703f4,
+                0x34882929b38f372e,
+                0x15608a015657680c,
+                0x3cd8e8a6876ae1b3,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7201,17 +6737,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x187505a5e13a597e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x9b40062a616703f4,
-                0x34882929b38f372e,
-                0x15608a015657680c,
-                0x3cd8e8a6876ae1b3,
+                0x54f8bb697420ea39,
+                0x80e9fba1f2cd4510,
+                0x4bf077d6d903b83a,
+                0x138e35813bf83323,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7248,17 +6784,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x333d7140b7cfbdaa,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x54f8bb697420ea39,
-                0x80e9fba1f2cd4510,
-                0x4bf077d6d903b83a,
-                0x138e35813bf83323,
+                0x62eb0db76cb030ed,
+                0xbc7a7fe66adcac35,
+                0xb1a4fc47e8dd1685,
+                0x3d1f388881abd5b5,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7295,17 +6831,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2521236ee4bb1fa0,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x62eb0db76cb030ed,
-                0xbc7a7fe66adcac35,
-                0xb1a4fc47e8dd1685,
-                0x3d1f388881abd5b5,
+                0xc0ffa38d296bd530,
+                0x416828c1da92c70b,
+                0x00b221de93da8d29,
+                0x303aec1cedd9efad,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7342,17 +6878,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x03f40fa43d00e778,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xc0ffa38d296bd530,
-                0x416828c1da92c70b,
-                0x00b221de93da8d29,
-                0x303aec1cedd9efad,
+                0x669c695506d3a8d1,
+                0x517a2957a0f46e01,
+                0x380bb075cb808562,
+                0x2e30892b6ea8ffc0,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7389,17 +6925,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x056096b2f01fd1f1,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x669c695506d3a8d1,
-                0x517a2957a0f46e01,
-                0x380bb075cb808562,
-                0x2e30892b6ea8ffc0,
+                0xca099cb5d1a20a93,
+                0x62bb8a89be98822b,
+                0xa7ad5e95b7408cdc,
+                0x25dc575abda84f17,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7436,17 +6972,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2552a1e306be13d4,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xca099cb5d1a20a93,
-                0x62bb8a89be98822b,
-                0xa7ad5e95b7408cdc,
-                0x25dc575abda84f17,
+                0x1b50bc58dc5622d5,
+                0xb82efbb2992855fa,
+                0xd377ddd4ec693f00,
+                0x373cbaa6bb8ce385,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7483,17 +7019,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2b8520a342a4e45b,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x1b50bc58dc5622d5,
-                0xb82efbb2992855fa,
-                0xd377ddd4ec693f00,
-                0x373cbaa6bb8ce385,
+                0x476602264a664f77,
+                0xa993c3fd834d8cc0,
+                0x559cbc7d31bbd83a,
+                0x325c893a59da158e,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7530,17 +7066,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2fb55a8df3c2864e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x476602264a664f77,
-                0xa993c3fd834d8cc0,
-                0x559cbc7d31bbd83a,
-                0x325c893a59da158e,
+                0x9128dfa82733ccce,
+                0x13da8aedc16f6b95,
+                0xc63491a1a9b5ff16,
+                0x2404b6c3827301a3,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7577,17 +7113,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0f0ae93513a0389f,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x9128dfa82733ccce,
-                0x13da8aedc16f6b95,
-                0xc63491a1a9b5ff16,
-                0x2404b6c3827301a3,
+                0x92d3fff5c69f3984,
+                0x6c04437ce84a610c,
+                0x6cede1f69ca688af,
+                0x0abf1b541c2202c8,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7624,17 +7160,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x03327371ee51536a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x92d3fff5c69f3984,
-                0x6c04437ce84a610c,
-                0x6cede1f69ca688af,
-                0x0abf1b541c2202c8,
+                0x28f853c9b991508a,
+                0x4eaa578b4aa6937a,
+                0x9d53857d32730f3c,
+                0x0f329db7a6f45444,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7671,17 +7207,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0967e3a3f4d196bf,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x28f853c9b991508a,
-                0x4eaa578b4aa6937a,
-                0x9d53857d32730f3c,
-                0x0f329db7a6f45444,
+                0xbed51ccbec98f159,
+                0xc1ab7bbfb16cbccf,
+                0xa4605105834e023c,
+                0x029b139a8dcd742b,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7718,17 +7254,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x29200d6c6bbdcc0c,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xbed51ccbec98f159,
-                0xc1ab7bbfb16cbccf,
-                0xa4605105834e023c,
-                0x029b139a8dcd742b,
+                0x35e9eb442484dc3b,
+                0xc069b639a405e103,
+                0xdffc3bf36835e33f,
+                0x15b476edb87fbda4,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7765,17 +7301,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2858875fed6dd3e1,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x35e9eb442484dc3b,
-                0xc069b639a405e103,
-                0xdffc3bf36835e33f,
-                0x15b476edb87fbda4,
+                0x4af7862d32dafc56,
+                0x2d7126818ec1ae30,
+                0xa19f783095301f3e,
+                0x1b1656e11d7f0b85,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7812,17 +7348,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0d7723737cf78c61,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x4af7862d32dafc56,
-                0x2d7126818ec1ae30,
-                0xa19f783095301f3e,
-                0x1b1656e11d7f0b85,
+                0x0ba66cb94ee7fc0b,
+                0xb3868244ff341557,
+                0xecda097770fd15bf,
+                0x314ab38b3e47bc9b,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7859,17 +7395,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2889646f0dda1d89,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x0ba66cb94ee7fc0b,
-                0xb3868244ff341557,
-                0xecda097770fd15bf,
-                0x314ab38b3e47bc9b,
+                0xd4876097c4aa2435,
+                0xfee9dea5cd1cf33c,
+                0x04a625433c55da2c,
+                0x2c624f96f268c8c6,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7906,17 +7442,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0b6b29afc39cb40a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xd4876097c4aa2435,
-                0xfee9dea5cd1cf33c,
-                0x04a625433c55da2c,
-                0x2c624f96f268c8c6,
+                0x70ad8c4bff9b4c43,
+                0x12a1b3eba63cd289,
+                0xac08db95f8678d79,
+                0x0707e3cee74ce296,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -7953,17 +7489,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0ae930fc9385b17a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x70ad8c4bff9b4c43,
-                0x12a1b3eba63cd289,
-                0xac08db95f8678d79,
-                0x0707e3cee74ce296,
+                0x3cb04bdfc10e1435,
+                0xb000fe871cde0a83,
+                0x2c6dabae3d3b7d62,
+                0x060848ad970bf733,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8000,17 +7536,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x23ab004b70c763ea,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3cb04bdfc10e1435,
-                0xb000fe871cde0a83,
-                0x2c6dabae3d3b7d62,
-                0x060848ad970bf733,
+                0xb589a3922f8816f2,
+                0x391fe4153a17ad38,
+                0x664473b367955f46,
+                0x262a80c8f489591f,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8047,17 +7583,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2dfb6138f2c515e4,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xb589a3922f8816f2,
-                0x391fe4153a17ad38,
-                0x664473b367955f46,
-                0x262a80c8f489591f,
+                0x123998327604ef3e,
+                0x7c09f3cab2cc1b0a,
+                0xf47133430f893d4a,
+                0x0bd7b0ae42f66b4e,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8094,17 +7630,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x20f7df359533acdb,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x123998327604ef3e,
-                0x7c09f3cab2cc1b0a,
-                0xf47133430f893d4a,
-                0x0bd7b0ae42f66b4e,
+                0xb20509c8979bb8e6,
+                0x99271516143ecb22,
+                0x7c1bee6ba3ca5e6e,
+                0x052d72f95c73e28a,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8141,17 +7677,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x20ea94a3d9d31e9e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xb20509c8979bb8e6,
-                0x99271516143ecb22,
-                0x7c1bee6ba3ca5e6e,
-                0x052d72f95c73e28a,
+                0xf96af9eb8e689995,
+                0xa31155d32a4961d8,
+                0x1408824a42219316,
+                0x2a02f116f1883861,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8188,17 +7724,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x032e06c20cabcc30,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xf96af9eb8e689995,
-                0xa31155d32a4961d8,
-                0x1408824a42219316,
-                0x2a02f116f1883861,
+                0x1087bbc36e503b27,
+                0x651fcf35e2ba3a60,
+                0x1715634d43ce909e,
+                0x3d0f66ea6a556c7d,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8235,17 +7771,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x3b88712215dfdd2e,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x1087bbc36e503b27,
-                0x651fcf35e2ba3a60,
-                0x1715634d43ce909e,
-                0x3d0f66ea6a556c7d,
+                0x18d62945d9a7fd2b,
+                0xf0cec8f18c4c704c,
+                0x6145ee58159af340,
+                0x28bf1557a82ec2ac,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8282,17 +7818,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x380fd57444b4adc9,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x18d62945d9a7fd2b,
-                0xf0cec8f18c4c704c,
-                0x6145ee58159af340,
-                0x28bf1557a82ec2ac,
+                0xe6d19ea283c6f629,
+                0xa1c1de15cd1df53a,
+                0x40d2c01c02e723e3,
+                0x3aaf841de44437f1,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8329,17 +7865,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x1d7ad4feff6411e7,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xe6d19ea283c6f629,
-                0xa1c1de15cd1df53a,
-                0x40d2c01c02e723e3,
-                0x3aaf841de44437f1,
+                0xb1a660b34a8f9f9b,
+                0x36f6bc2d61a17642,
+                0xb5a34c935dced95f,
+                0x0ae1b3d20e553bf5,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8376,17 +7912,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x31f470bdd4d66f44,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xb1a660b34a8f9f9b,
-                0x36f6bc2d61a17642,
-                0xb5a34c935dced95f,
-                0x0ae1b3d20e553bf5,
+                0x018f79971cf42fc4,
+                0x8cd3d647f573df80,
+                0x8a76d20619764d4c,
+                0x060161149f5d3134,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8423,17 +7959,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x2168d795ef960e7d,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x018f79971cf42fc4,
-                0x8cd3d647f573df80,
-                0x8a76d20619764d4c,
-                0x060161149f5d3134,
+                0x3cc62557b90f8df1,
+                0x9b81358de0f7c346,
+                0x441e5119212c1e84,
+                0x10980e7016eefba2,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8470,17 +8006,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x201a91c250c94a03,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3cc62557b90f8df1,
-                0x9b81358de0f7c346,
-                0x441e5119212c1e84,
-                0x10980e7016eefba2,
+                0xe162eebdbe0cec5e,
+                0x526537604783cd26,
+                0xd1d22a45aa68f4ad,
+                0x2137ed5deafcab4b,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8517,17 +8053,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x04728a6227683370,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xe162eebdbe0cec5e,
-                0x526537604783cd26,
-                0xd1d22a45aa68f4ad,
-                0x2137ed5deafcab4b,
+                0x2acf8e8c37771ac0,
+                0xa73fcc0c20dca9ce,
+                0x51d9c1a6d6ccab54,
+                0x2c6cc6ebc81bfe65,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8564,17 +8100,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x085553812e0e135a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x2acf8e8c37771ac0,
-                0xa73fcc0c20dca9ce,
-                0x51d9c1a6d6ccab54,
-                0x2c6cc6ebc81bfe65,
+                0x88e2f47db79cc7b2,
+                0xa8c2b2e148dd6663,
+                0x983dad959d8fb10d,
+                0x040548a5bb6fee4a,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8611,17 +8147,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x3b2868c2035cad99,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x88e2f47db79cc7b2,
-                0xa8c2b2e148dd6663,
-                0x983dad959d8fb10d,
-                0x040548a5bb6fee4a,
+                0x19d9c4fd4a143003,
+                0x9b713d7e1a3e9c4d,
+                0xe0765723104bc524,
+                0x158353892df018cc,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8658,17 +8194,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0375a2cd954bb2bd,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x19d9c4fd4a143003,
-                0x9b713d7e1a3e9c4d,
-                0xe0765723104bc524,
-                0x158353892df018cc,
+                0x90edeb48d9cbf2cf,
+                0xfede3ac0e96de3eb,
+                0xb9eeb29fa8803e05,
+                0x3f0d0cd95ea44b7f,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8705,17 +8241,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x225de64e351229e2,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x90edeb48d9cbf2cf,
-                0xfede3ac0e96de3eb,
-                0xb9eeb29fa8803e05,
-                0x3f0d0cd95ea44b7f,
+                0xcb25f4ff8e142bf6,
+                0x67dba08a2bb41151,
+                0xe5fc5557cdce4e2d,
+                0x2bad5f6f56c34827,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8752,17 +8288,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x1aa26c746ac765c2,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xcb25f4ff8e142bf6,
-                0x67dba08a2bb41151,
-                0xe5fc5557cdce4e2d,
-                0x2bad5f6f56c34827,
+                0xb4af3e2fda409efc,
+                0xb0e803ce3dc5ca2f,
+                0x74b8718eb04ef493,
+                0x06f298622ef2c5ca,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8799,17 +8335,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x254eec7d6c011a75,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xb4af3e2fda409efc,
-                0xb0e803ce3dc5ca2f,
-                0x74b8718eb04ef493,
-                0x06f298622ef2c5ca,
+                0x256db8fc82f6cd6c,
+                0x3e30039fef9a776c,
+                0xf1cdb14e35cd533a,
+                0x0ee42be48a6f3ee5,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8846,17 +8382,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x21746d495e2f7d3a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x256db8fc82f6cd6c,
-                0x3e30039fef9a776c,
-                0xf1cdb14e35cd533a,
-                0x0ee42be48a6f3ee5,
+                0x3a9ff6e2e5061bd9,
+                0xb3e9d71f813619bb,
+                0x0832de8246fc2128,
+                0x2d9ea2cf8f8dd125,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8893,17 +8429,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x1872b6768c012316,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x3a9ff6e2e5061bd9,
-                0xb3e9d71f813619bb,
-                0x0832de8246fc2128,
-                0x2d9ea2cf8f8dd125,
+                0x4ca2b4da732d721f,
+                0x1d2c3248bdfcf687,
+                0xa4b652fe89213df4,
+                0x21835e531e5095a9,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8940,17 +8476,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0a7b295e39f4ecee,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x4ca2b4da732d721f,
-                0x1d2c3248bdfcf687,
-                0xa4b652fe89213df4,
-                0x21835e531e5095a9,
+                0x573e8c855f005314,
+                0xe4c30167cdcf817e,
+                0x6b1459be6f57066d,
+                0x104b1faf570cb950,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -8987,17 +8523,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x00a3a1136feae94d,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x573e8c855f005314,
-                0xe4c30167cdcf817e,
-                0x6b1459be6f57066d,
-                0x104b1faf570cb950,
+                0x25930ade8d6bd757,
+                0xe2c5d8489f2c00c0,
+                0xf84e2753e0f1f9af,
+                0x38948076dc088009,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -9034,17 +8570,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x149437a942ad7c9a,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x25930ade8d6bd757,
-                0xe2c5d8489f2c00c0,
-                0xf84e2753e0f1f9af,
-                0x38948076dc088009,
+                0xa0f5c62f129f7463,
+                0x9e120dd8fb2cca16,
+                0x485fa4d5ba909c1a,
+                0x2936ffbcd605bc89,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -9081,17 +8617,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x1a4b44b28540cb2f,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0xa0f5c62f129f7463,
-                0x9e120dd8fb2cca16,
-                0x485fa4d5ba909c1a,
-                0x2936ffbcd605bc89,
+                0x5226d00fe8377ea1,
+                0xeaf893467c89fa1f,
+                0xfef18ad239bb29db,
+                0x165478f7938596c9,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -9128,17 +8664,17 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x01f280d27e71241c,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x5226d00fe8377ea1,
-                0xeaf893467c89fa1f,
-                0xfef18ad239bb29db,
-                0x165478f7938596c9,
+                0x8e37ec8b1d6eddcb,
+                0xa7f1d7754ae7ccbb,
+                0x758f808969338731,
+                0x07328fe76d316dfd,
             ])
         ),
-    ],
-    &[
         field_new!(
             TweedleFr,
             BigInteger([
@@ -9175,13 +8711,51 @@ pub(crate) const GAMMA: &[&[TweedleFr]] = &[
                 0x0c55d06fe9e176e7,
             ])
         ),
+    ],
+    &[
         field_new!(
             TweedleFr,
             BigInteger([
-                0x8e37ec8b1d6eddcb,
-                0xa7f1d7754ae7ccbb,
-                0x758f808969338731,
-                0x07328fe76d316dfd,
+                0x097efd31ba26e1ad,
+                0x0e29f55a966b6612,
+                0x1841463952d61254,
+                0x04188fa924bef0ae,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x6dad92a94ef8769a,
+                0xa893ae83a219787b,
+                0x6632b3fa8dedf20f,
+                0x31b1d45fd6519c55,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0x2f9a5a61d10e14f2,
+                0xc91acea521b7f9b6,
+                0xba66be82f8d89b29,
+                0x3b150b94afa55545,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0xb54b19bdbee1f1c8,
+                0x8b82d34d7fa8781b,
+                0x660eeb14c9bc90d2,
+                0x106e41899adceebd,
+            ])
+        ),
+        field_new!(
+            TweedleFr,
+            BigInteger([
+                0xc3dce48ff641ffb6,
+                0x5c23d1a0f30e3fc9,
+                0x68e34e72eb1ed16f,
+                0x08dae762c524759e,
             ])
         ),
     ],
@@ -9510,71 +9084,6 @@ pub(crate) const LC: &[&[TweedleFr]] = &[
                 0x0000000000000000,
                 0x0000000000000000,
                 0x0000000000000000,
-            ])
-        ),
-    ],
-    &[
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xac23191657135784,
-                0x0cd01f11ac99a8fa,
-                0x13abd64a253c9832,
-                0x02abc2bf3fc60358,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x84c952e5288bd9b5,
-                0xc56f0e17022eab90,
-                0xebc12898a37d9d44,
-                0x0d1712ca3fd61c19,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xc82275595a19b9ca,
-                0x2cb27c322dc3c012,
-                0xc4737362f64352a4,
-                0x17e8372447dce6bf,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0xe3bc452223d4427b,
-                0x1a947d90f6363a11,
-                0xd7a8efef8b7db756,
-                0x39c38d7617166441,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x0206deb97e80af27,
-                0x2e144a99b25cc953,
-                0xeb4b53050c3822f9,
-                0x1a2538c4696f41b4,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x19da1ed09e3d1577,
-                0xb9d9ddcd5623de7d,
-                0x863f51c4b613fd8c,
-                0x0b47fd3bbb8d1a62,
-            ])
-        ),
-        field_new!(
-            TweedleFr,
-            BigInteger([
-                0x6057da5cbb56c8a8,
-                0xd463b5776bb14c4d,
-                0x991fb3b13d970997,
-                0x1fe236ff95355058,
             ])
         ),
     ],
