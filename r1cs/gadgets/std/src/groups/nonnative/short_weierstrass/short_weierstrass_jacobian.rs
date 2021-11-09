@@ -7,8 +7,8 @@ use algebra::{
     curves::short_weierstrass_jacobian::{
         GroupAffine as SWAffine, GroupProjective as SWProjective,
     },
-    AffineCurve, BitIterator, Field, PrimeField, ProjectiveCurve, SWModelParameters, EndoMulParameters,
-    SquareRootField,
+    AffineCurve, BitIterator, EndoMulParameters, Field, PrimeField, ProjectiveCurve,
+    SWModelParameters, SquareRootField,
 };
 
 use r1cs_core::{ConstraintSystem, SynthesisError};
@@ -17,7 +17,9 @@ use crate::{
     alloc::{AllocGadget, ConstantGadget},
     boolean::Boolean,
     fields::{nonnative::nonnative_field_gadget::NonNativeFieldGadget, FieldGadget},
-    groups::{check_mul_bits_fixed_base_inputs, check_mul_bits_inputs, GroupGadget, EndoMulCurveGadget},
+    groups::{
+        check_mul_bits_fixed_base_inputs, check_mul_bits_inputs, EndoMulCurveGadget, GroupGadget,
+    },
     prelude::EqGadget,
     select::{CondSelectGadget, TwoBitLookupGadget},
     uint8::UInt8,
@@ -487,11 +489,12 @@ where
     }
 }
 
-impl<P, ConstraintF, SimulationF> EndoMulCurveGadget<SWProjective<P>, ConstraintF> for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
-    where
-        P: EndoMulParameters<BaseField = SimulationF>,
-        ConstraintF: PrimeField,
-        SimulationF: PrimeField + SquareRootField,
+impl<P, ConstraintF, SimulationF> EndoMulCurveGadget<SWProjective<P>, ConstraintF>
+    for GroupAffineNonNativeGadget<P, ConstraintF, SimulationF>
+where
+    P: EndoMulParameters<BaseField = SimulationF>,
+    ConstraintF: PrimeField,
+    SimulationF: PrimeField + SquareRootField,
 {
     /// Given an arbitrary curve element `&self`, applies the endomorphism
     /// defined by `ENDO_COEFF`.
@@ -502,12 +505,12 @@ impl<P, ConstraintF, SimulationF> EndoMulCurveGadget<SWProjective<P>, Constraint
         Ok(Self::new(
             self.x.mul_by_constant(cs.ns(|| "endo x"), &P::ENDO_COEFF)?,
             self.y.clone(),
-            self.infinity
+            self.infinity,
         ))
     }
 
-    /// The endomorphism-based scalar multiplication circuit from [Halo] in non-native 
-    /// arithmetics. Assumes that `ENDO_SCALAR` satisfies the minimal distance property as 
+    /// The endomorphism-based scalar multiplication circuit from [Halo] in non-native
+    /// arithmetics. Assumes that `ENDO_SCALAR` satisfies the minimal distance property as
     /// mentioned in `SWModelParameters`.
     /// Given any non-trivial point `P= &self` of the prime order r subgroup, and a slice
     /// of an even number of at most `lambda` Booleans `bits`, enforces that the result equals
@@ -520,14 +523,15 @@ impl<P, ConstraintF, SimulationF> EndoMulCurveGadget<SWProjective<P>, Constraint
         mut cs: CS,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
-
         let mut bits = bits.to_vec();
         if bits.len() % 2 == 1 {
             bits.push(Boolean::constant(false));
         }
 
         if bits.len() > P::LAMBDA {
-            Err(SynthesisError::Other("Endo mul bits length exceeds LAMBDA".to_owned()))?
+            Err(SynthesisError::Other(
+                "Endo mul bits length exceeds LAMBDA".to_owned(),
+            ))?
         }
 
         let endo_self = self.apply_endomorphism(cs.ns(|| "endo self"))?;
@@ -538,7 +542,6 @@ impl<P, ConstraintF, SimulationF> EndoMulCurveGadget<SWProjective<P>, Constraint
         acc.double_in_place(cs.ns(|| "double"))?;
 
         for i in (0..(bits.len() / 2)).rev() {
-
             // Conditional select between (-1)^b_0 * Phi^{b_1}(&self), according
             // to [b_1,b_0] = bits[2i+1, 2i].
             // Takes 2 constraints.
@@ -555,7 +558,7 @@ impl<P, ConstraintF, SimulationF> EndoMulCurveGadget<SWProjective<P>, Constraint
                     &self.y,
                     &self_y_neg,
                 )?,
-                self.infinity
+                self.infinity,
             );
 
             // The unsafe double and add, takes 5 constraints.
