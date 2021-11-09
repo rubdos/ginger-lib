@@ -10,37 +10,18 @@ use crate::{crh::{FieldBasedHash, BatchFieldBasedHash, FieldBasedHashParameters}
     },
 }, ActionLeaf};
 
-use rocksdb::{DB, Options, IteratorMode};
-
-use std::{
-  collections::HashSet, marker::PhantomData, fs, path::Path, io::{Error, ErrorKind}, sync::Arc,
-};
+use std::{collections::{HashMap, HashSet}, fs, io::{Error, ErrorKind}, marker::PhantomData, path::Path, sync::Arc};
 
 #[derive(Debug)]
 pub struct LazyBigMerkleTree<T: BatchFieldBasedMerkleTreeParameters> {
-    // if unset, all DBs and tree internal state will be deleted when an instance of this struct
-    // gets dropped
-    pub(crate) persistent: bool,
     // tree in-memory state
     pub(crate) state: BigMerkleTreeState<T>,
     // the number of leaves
     pub(crate) width: usize,
-    // path to the db
-    pub(crate) path_db: String,
     // stores the leaves
-    pub(crate) database: Arc<DB>,
-    // path to the cache
-    pub(crate) path_cache: String,
+    pub(crate) leaves: HashMap<usize, T::Data>,
     // stores the cached nodes
-    pub(crate) db_cache: Arc<DB>,
-
-    _parameters: PhantomData<T>,
-}
-
-impl<T: BatchFieldBasedMerkleTreeParameters> Drop for LazyBigMerkleTree<T> {
-    fn drop(&mut self) {
-        self.flush()
-    }
+    pub(crate) cached_nodes: HashMap<Coord, T::Data>,
 }
 
 impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
@@ -50,8 +31,6 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
     // and the DBs will be deleted.
     pub fn new(
         height: usize,
-        persistent: bool,
-        path_db: String,
     ) -> Result<Self, Error> {
         assert!(check_precomputed_parameters::<T>(height));
 
@@ -65,273 +44,40 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
         let state = BigMerkleTreeState::<T>::get_default_state(height);
         let width = T::MERKLE_ARITY.pow(height as u32);
 
-        let path_db = path_db;
-        let database = Arc::new(DB::open_default(path_db.clone())
-            .map_err(|e| Error::new(ErrorKind::Other, e))?);
-
-        let mut path_cache = path_db.clone();
-        path_cache.push_str("_cache");
-        let db_cache = Arc::new(DB::open_default(path_cache.clone())
-            .map_err(|e| Error::new(ErrorKind::Other, e))?);
-
         Ok(Self {
-            persistent,
             state,
             width,
-            path_db,
-            database,
-            path_cache,
-            db_cache,
-            _parameters: PhantomData,
+            leaves: HashMap::new(),
+            cached_nodes: HashMap::new(),
         })
     }
 
-    // Restore a tree from a state saved at `state_path` and DBs at `path_db` and `path_cache`.
-    // The new tree may be persistent or not, the actions taken in both cases are the same as
-    // in `new` function. The function is able to restore the tree iff at least `path_db` is
-    // present.
-    pub fn load(
-        height: usize,
-        persistent: bool,
-        path_db: String,
-    ) -> Result<Self, Error> {
-
-        let leaves_db_path = Path::new(path_db.as_str());
-        let cache_db_str = {
-            let mut t = path_db.clone();
-            t.push_str("_cache");
-            t
-        };
-        let cache_db_path = Path::new(cache_db_str.as_str());
-
-        // Temporary: clean up anyway, as we have not implemented still a way
-        // to check for dbs consistency
-        if cache_db_path.exists() { fs::remove_dir_all(cache_db_path)? }
-
-        // The DB containing all the leaves it's enough to reconstruct a consistent tree.
-        // Even if other info are available on disk, we would still need to check that
-        // they stand for the same tree state, which is expensive nevertheless (and still
-        // requires to compute the root). At this point, as a temporary solution, it's worth
-        // in any case to reconstruct the whole tree given the leaves.
-        if leaves_db_path.exists()
-        {
-            Self::restore_from_leaves(height, persistent, path_db)
-        } else
-        {
-            // If `database` has been lost, it's not possible to load or recover anything
-            Err(Error::new(
-                ErrorKind::InvalidData,
-                "Unable to restore MerkleTree: leaves not available")
-            )
-        }
+    fn insert_to_cache(&mut self, coord: Coord, data:T::Data) {
+        self.cached_nodes.insert(coord, data);
     }
 
-    // Use the database at db_path to restore the tree, thus recreating `state` and `db_cache`.
-    // This operation is expensive.
-    fn restore_from_leaves(
-        height: usize,
-        persistent: bool,
-        path_db: String,
-    ) -> Result<Self, Error> {
-
-        let rate = <<T::H as FieldBasedHash>::Parameters as FieldBasedHashParameters>::R;
-        assert_eq!(T::MERKLE_ARITY, 2); // For now we support only arity 2
-        // Rate may also be smaller than the arity actually, but this assertion
-        // is reasonable and simplify the design.
-        assert_eq!(rate, T::MERKLE_ARITY);
-
-        // Create new state
-        let state = BigMerkleTreeState::<T>::get_default_state(height);
-        assert!(check_precomputed_parameters::<T>(state.height));
-        let width = T::MERKLE_ARITY.pow(height as u32);
-
-        let opening_options = Options::default();
-
-        // Restore leaves DB
-        let path_db = path_db.clone();
-        let database = Arc::new(DB::open(&opening_options, path_db.clone())
-            .map_err(|e| Error::new(ErrorKind::Other, e))?);
-        // It's fine here to have one instance writing and the other reading: first because
-        // they are not concurrent and second because `database` already contain all the leaves
-        // we are going to add, so there will be no writings at all.
-        let database_read = database.clone();
-
-        // Create new cache DB
-        let mut path_cache = path_db.clone();
-        path_cache.push_str("_cache");
-        let db_cache = Arc::new(DB::open_default(path_cache.clone())
-            .map_err(|e| Error::new(ErrorKind::Other, e))?);
-
-        // Create new tree instance
-        let mut new_tree = Self {
-            persistent,
-            state,
-            width,
-            path_db,
-            database,
-            path_cache,
-            db_cache,
-            _parameters: PhantomData,
-        };
-
-        // Re-add the leaves to the tree in order to update state and db_cache
-        let db_iter = database_read.iterator(IteratorMode::Start);
-        let mut leaves_to_insert = Vec::with_capacity(db_iter.size_hint().0);
-
-        // For the moment, let's load all the leaves in memory and update the tree
-        for (leaf_index, leaf_val) in db_iter {
-            let index = u32::read(&*leaf_index)?;
-            let leaf = T::Data::read(&*leaf_val)?;
-            leaves_to_insert.push(OperationLeaf {
-                coord: Coord { height: 0, idx: index as usize },
-                action: ActionLeaf::Insert,
-                hash: Some(leaf.clone())
-            });
-        }
-
-        new_tree.process_leaves(leaves_to_insert.as_slice());
-        Ok(new_tree)
+    fn contains_key_in_cache(&self, coord: Coord) -> bool {
+        self.cached_nodes.get(&coord).is_some()
     }
 
-    pub fn flush(&mut self) {
-
-        if !self.persistent {
-
-            // Deletes the folder containing the db
-            match fs::remove_dir_all(self.path_db.clone()) {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("Error deleting the folder containing the db: {}", e);
-                }
-            };
-
-            // Deletes the folder containing the cache
-            match fs::remove_dir_all(self.path_cache.clone()) {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("Error deleting the folder containing the db: {}", e);
-                }
-            };
-        }
-    }
-    
-    pub fn set_persistency(&mut self, persistency: bool) {
-        self.persistent = persistency;
+    fn get_from_cache(&self, coord: Coord) -> Option<T::Data> {
+        self.cached_nodes.get(&coord).and_then(|data| Some(*data))
     }
 
-    fn insert_to_cache(&self, coord: Coord, data:T::Data) {
-        let elem = to_bytes!(data).unwrap();
-        let index = to_bytes!(coord).unwrap();
-        self.db_cache.put(index, elem).unwrap();
+    fn remove_from_cache(&mut self, coord: Coord) -> Option<T::Data>{
+        self.cached_nodes.remove(&coord)
     }
 
-    fn contains_key_in_cache(&self, coord:Coord) -> bool {
-        let coordinates = to_bytes!(coord).unwrap();
-        match self.db_cache.get(coordinates) {
-            Ok(Some(_value)) => {
-                return true;
-            },
-            Ok(None) => {
-                return false;
-            },
-            Err(e) => {
-                println!("operational problem encountered: {}", e);
-                return false;
-            },
-        }
-    }
-
-    fn get_from_cache(&self, coord:Coord) -> Option<T::Data> {
-        let coordinates = to_bytes!(coord).unwrap();
-        match self.db_cache.get(coordinates) {
-            Ok(Some(value)) => {
-                let retrieved_elem = T::Data::read(value.as_slice()).unwrap();
-                return Some(retrieved_elem);
-            },
-            Ok(None) => {
-                return None;
-            },
-            Err(e) => {
-                println!("operational problem encountered: {}", e);
-                return None;
-            },
-        }
-    }
-
-    fn remove_from_cache(&self, coord: Coord) -> Option<T::Data>{
-        let coordinates = to_bytes!(coord).unwrap();
-        match self.db_cache.get(coordinates.clone()) {
-            Ok(Some(value)) => {
-                let retrieved_elem = T::Data::read(value.as_slice()).unwrap();
-                let res = self.db_cache.delete(coordinates.clone());
-                match res {
-                    Ok(_) => {
-                        return Some(retrieved_elem);
-                    },
-                    Err(e) => {
-                        println!("Could not delete node from cache: {}", e);
-                        return None;
-                    }
-                }
-            },
-            Ok(None) => {
-                return None;
-            },
-            Err(e) => {
-                println!("operational problem encountered: {}", e);
-                return None;
-            },
-        }
-    }
-
-    fn insert_to_db(&self, idx: usize, data: T::Data) {
-        let elem = to_bytes!(data).unwrap();
-        let index = to_bytes!(idx as u32).unwrap();
-        self.database.put(index, elem).unwrap();
+    fn insert_to_db(&mut self, idx: usize, data: T::Data) {
+        self.leaves.insert(idx, data);
     }
 
     fn get_from_db(&self, idx: usize) -> Option<T::Data>{
-        let index = to_bytes!(idx as u32).unwrap();
-        match self.database.get(index) {
-            Ok(Some(value)) => {
-                let retrieved_elem = T::Data::read(value.as_slice()).unwrap();
-                return Some(retrieved_elem);
-            },
-            Ok(None) => {
-                return None;
-            },
-            Err(e) => {
-                println!("operational problem encountered: {}", e);
-                return None;
-            },
-        }
+        self.leaves.get(&idx).and_then(|data| Some(*data))
     }
 
-    fn remove_from_db(&self, idx: usize) -> Option<T::Data>{
-        let index = to_bytes!(idx as u32).unwrap();
-        match self.database.get(index.clone()) {
-            Ok(Some(value)) => {
-                let retrieved_elem = T::Data::read(value.as_slice()).unwrap();
-                let res = self.database.delete(index.clone());
-                match res {
-                    Ok(_) => {
-                        return Some(retrieved_elem);
-                    },
-                    Err(e) => {
-                        println!("Could not delete leaf from db: {}", e);
-                        return None;
-                    }
-                }
-
-            },
-            Ok(None) => {
-                return None;
-            },
-            Err(e) => {
-                println!("operational problem encountered: {}", e);
-                return None;
-            },
-        }
+    fn remove_from_db(&mut self, idx: usize) -> Option<T::Data>{
+        self.leaves.remove(&idx)
     }
 
     fn check_b_plus_caching_level_down(&mut self, coord: Coord) {
@@ -474,7 +220,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
         }
 
         // Mark nodes to recompute
-        let mut visited_nodes:HashSet<Coord> = HashSet::new();
+        let mut visited_nodes: HashSet<Coord> = HashSet::new();
         let mut nodes_to_process_in_parallel:Vec<Vec<Coord>> = Vec::new();
 
         // process the first level
@@ -719,10 +465,10 @@ mod test {
         },
         merkle_tree::field_based_mht::{
             naive:: NaiveMerkleTree,
-            smt::{OperationLeaf, Coord, ActionLeaf, BigMerkleTree, LazyBigMerkleTree},
+            smt::{OperationLeaf, Coord, ActionLeaf, LazyBigMerkleTree},
             parameters::{MNT4753_MHT_POSEIDON_PARAMETERS, MNT6753_MHT_POSEIDON_PARAMETERS},
             FieldBasedMerkleTreeParameters, BatchFieldBasedMerkleTreeParameters,
-            FieldBasedMerkleTreePrecomputedEmptyConstants, FieldBasedMerkleTreePath,
+            FieldBasedMerkleTreePath, FieldBasedMerkleTreePrecomputedZeroConstants,
             FieldBasedBinaryMHTPath,
         },
 
@@ -743,14 +489,13 @@ mod test {
         type Data = MNT4753Fr;
         type H = MNT4PoseidonHash;
         const MERKLE_ARITY: usize = 2;
-        const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedEmptyConstants<'static, Self::H>> =
+        const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedZeroConstants<'static, Self::H>> =
             Some(MNT4753_MHT_POSEIDON_PARAMETERS);
     }
     impl BatchFieldBasedMerkleTreeParameters for MNT4753FieldBasedMerkleTreeParams {
         type BH = MNT4BatchPoseidonHash;
     }
     type MNT4753FieldBasedMerkleTree = NaiveMerkleTree<MNT4753FieldBasedMerkleTreeParams>;
-    type MNT4PoseidonSMT = BigMerkleTree<MNT4753FieldBasedMerkleTreeParams>;
     type MNT4PoseidonSMTLazy = LazyBigMerkleTree<MNT4753FieldBasedMerkleTreeParams>;
     type MNT4MerklePath = FieldBasedBinaryMHTPath<MNT4753FieldBasedMerkleTreeParams>;
 
@@ -760,20 +505,19 @@ mod test {
         type Data = MNT6753Fr;
         type H = MNT6PoseidonHash;
         const MERKLE_ARITY: usize = 2;
-        const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedEmptyConstants<'static, Self::H>> =
+        const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedZeroConstants<'static, Self::H>> =
             Some(MNT6753_MHT_POSEIDON_PARAMETERS);
     }
     impl BatchFieldBasedMerkleTreeParameters for MNT6753FieldBasedMerkleTreeParams {
         type BH = MNT6BatchPoseidonHash;
     }
     type MNT6753FieldBasedMerkleTree = NaiveMerkleTree<MNT6753FieldBasedMerkleTreeParams>;
-    type MNT6PoseidonSMT = BigMerkleTree<MNT6753FieldBasedMerkleTreeParams>;
     type MNT6PoseidonSMTLazy = LazyBigMerkleTree<MNT6753FieldBasedMerkleTreeParams>;
     type MNT6MerklePath = FieldBasedBinaryMHTPath<MNT6753FieldBasedMerkleTreeParams>;
 
     const TEST_HEIGHT_1: usize = 5;
 
-    //#[test]
+    #[test]
     fn process_leaves_mnt4() {
 
         let mut leaves_to_process: Vec<OperationLeaf<MNT4753Fr>> = Vec::new();
@@ -786,8 +530,6 @@ mod test {
 
         let mut smt = MNT4PoseidonSMTLazy::new(
             TEST_HEIGHT_1,
-            false,
-            String::from("./db_leaves_mnt4"),
         ).unwrap();
         smt.process_leaves(leaves_to_process.as_slice());
 
@@ -816,7 +558,7 @@ mod test {
 
     }
 
-    //#[test]
+    #[test]
     fn process_leaves_mnt6() {
 
         let mut leaves_to_process: Vec<OperationLeaf<MNT6753Fr>> = Vec::new();
@@ -829,8 +571,6 @@ mod test {
 
         let mut smt = MNT6PoseidonSMTLazy::new(
             TEST_HEIGHT_1,
-            false,
-            String::from("./db_leaves_mnt6"),
         ).unwrap();
         smt.process_leaves(leaves_to_process.as_slice());
 
@@ -858,147 +598,6 @@ mod test {
         assert_eq!(tree.root(), smt.state.root, "Roots are not equal");
     }
 
-    //#[test]
-    fn test_persistency_lazy() {
-        let root = MNT4753Fr::new(
-            BigInteger768([
-                17131081159200801074,
-                9006481350618111567,
-                12051725085490156787,
-                2023238364439588976,
-                13194888104290656497,
-                14162537977718443379,
-                13575626123664189275,
-                9267800406229717074,
-                8973990559932404408,
-                1830585533392189796,
-                16667600459761825175,
-                476991746583444
-            ])
-        );
-
-        // create a persistent smt in a separate scope
-        {
-            let mut smt = MNT4PoseidonSMTLazy::new(
-                TEST_HEIGHT_1,
-                true,
-                String::from("./db_leaves_persistency_test_info_lazy"),
-            ).unwrap();
-
-            //Insert some leaves in the tree
-            let mut leaves_to_process: Vec<OperationLeaf<MNT4753Fr>> = Vec::new();
-
-            leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 0 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("1").unwrap()) });
-            leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 9 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("2").unwrap()) });
-
-            smt.process_leaves(leaves_to_process.as_slice());
-
-            // smt gets dropped but its info should be saved
-        }
-        // files and directories should have been created
-        assert!(Path::new("./db_leaves_persistency_test_info_lazy").exists());
-
-        // create a non-persistent smt in another scope by restoring the previous one
-        {
-            let mut smt = MNT4PoseidonSMTLazy::load(
-                TEST_HEIGHT_1,
-                false,
-                String::from("./db_leaves_persistency_test_info_lazy"),
-            ).unwrap();
-
-            // insert other leaves
-            let mut leaves_to_process: Vec<OperationLeaf<MNT4753Fr>> = Vec::new();
-
-            leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 16 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("10").unwrap()) });
-            leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 29 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("3").unwrap()) });
-
-            smt.process_leaves(leaves_to_process.as_slice());
-
-            // if truly state has been kept, then the equality below must pass, since `root` was
-            // computed in one go with another smt
-            assert_eq!(root, smt.state.root);
-
-            // smt gets dropped and info on disk destroyed
-        }
-
-        // files and directories should have been deleted
-        assert!(!Path::new("./db_leaves_persistency_test_info_lazy").exists());
-        assert!(!Path::new("./db_leaves_persistency_test_info_lazy_cache").exists());
-
-        // assert being unable to restore
-        assert!(MNT4PoseidonSMTLazy::load(
-            TEST_HEIGHT_1,
-            false,
-            String::from("./db_leaves_persistency_test_info_lazy"),
-        ).is_err());
-    }
-
-    //#[test]
-    fn test_persistency_non_lazy() {
-        let root = MNT4753Fr::new(
-            BigInteger768([
-                17131081159200801074,
-                9006481350618111567,
-                12051725085490156787,
-                2023238364439588976,
-                13194888104290656497,
-                14162537977718443379,
-                13575626123664189275,
-                9267800406229717074,
-                8973990559932404408,
-                1830585533392189796,
-                16667600459761825175,
-                476991746583444
-            ])
-        );
-
-        // create a persistent smt in a separate scope
-        {
-            let mut smt = MNT4PoseidonSMT::new(
-                TEST_HEIGHT_1,
-                true,
-                String::from("./db_leaves_persistency_test_info"),
-            ).unwrap();
-
-            //Insert some leaves in the tree
-            smt.insert_leaf(Coord{height:0, idx:0}, MNT4753Fr::from_str("1").unwrap());
-            smt.insert_leaf(Coord{height:0, idx:9}, MNT4753Fr::from_str("2").unwrap());
-
-            // smt gets dropped but its info should be saved
-        }
-        // files and directories should have been created
-        assert!(Path::new("./db_leaves_persistency_test_info").exists());
-
-        // create a non-persistent smt in another scope by restoring the previous one
-        {
-            let mut smt = MNT4PoseidonSMT::load_batch::<MNT4753FieldBasedMerkleTreeParams>(
-                TEST_HEIGHT_1,
-                false,
-                String::from("./db_leaves_persistency_test_info"),
-            ).unwrap();
-
-            // insert other leaves
-            smt.insert_leaf(Coord { height: 0, idx: 16 }, MNT4753Fr::from_str("10").unwrap());
-            smt.insert_leaf(Coord { height: 0, idx: 29 }, MNT4753Fr::from_str("3").unwrap());
-
-            // if truly state has been kept, then the equality below must pass, since `root` was
-            // computed in one go with another smt
-            assert_eq!(root, smt.get_root());
-
-            // smt gets dropped and the info on disk destroyed
-        }
-
-        // files and directories should have been deleted
-        assert!(!Path::new("./db_leaves_persistency_test_info").exists());
-
-        // assert being unable to restore
-        assert!(MNT4PoseidonSMT::load_batch::<MNT4753FieldBasedMerkleTreeParams>(
-            TEST_HEIGHT_1,
-            false,
-            String::from("./db_leaves_persistency_test_info"),
-        ).is_err());
-    }
-
     #[test]
     fn merkle_tree_path_test_mnt4() {
 
@@ -1009,8 +608,6 @@ mod test {
 
         let mut smt = MNT4PoseidonSMTLazy::new(
             TEST_HEIGHT_1,
-            false,
-            String::from("./db_leaves_merkle_tree_path_test_mnt4_lazy"),
         ).unwrap();
 
         // Generate random leaves, half of which empty
@@ -1070,8 +667,6 @@ mod test {
 
         let mut smt = MNT6PoseidonSMTLazy::new(
             TEST_HEIGHT_1,
-            false,
-            String::from("./db_leaves_merkle_tree_path_test_mnt6_lazy"),
         ).unwrap();
 
         // Generate random leaves, half of which empty
@@ -1119,179 +714,5 @@ mod test {
             let path_deserialized = MNT6MerklePath::read(path_serialized.as_slice()).unwrap();
             assert_eq!(path, path_deserialized);
         }
-    }
-
-    const TEST_HEIGHT_2: usize = 23;
-
-    //#[test]
-    fn process_leaves_mnt4_comp() {
-
-        let num_leaves = 2usize.pow(23);
-        let mut rng1 = XorShiftRng::seed_from_u64(9174123u64);
-        let mut leaves_to_insert: Vec<OperationLeaf<MNT4753Fr>> = Vec::new();
-        let mut leaves_to_remove: Vec<OperationLeaf<MNT4753Fr>> = Vec::new();
-
-        let n = 1000;
-
-        for _i in 0..n {
-            let random: u64 = OsRng.next_u64();
-            let idx = random % num_leaves as u64;
-            let elem = MNT4753Fr::rand(&mut rng1);
-
-            leaves_to_insert.push(OperationLeaf { coord: Coord { height: 0, idx: idx as usize }, action: ActionLeaf::Insert, hash: Some(elem.clone()) });
-            leaves_to_remove.push(OperationLeaf { coord: Coord { height: 0, idx: idx as usize }, action: ActionLeaf::Remove, hash: None });
-        }
-
-        // Insertion
-
-        let root1;
-        let root2;
-        let root3;
-        let root4;
-        {
-            let mut smt1 = MNT4PoseidonSMT::new(
-                TEST_HEIGHT_2,
-                false,
-                String::from("./db_leaves_mnt4_comp_1"),
-            ).unwrap();
-            let leaves_to_process1 = leaves_to_insert.clone();
-            let now = Instant::now();
-            root1 = smt1.process_leaves_normal(leaves_to_process1);
-            let new_now = Instant::now();
-
-            let duration_normal = new_now.duration_since(now).as_millis();
-
-            println!("duration normal = {}", duration_normal);
-
-            // Removal
-
-            let leaves_to_process3 = leaves_to_remove.clone();
-            let now = Instant::now();
-            root3 = smt1.process_leaves_normal(leaves_to_process3);
-            let new_now = Instant::now();
-
-            let duration_normal = new_now.duration_since(now).as_millis();
-
-            println!("duration normal = {}",duration_normal);
-
-        }
-
-        {
-            let mut smt2 = MNT4PoseidonSMTLazy::new(
-                TEST_HEIGHT_2,
-                false,
-                String::from("./db_leaves_mnt4_comp_2"),
-            ).unwrap();
-            let leaves_to_process2 = leaves_to_insert.clone();
-            let now = Instant::now();
-            root2 = smt2.process_leaves(leaves_to_process2.as_slice());
-            let new_now = Instant::now();
-
-            let duration_fast = new_now.duration_since(now).as_millis();
-
-            println!("duration fast = {}", duration_fast);
-
-            let leaves_to_process4 = leaves_to_remove.clone();
-            let now = Instant::now();
-            root4 = smt2.process_leaves(leaves_to_process4.as_slice());
-            let new_now = Instant::now();
-
-            let duration_fast = new_now.duration_since(now).as_millis();
-
-            println!("duration fast = {}",duration_fast);
-
-        }
-
-        assert_eq!(root1, root2, "Roots are not equal");
-        assert_eq!(root3, root4, "Roots are not equal");
-
-        assert_eq!(root3, MNT4753_MHT_POSEIDON_PARAMETERS.nodes[23], "Sequence of roots not equal");
-
-    }
-
-    //#[test]
-    fn process_leaves_mnt6_comp() {
-
-        let num_leaves = 2usize.pow(23);
-        let mut rng1 = XorShiftRng::seed_from_u64(9174123u64);
-        let mut leaves_to_insert: Vec<OperationLeaf<MNT6753Fr>> = Vec::new();
-        let mut leaves_to_remove: Vec<OperationLeaf<MNT6753Fr>> = Vec::new();
-
-        let n = 1000;
-
-        for _i in 0..n {
-            let random: u64 = OsRng.next_u64();
-            let idx = random % num_leaves as u64;
-            let elem = MNT6753Fr::rand(&mut rng1);
-
-            leaves_to_insert.push(OperationLeaf { coord: Coord { height: 0, idx: idx as usize }, action: ActionLeaf::Insert, hash: Some(elem.clone()) });
-            leaves_to_remove.push(OperationLeaf { coord: Coord { height: 0, idx: idx as usize }, action: ActionLeaf::Remove, hash: None });
-        }
-
-        // Insertion
-
-        let root1;
-        let root2;
-        let root3;
-        let root4;
-        {
-            let mut smt1 = MNT6PoseidonSMT::new(
-                TEST_HEIGHT_2,
-                false,
-                String::from("./db_leaves_mnt6_comp_1"),
-            ).unwrap();
-            let leaves_to_process1 = leaves_to_insert.clone();
-            let now = Instant::now();
-            root1 = smt1.process_leaves_normal(leaves_to_process1);
-            let new_now = Instant::now();
-
-            let duration_normal = new_now.duration_since(now).as_millis();
-
-            println!("duration normal = {}", duration_normal);
-
-            // Removal
-
-            let leaves_to_process3 = leaves_to_remove.clone();
-            let now = Instant::now();
-            root3 = smt1.process_leaves_normal(leaves_to_process3);
-            let new_now = Instant::now();
-
-            let duration_normal = new_now.duration_since(now).as_millis();
-
-            println!("duration normal = {}",duration_normal);
-
-        }
-
-        {
-            let mut smt2 = MNT6PoseidonSMTLazy::new(
-                TEST_HEIGHT_2,
-                false,
-                String::from("./db_leaves_mnt6_comp_2"),
-            ).unwrap();
-            let leaves_to_process2 = leaves_to_insert.clone();
-            let now = Instant::now();
-            root2 = smt2.process_leaves(leaves_to_process2.as_slice());
-            let new_now = Instant::now();
-
-            let duration_fast = new_now.duration_since(now).as_millis();
-
-            println!("duration fast = {}", duration_fast);
-
-            let leaves_to_process4 = leaves_to_remove.clone();
-            let now = Instant::now();
-            root4 = smt2.process_leaves(leaves_to_process4.as_slice());
-            let new_now = Instant::now();
-
-            let duration_fast = new_now.duration_since(now).as_millis();
-
-            println!("duration fast = {}",duration_fast);
-
-        }
-
-        assert_eq!(root1, root2, "Roots are not equal");
-        assert_eq!(root3, root4, "Roots are not equal");
-
-        assert_eq!(root3, MNT6753_MHT_POSEIDON_PARAMETERS.nodes[23], "Sequence of roots not equal");
-
     }
 }

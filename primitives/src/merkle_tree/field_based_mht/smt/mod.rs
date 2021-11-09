@@ -1,8 +1,5 @@
 #![allow(dead_code)]
 
-pub mod big_merkle_tree;
-pub use self::big_merkle_tree::*;
-
 pub mod big_lazy_merkle_tree;
 pub use self::big_lazy_merkle_tree::*;
 
