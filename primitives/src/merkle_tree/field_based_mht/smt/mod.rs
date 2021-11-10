@@ -9,11 +9,7 @@ use algebra::{
 
 use crate::merkle_tree::field_based_mht::FieldBasedMerkleTreeParameters;
 
-use std::{
-    io::{Write, Result as IoResult, Read},
-    collections::{HashMap, HashSet},
-    marker::PhantomData
-};
+use std::{cmp::Ordering, collections::{HashMap, HashSet}, io::{Write, Result as IoResult, Read}, marker::PhantomData};
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum ActionLeaf {
@@ -33,6 +29,26 @@ pub struct Coord {
 impl Coord {
     pub fn new(height: usize, idx: usize) -> Self {
         Self { height, idx }
+    }
+}
+
+impl Ord for Coord {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut ord = self.height.cmp(&other.height);
+        if matches!(ord, Ordering::Equal) {
+            ord = self.idx.cmp(&other.idx)
+        }
+        ord
+    }
+}
+
+impl PartialOrd for Coord {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match self.height.partial_cmp(&other.height) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.idx.partial_cmp(&other.idx)
     }
 }
 
