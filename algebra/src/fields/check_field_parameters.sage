@@ -156,11 +156,14 @@ else:
     print("WARNING! THE VALUE OF MODULUS_MINUS_ONE_DIV_TWO IS NOT CORRECT")
 
 #GENERATOR and ROOT_OF_UNITY
+F = FiniteField(MODULUS)
 #Converting GENERATOR from Montgomery form
 GENERATOR_STANDARD = GENERATOR * inverse_mod(R,MODULUS) % MODULUS
 
-#Checking that GENERATOR has multiplicative order = MODULUS - 1
-F = FiniteField(MODULUS)
+# Checking that GENERATOR has multiplicative order = MODULUS - 1 
+# It is not always a generator, but just a non-square element of the field.
+# It is a parameter never used in the code, nevertheless its check can be really expensive.
+# If you want a faster check, you can comment the next 4 lines.
 if F(GENERATOR_STANDARD).multiplicative_order() == MODULUS - 1:
     print("Correct. GENERATOR is a generator of the multiplicative group.")
 else:
