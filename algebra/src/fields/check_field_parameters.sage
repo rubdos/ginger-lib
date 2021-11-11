@@ -170,7 +170,12 @@ else:
 ROOT_OF_UNITY_STANDARD = ROOT_OF_UNITY * inverse_mod(R,MODULUS) % MODULUS
 
 #Checking if the value of ROOT_OF_UNITY a primitive 2^TWO_ADICITY-root
-if F(ROOT_OF_UNITY_STANDARD).multiplicative_order() == 2**(TWO_ADICITY):
+root_pow = F(ROOT_OF_UNITY_STANDARD)
+for _ in range(0,TWO_ADICITY):
+    if root_pow == F(1):
+        print("WARNING! ROOT_OF_UNITY IS A 2^TWO_ADICITY-ROOT OF 1, BUT NOT PRIMITIVE!")
+    root_pow = root_pow^2
+if root_pow == F(1):
     print("Correct. ROOT_OF_UNITY is a primitive 2^TWO_ADICITY-root of 1.")
 else:
-    print("WARNING! ROOT_OF_UNITY IS NOT A PRIMITIVE 2^TWO_ADICITY-ROOT OF 1.")
+    print("WARNING! ROOT_OF_UNITY IS NOT A 2^TWO_ADICITY-ROOT OF 1!")
