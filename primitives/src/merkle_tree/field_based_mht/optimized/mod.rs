@@ -234,10 +234,16 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
     }
 
     fn reset(&mut self) -> &mut Self {
+        // Reset indices
         for i in 0..self.new_elem_pos.len() {
             self.new_elem_pos[i] = self.initial_pos[i];
             self.processed_pos[i] = self.initial_pos[i];
         }
+
+        // Reset all nodes values
+        self.array_nodes.iter_mut().for_each(|leaf| *leaf = <T::Data as Field>::zero());
+
+        // Reset finalized value
         self.finalized = false;
 
         self
