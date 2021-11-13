@@ -54,6 +54,13 @@ pub trait FieldGadget<F: Field, ConstraintF: Field>:
         _: CS,
         _: &Self,
     ) -> Result<Self, SynthesisError>;
+    
+    fn conditionally_add<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        _: CS,
+        _: &Boolean,
+        _: &Self,
+    ) -> Result<Self, SynthesisError>;
 
     fn add_in_place<CS: ConstraintSystem<ConstraintF>>(
         &mut self,

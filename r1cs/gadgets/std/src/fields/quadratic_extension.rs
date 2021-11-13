@@ -174,6 +174,22 @@ impl<P: QuadExtParametersGadget<ConstraintF>, ConstraintF: PrimeField + SquareRo
     }
 
     #[inline]
+    fn conditionally_add<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        bit: &Boolean,
+        other: &Self,
+    ) -> Result<Self, SynthesisError> {
+        let c0 = self
+            .c0
+            .conditionally_add(cs.ns(|| "c0"), bit, &other.c0)?;
+        let c1 = self
+            .c1
+            .conditionally_add(cs.ns(|| "c1"), bit, &other.c1)?;
+        Ok(Self::new(c0, c1))
+    }
+
+    #[inline]
     fn double<CS: ConstraintSystem<ConstraintF>>(&self, cs: CS) -> Result<Self, SynthesisError> {
         let mut result = self.clone();
         result.double_in_place(cs)?;

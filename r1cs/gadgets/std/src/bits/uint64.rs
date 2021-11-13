@@ -277,6 +277,25 @@ impl UInt64 {
             value: modular_value,
         })
     }
+
+    pub fn conditionally_add<ConstraintF, CS>(
+        mut cs: CS,
+        bit: &Boolean,
+        first: Self,
+        second: Self
+    ) -> Result<Self, SynthesisError> 
+    where
+        ConstraintF: PrimeField,
+        CS: ConstraintSystem<ConstraintF>,
+    {
+        let added_values_g = UInt64::addmany(cs.ns(|| "added values"),&[first.clone(),second])?;
+        Self::conditionally_select(
+            cs.ns(|| "select added_values or original value"),
+            bit,
+            &added_values_g,
+            &first
+        )
+    }
 }
 
 impl<ConstraintF: Field> ToBytesGadget<ConstraintF> for UInt64 {

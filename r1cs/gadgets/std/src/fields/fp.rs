@@ -179,6 +179,21 @@ impl<F: PrimeField> FieldGadget<F, F> for FpGadget<F> {
         })
     }
 
+    fn conditionally_add<CS: ConstraintSystem<F>>(
+        &self,
+        mut cs: CS,
+        bit: &Boolean,
+        other: &Self
+    ) -> Result<Self, SynthesisError> {
+        let added_values_g = self.add(cs.ns(|| "added values"),&other)?;
+        Self::conditionally_select(
+            cs.ns(|| "select added_values or original value"),
+            bit,
+            &added_values_g,
+            &self
+        )
+    }
+
     fn double<CS: ConstraintSystem<F>>(&self, _cs: CS) -> Result<Self, SynthesisError> {
         let value = self.value.map(|val| val.double());
         let mut variable = self.variable.clone();
