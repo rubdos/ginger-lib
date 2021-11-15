@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 pub struct LazyBigMerkleTree<T: BatchFieldBasedMerkleTreeParameters> {
     // the height of this tree
     pub(crate) height: usize,
-    // number of leaves = T::ARITY^height
+    // number of leaves
     pub(crate) width: usize,
     // stores the non-empty nodes of the tree
     pub(crate) nodes: HashMap<Coord, T::Data>,
@@ -36,7 +36,8 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
         // is reasonable and simplify the design.
         assert_eq!(rate, T::MERKLE_ARITY);
 
-        let width = T::MERKLE_ARITY.pow(height as u32);
+        // If height is 0 it must not be possible to add any leaf, so we'll set width to 0. 
+        let width = if height != 0 { T::MERKLE_ARITY.pow(height as u32) } else { 0 };
 
         Self {
             height,
@@ -96,7 +97,11 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
             
             // Check that the index of the leaf is less than the width of the Merkle tree
             if idx >= self.width {
-                return Err(MerkleTreeError::IncorrectLeafIndex(idx, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
+                if self.height == 0 {
+                    return Err(MerkleTreeError::MaximumLeavesReached(0))?
+                } else {
+                    return Err(MerkleTreeError::IncorrectLeafIndex(idx, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
+                }
             }
 
             // Forbid attempt to remove a non-existing leaf
@@ -378,7 +383,7 @@ mod test {
     /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
     /// of all leaves additions and all leaves removals. If 'adjacent_leaves' is enabled, the batches will be
     /// made up of leaves with subsequent indices
-    fn merkle_tree_root_batch_all_additions_removals_test<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
+    fn test_batch_all_additions_removals_test<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
         height: usize,
         rng: &mut R,
         adjacent_leaves: bool,
@@ -446,7 +451,7 @@ mod test {
 
     /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
     /// of leaves additions and removals, in mixed order.
-    fn merkle_tree_root_batch_mixed_additions_removals_test<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
+    fn test_batch_mixed_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
         height: usize,
         rng: &mut R,
     ) 
@@ -490,9 +495,8 @@ mod test {
         assert_eq!(smt.nodes.len(), num_leaves);
     }
 
-    fn test_error_cases<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
+    fn test_error_cases<T: BatchFieldBasedMerkleTreeParameters>(
         height: usize,
-        rng: &mut R,
     ) {
         // Initialize tree
         let mut smt = LazyBigMerkleTree::<T>::new(height);
@@ -517,7 +521,7 @@ mod test {
         assert_eq!(smt.nodes.len(), height + 1);
 
         // Replace previously added leaf with a new value and check correct replacement
-        dummy_leaf.hash = Some(T::Data::rand(rng));
+        dummy_leaf.hash = Some(T::Data::from(2u8));
         let new_smt_root = smt.process_leaves(&[dummy_leaf]).unwrap();
         assert_ne!(new_smt_root, smt_root);
         assert_eq!(new_smt_root, compute_append_only_tree_root(&smt));
@@ -592,6 +596,59 @@ mod test {
         }
     }
 
+    fn test_edge_cases<T: BatchFieldBasedMerkleTreeParameters>() {
+        let dummy_leaf = OperationLeaf::new(0, ActionLeaf::Insert, Some(T::Data::one()));
+
+        // HEIGHT > 1
+        {
+            // Generate empty tree and get the root
+            let mut smt = LazyBigMerkleTree::<T>::new(TEST_HEIGHT_1);
+            let root = smt.get_root();
+            assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT_1]);
+
+            // Generate tree with only 1 leaf and attempt to get the root
+            assert!(smt.process_leaves(&[dummy_leaf]).is_ok());
+            let new_root = smt.get_root();
+            assert_ne!(new_root, root);
+            assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT_1]);
+        }
+
+        // HEIGHT == 1
+        {
+            // Generate empty tree and get the root
+            let mut smt = LazyBigMerkleTree::<T>::new(1);
+            let mut root = smt.get_root();
+            assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[1]);
+
+            // Generate tree with only 1 leaf and attempt to get the root
+            assert!(smt.process_leaves(&[dummy_leaf]).is_ok());
+            let new_root = smt.get_root();
+            assert_ne!(new_root, root);
+            assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[1]);
+            root = new_root;
+
+            // Generate tree with exactly 2 leaves and attempt to get the root.
+            // Assert error if trying to add another leaf
+            assert!(smt.process_leaves(&[OperationLeaf::new(1, ActionLeaf::Insert, Some(T::Data::one()))]).is_ok());
+            let new_root = smt.get_root();
+            assert_ne!(new_root, root);
+            assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[1]);
+
+            assert!(smt.process_leaves(&[OperationLeaf::new(2, ActionLeaf::Insert, Some(T::Data::one()))]).is_err());
+        }
+
+        // HEIGHT == 0
+        {
+            // Generate empty tree and get the root
+            let mut smt = LazyBigMerkleTree::<T>::new(0);
+            let mut root = smt.get_root();
+            assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[0]);
+
+            // Generate tree with only 1 leaf and assert error
+            assert!(smt.process_leaves(&[dummy_leaf]).unwrap_err().to_string().contains("Reached maximum number of leaves for a tree of height 0"));
+        }
+    }
+
     #[test]
     fn process_leaves_mnt4() {
         let rng = &mut thread_rng();
@@ -600,7 +657,8 @@ mod test {
             //merkle_tree_root_batch_all_additions_removals_test::<MNT4753FieldBasedMerkleTreeParams, _>(TEST_HEIGHT_1, rng, true);
             //merkle_tree_root_batch_mixed_additions_removals_test::<MNT4753FieldBasedMerkleTreeParams, _>(TEST_HEIGHT_1, rng);
         }
-        test_error_cases::<MNT4753FieldBasedMerkleTreeParams, _>(TEST_HEIGHT_1, rng);
+        test_error_cases::<MNT4753FieldBasedMerkleTreeParams>(TEST_HEIGHT_1);
+        test_edge_cases::<MNT4753FieldBasedMerkleTreeParams>();
         
         /*let mut leaves_to_process: Vec<OperationLeaf<MNT4753Fr>> = Vec::new();
 
