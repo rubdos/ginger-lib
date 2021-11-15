@@ -70,14 +70,14 @@ impl FromBytes for Coord {
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 // Action associated to the leaf
 pub struct OperationLeaf <F: Field>{
-    coord: Coord,
+    idx: usize,
     action: ActionLeaf,
     hash: Option<F>,
 }
 
 impl<F: Field> OperationLeaf<F> {
-    pub fn new(height: usize, idx: usize, action: ActionLeaf, hash: Option<F>) -> Self {
-        Self { coord: Coord { height, idx }, action, hash}
+    pub fn new(idx: usize, action: ActionLeaf, hash: Option<F>) -> Self {
+        Self { idx, action, hash }
     }
 }
 

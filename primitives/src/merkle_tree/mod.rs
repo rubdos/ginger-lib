@@ -201,7 +201,7 @@ impl<P: MerkleTreeConfig> MerkleHashTree<P> {
 
         // Check that the given index corresponds to the correct leaf.
         if leaf_hash != self.tree[tree_index] {
-            Err(MerkleTreeError::IncorrectLeafIndex(tree_index))?
+            Err(MerkleTreeError::IncorrectLeafIndex(tree_index, "Leaf and index mismatch".to_string()))?
         }
 
         // Iterate from the leaf up to the root, storing all intermediate hash values.
@@ -236,7 +236,7 @@ impl<P: MerkleTreeConfig> MerkleHashTree<P> {
 #[derive(Debug)]
 pub enum MerkleTreeError {
     MaximumLeavesReached(usize),
-    IncorrectLeafIndex(usize),
+    IncorrectLeafIndex(usize, String),
     IncorrectPathLength(usize, usize),
 }
 
@@ -244,8 +244,8 @@ impl std::fmt::Display for MerkleTreeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             MerkleTreeError::MaximumLeavesReached(height) => format!("Reached maximum number of leaves for a tree of height {}", height),
-            MerkleTreeError::IncorrectLeafIndex(index) => {
-                format!("incorrect leaf index: {}", index)
+            MerkleTreeError::IncorrectLeafIndex(index, message) => {
+                format!("incorrect leaf index: {} - {}", index, message)
             },
             MerkleTreeError::IncorrectPathLength(actual_len, expected_len) => {
                 format!("Incorrect path length. Expected {}, found {}", expected_len, actual_len)

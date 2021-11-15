@@ -132,7 +132,7 @@ impl<P: FieldBasedMerkleTreeParameters> NaiveMerkleTree<P> {
 
         // Check that the given index corresponds to the correct leaf.
         if *leaf != self.tree[tree_index] {
-            Err(MerkleTreeError::IncorrectLeafIndex(tree_index))?
+            Err(MerkleTreeError::IncorrectLeafIndex(tree_index, "Leaf and index mismatch".to_string()))?
         }
 
         // Iterate from the leaf up to the root, storing all intermediate hash values.
