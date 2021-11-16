@@ -42,7 +42,6 @@ llvm_asm = ["algebra/llvm_asm"]
 
 commitment = ["digest", "blake2"]
 merkle_tree = ["algebra/derive"]
-smt = ["merkle_tree"]
 prf = ["digest", "blake2"]
 signature = ["digest", "blake2", "algebra/derive"]
 vrf = ["algebra/derive"]
