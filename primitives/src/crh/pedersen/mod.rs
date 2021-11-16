@@ -1,4 +1,4 @@
-use crate::{Error, bytes_to_bits};
+use crate::{bytes_to_bits, CryptoError, Error};
 use rand::Rng;
 use rayon::prelude::*;
 use std::{
@@ -8,8 +8,7 @@ use std::{
 
 use crate::crh::FixedLengthCRH;
 use algebra::{groups::Group, Field, ToConstraintField};
-use serde::{Serialize, Deserialize};
-
+use serde::{Deserialize, Serialize};
 
 pub trait PedersenWindow: Clone {
     const WINDOW_SIZE: usize;
@@ -23,7 +22,7 @@ pub struct PedersenParameters<G: Group> {
 }
 
 pub struct PedersenCRH<G: Group, W: PedersenWindow> {
-    group:  PhantomData<G>,
+    group: PhantomData<G>,
     window: PhantomData<W>,
 }
 
@@ -68,12 +67,15 @@ impl<G: Group, W: PedersenWindow> FixedLengthCRH for PedersenCRH<G, W> {
         let eval_time = start_timer!(|| "PedersenCRH::Eval");
 
         if (input.len() * 8) > W::WINDOW_SIZE * W::NUM_WINDOWS {
-            panic!(
-                "incorrect input length {:?} for window params {:?}x{:?}",
-                input.len(),
-                W::WINDOW_SIZE,
-                W::NUM_WINDOWS
-            );
+            return Err(Box::new(CryptoError::Other(
+                format!(
+                    "incorrect input length {:?} for window params {:?}x{:?}",
+                    input.len(),
+                    W::WINDOW_SIZE,
+                    W::NUM_WINDOWS
+                )
+                .to_owned(),
+            )));
         }
 
         let mut padded_input = Vec::with_capacity(input.len());
@@ -88,15 +90,18 @@ impl<G: Group, W: PedersenWindow> FixedLengthCRH for PedersenCRH<G, W> {
             input = padded_input.as_slice();
         }
 
-        assert_eq!(
-            parameters.generators.len(),
-            W::NUM_WINDOWS,
-            "Incorrect pp of size {:?}x{:?} for window params {:?}x{:?}",
-            parameters.generators[0].len(),
-            parameters.generators.len(),
-            W::WINDOW_SIZE,
-            W::NUM_WINDOWS
-        );
+        if parameters.generators.len() != W::NUM_WINDOWS {
+            Err(Box::new(CryptoError::Other(
+                format!(
+                    "Incorrect pp of size {:?}x{:?} for window params {:?}x{:?}",
+                    parameters.generators[0].len(),
+                    parameters.generators.len(),
+                    W::WINDOW_SIZE,
+                    W::NUM_WINDOWS
+                )
+                .to_owned(),
+            )))?
+        }
 
         // Compute sum of h_i^{m_i} for all i.
         let result = bytes_to_bits(input)
@@ -128,7 +133,7 @@ impl<G: Group> Debug for PedersenParameters<G> {
     }
 }
 
-impl<G: Group> PedersenParameters<G>{
+impl<G: Group> PedersenParameters<G> {
     pub fn check_consistency(&self) -> bool {
         for (i, p1) in self.generators.iter().enumerate() {
             if p1[0] == G::zero() {

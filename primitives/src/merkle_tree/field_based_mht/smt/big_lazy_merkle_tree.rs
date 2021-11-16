@@ -109,7 +109,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
             // Check that the index of the leaf is less than the width of the Merkle tree
             if idx >= self.width {
                 if self.height == 0 {
-                    return Err(MerkleTreeError::MaximumLeavesReached(0))?
+                    return Err(MerkleTreeError::TooManyLeaves(0))?
                 } else {
                     return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
                 }
@@ -324,7 +324,7 @@ mod test {
         smt: &LazyBigMerkleTree<T>,
     ) -> T::Data
     {
-        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize);
+        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize).unwrap();
         let mut last_idx = 0;
         smt.get_non_empty_leaves().iter().for_each(|(&idx, leaf)| {
             for _ in last_idx..idx {
@@ -333,7 +333,7 @@ mod test {
             optimized.append(*leaf).unwrap();
             last_idx = idx + 1;
         });
-        optimized.finalize().root().unwrap()
+        optimized.finalize().unwrap().root().unwrap()
     }
 
     /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
@@ -359,7 +359,7 @@ mod test {
         }
 
         // Test insertions
-        let chunk_size = rng.gen_range(1, num_leaves + 1) as usize;
+        let chunk_size = rng.gen_range(1..num_leaves + 1) as usize;
         leaves
             .chunks(chunk_size)
             .for_each(|leaves| {
@@ -435,7 +435,7 @@ mod test {
         leaves.shuffle(rng);
 
         // Test
-        let chunk_size = rng.gen_range(1, num_leaves + 1) as usize;
+        let chunk_size = rng.gen_range(1..num_leaves + 1) as usize;
         leaves
             .chunks(chunk_size)
             .for_each(|leaves| {
@@ -503,9 +503,11 @@ mod test {
             assert_eq!(smt.nodes.len() as u8, height + 1);
 
             let optimized_root = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize)
+                .unwrap()
                 .append(T::Data::from(NUM_SAMPLES as u8))
                 .unwrap()
                 .finalize()
+                .unwrap()
                 .root()
                 .unwrap();
 
@@ -606,9 +608,11 @@ mod test {
         height: u8,
         rng: &mut R,
     ) {
+        use std::convert::TryInto;
+
         let mut smt = LazyBigMerkleTree::<T>::new(height);
         let num_leaves = smt.width;
-        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, num_leaves as usize);
+        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, num_leaves as usize).unwrap();
         let mut leaves_for_lazy_smt = Vec::with_capacity(num_leaves as usize);
 
         // Generate random leaves, half of which empty
@@ -617,7 +621,7 @@ mod test {
             optimized.append(leaf).unwrap();
             leaves_for_lazy_smt.push(OperationLeaf { idx: i, action: ActionLeaf::Insert, hash: Some(leaf)});
         }
-        optimized.finalize_in_place();
+        optimized.finalize_in_place().unwrap();
 
         // Compute the root of the tree, and do the same for a FieldBasedOptimizedMHT, used here as reference
         let root = smt.process_leaves(leaves_for_lazy_smt.as_slice()).unwrap();
@@ -635,7 +639,7 @@ mod test {
             assert!(optimized_path.verify(optimized.height(), leaf, &optimized_root).unwrap());
 
             // Assert the two paths are equal
-            let optimized_path: FieldBasedBinaryMHTPath<T> = optimized_path.into();
+            let optimized_path: FieldBasedBinaryMHTPath<T> = optimized_path.try_into().unwrap();
             assert_eq!(optimized_path, path);
 
             // Check leaf index is the correct one

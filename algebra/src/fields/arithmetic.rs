@@ -1,3 +1,25 @@
+macro_rules! impl_montgomery_reduction {
+    ($limbs:expr) => {
+        #[inline]
+        #[unroll_for_loops]
+        fn montgomery_reduction(&mut self, r: &mut [u64; $limbs * 2]) {
+            let mut _carry2 = 0;
+            for i in 0..$limbs {
+                let k = r[i].wrapping_mul(P::INV);
+                let mut carry = 0;
+                fa::mac_with_carry(r[i], k, P::MODULUS.0[0], &mut carry);
+                for j in 1..$limbs {
+                    r[j + i] = fa::mac_with_carry(r[j + i], k, P::MODULUS.0[j], &mut carry);
+                }
+                r[$limbs + i] = fa::adc(r[$limbs + i], _carry2, &mut carry);
+                _carry2 = carry;
+            }
+            (self.0).0.copy_from_slice(&r[$limbs..]);
+            self.reduce();
+        }
+    };
+}
+
 /// This modular multiplication algorithm uses Montgomery
 /// reduction for efficient implementation. It also additionally
 /// uses the "no-carry optimization" outlined
@@ -57,20 +79,7 @@ macro_rules! impl_field_mul_assign {
                     }
                     r[$limbs + i] = carry;
                 }
-                // Montgomery reduction
-                let mut _carry2 = 0;
-                for i in 0..$limbs {
-                    let k = r[i].wrapping_mul(P::INV);
-                    let mut carry = 0;
-                    fa::mac_with_carry(r[i], k, P::MODULUS.0[0], &mut carry);
-                    for j in 1..$limbs {
-                        r[j + i] = fa::mac_with_carry(r[j + i], k, P::MODULUS.0[j], &mut carry);
-                    }
-                    r[$limbs + i] = fa::adc(r[$limbs + i], _carry2, &mut carry);
-                    _carry2 = carry;
-                }
-                (self.0).0.copy_from_slice(&r[$limbs..]);
-                self.reduce();
+                self.montgomery_reduction(&mut r)
             }
         }
     };
@@ -80,6 +89,10 @@ macro_rules! impl_field_mul_short_assign {
     ($limbs: expr) => {
         #[inline]
         #[unroll_for_loops]
+        // Partial, or short, Montgomery multiplication. Computes the product
+        //      R*xy mod p = (R*x mod p)*(R_s * y mod p)
+        // for y having a 1-limb sized representation (R_s*y mod p) w.r.t. the
+        // "short" Montgomery constant R_s = 2^64.
         //TODO: Can we write the assembly equivalent of this ? Is it worth ?
         //TODO: Probably there's a more compact way to write this
         fn mul_short_assign(&mut self, other: &Self) {
@@ -104,7 +117,7 @@ macro_rules! impl_field_mul_short_assign {
             }
             self.reduce();
         }
-    }
+    };
 }
 
 macro_rules! impl_field_into_repr {
@@ -189,20 +202,7 @@ macro_rules! impl_field_square_in_place {
                 r[2 * i] = fa::mac_with_carry(r[2 * i], (self.0).0[i], (self.0).0[i], &mut carry);
                 r[2 * i + 1] = fa::adc(r[2 * i + 1], 0, &mut carry);
             }
-            // Montgomery reduction
-            let mut _carry2 = 0;
-            for i in 0..$limbs {
-                let k = r[i].wrapping_mul(P::INV);
-                let mut carry = 0;
-                fa::mac_with_carry(r[i], k, P::MODULUS.0[0], &mut carry);
-                for j in 1..$limbs {
-                    r[j + i] = fa::mac_with_carry(r[j + i], k, P::MODULUS.0[j], &mut carry);
-                }
-                r[$limbs + i] = fa::adc(r[$limbs + i], _carry2, &mut carry);
-                _carry2 = carry;
-            }
-            (self.0).0.copy_from_slice(&r[$limbs..]);
-            self.reduce();
+            self.montgomery_reduction(&mut r);
             self
         }
     };
@@ -233,11 +233,14 @@ macro_rules! impl_prime_field_standard_sample {
             fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> $field<P> {
                 loop {
                     let mut tmp = $field(rng.sample(rand::distributions::Standard), PhantomData);
-                    // Mask away the unused bits at the beginning.
-                    tmp.0
-                        .as_mut()
-                        .last_mut()
-                        .map(|val| *val &= std::u64::MAX >> P::REPR_SHAVE_BITS);
+
+                    assert!(P::REPR_SHAVE_BITS <= 64);
+                    let mask = if P::REPR_SHAVE_BITS == 64 {
+                        0
+                    } else {
+                        std::u64::MAX >> P::REPR_SHAVE_BITS
+                    };
+                    tmp.0.as_mut().last_mut().map(|val| *val &= mask);
 
                     if tmp.is_valid() {
                         return tmp;
@@ -295,7 +298,8 @@ macro_rules! sqrt_impl {
                         check.square_in_place();
                     }
                     if !check.is_one() {
-                        panic!("Input is not a square root, but it passed the QR test")
+                        eprintln!("Input is not a square root, but it passed the QR test");
+                        return None;
                     }
                 }
 
@@ -546,7 +550,6 @@ macro_rules! impl_mul_short {
 
         #[allow(unused_qualifications)]
         impl<P: $params> MulShortAssign<Self> for $type<P> {
-
             #[inline]
             fn mul_short_assign(&mut self, other: Self) {
                 self.mul_short_assign(&other)
@@ -555,7 +558,6 @@ macro_rules! impl_mul_short {
 
         #[allow(unused_qualifications)]
         impl<'a, P: $params> MulShortAssign<&'a mut Self> for $type<P> {
-
             #[inline]
             fn mul_short_assign(&mut self, other: &'a mut Self) {
                 self.mul_short_assign(&*other)

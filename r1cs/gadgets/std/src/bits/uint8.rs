@@ -10,7 +10,7 @@ use std::borrow::Borrow;
 #[derive(Clone, Debug)]
 pub struct UInt8 {
     // Least significant bit_gadget first
-    pub(crate) bits:  Vec<Boolean>,
+    pub(crate) bits: Vec<Boolean>,
     pub(crate) value: Option<u8>,
 }
 
@@ -60,7 +60,7 @@ impl UInt8 {
         T: Into<Option<u8>> + Copy,
     {
         let mut output_vec = Vec::with_capacity(values.len());
-        for (i, value) in values.into_iter().enumerate() {
+        for (i, value) in values.iter().enumerate() {
             let byte: Option<u8> = Into::into(*value);
             let alloc_byte = Self::alloc(&mut cs.ns(|| format!("byte_{}", i)), || byte.get())?;
             output_vec.push(alloc_byte);
@@ -92,10 +92,9 @@ impl UInt8 {
             .zip(values.chunks(max_size))
             .enumerate()
         {
-            let fe = FpGadget::alloc_input(
-                &mut cs.ns(|| format!("Field element {}", i)),
-                || { Ok(field_element) }
-            )?;
+            let fe = FpGadget::alloc_input(&mut cs.ns(|| format!("Field element {}", i)), || {
+                Ok(field_element)
+            })?;
 
             // Let's use the length-restricted variant of the ToBitsGadget to remove the
             // padding: the padding bits are not constrained to be zero, so any field element
@@ -103,10 +102,11 @@ impl UInt8 {
             // satisfy the constraints. This kind of freedom might not be desiderable in
             // recursive SNARK circuits, where the public inputs of the inner circuit are
             // usually involved in other kind of constraints inside the wrap circuit.
-            let to_skip: usize = <ConstraintF as PrimeField>::Params::MODULUS_BITS as usize - (byte_chunk.len() * 8);
+            let to_skip: usize =
+                <ConstraintF as PrimeField>::Params::MODULUS_BITS as usize - (byte_chunk.len() * 8);
             let mut fe_bits = fe.to_bits_with_length_restriction(
                 cs.ns(|| format!("Convert fe to bits {}", i)),
-                to_skip
+                to_skip,
             )?;
 
             // FpGadget::to_bits outputs a big-endian binary representation of
@@ -124,11 +124,16 @@ impl UInt8 {
             .collect())
     }
 
+    /// Turns this `UInt8` into its big-endian byte order representation.
+    pub fn into_bits_be(&self) -> Vec<Boolean> {
+        self.bits.iter().rev().cloned().collect()
+    }
+
     /// Turns this `UInt8` into its little-endian byte order representation.
     /// LSB-first means that we can easily get the corresponding field element
     /// via double and add.
     pub fn into_bits_le(&self) -> Vec<Boolean> {
-        self.bits.iter().cloned().collect()
+        self.bits.to_vec()
     }
 
     /// Converts a little-endian byte order representation of bits into a
@@ -147,25 +152,25 @@ impl UInt8 {
                     if b {
                         value.as_mut().map(|v| *v |= 1);
                     }
-                },
+                }
                 Boolean::Is(ref b) => match b.get_value() {
                     Some(true) => {
                         value.as_mut().map(|v| *v |= 1);
-                    },
-                    Some(false) => {},
+                    }
+                    Some(false) => {}
                     None => value = None,
                 },
                 Boolean::Not(ref b) => match b.get_value() {
                     Some(false) => {
                         value.as_mut().map(|v| *v |= 1);
-                    },
-                    Some(true) => {},
+                    }
+                    Some(true) => {}
                     None => value = None,
                 },
             }
         }
 
-        Self { value, bits }
+        Self { bits, value }
     }
 
     /// XOR this `UInt8` with another `UInt8`
@@ -195,9 +200,9 @@ impl UInt8 {
 
     /// OR this `UInt8` with another `UInt8`
     pub fn or<ConstraintF, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
-        where
-            ConstraintF: Field,
-            CS: ConstraintSystem<ConstraintF>,
+    where
+        ConstraintF: Field,
+        CS: ConstraintSystem<ConstraintF>,
     {
         let new_value = match (self.value, other.value) {
             (Some(a), Some(b)) => Some(a | b),
@@ -221,14 +226,18 @@ impl UInt8 {
 
 impl PartialEq for UInt8 {
     fn eq(&self, other: &Self) -> bool {
-        !self.value.is_none() && !other.value.is_none() && self.value == other.value
+        self.value.is_some() && other.value.is_some() && self.value == other.value
     }
 }
 
 impl Eq for UInt8 {}
 
 impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt8 {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(&self, cs: CS, other: &Self) -> Result<Boolean, SynthesisError> {
+    fn is_eq<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        cs: CS,
+        other: &Self,
+    ) -> Result<Boolean, SynthesisError> {
         self.bits.as_slice().is_eq(cs, &other.bits)
     }
 
@@ -238,7 +247,8 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt8 {
         other: &Self,
         condition: &Boolean,
     ) -> Result<(), SynthesisError> {
-        self.bits.conditional_enforce_equal(cs, &other.bits, condition)
+        self.bits
+            .conditional_enforce_equal(cs, &other.bits, condition)
     }
 
     fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
@@ -272,7 +282,7 @@ impl<ConstraintF: Field> AllocGadget<u8, ConstraintF> for UInt8 {
                 }
 
                 v
-            },
+            }
             _ => vec![None; 8],
         };
 
@@ -311,7 +321,7 @@ impl<ConstraintF: Field> AllocGadget<u8, ConstraintF> for UInt8 {
                 }
 
                 v
-            },
+            }
             _ => vec![None; 8],
         };
 
@@ -333,13 +343,51 @@ impl<ConstraintF: Field> AllocGadget<u8, ConstraintF> for UInt8 {
     }
 }
 
+impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for UInt8 {
+    fn conditionally_select<CS: ConstraintSystem<ConstraintF>>(
+        mut cs: CS,
+        cond: &Boolean,
+        true_value: &Self,
+        false_value: &Self,
+    ) -> Result<Self, SynthesisError> {
+        let selected_bits = true_value
+            .bits
+            .iter()
+            .zip(&false_value.bits)
+            .enumerate()
+            .map(|(i, (t, f))| {
+                Boolean::conditionally_select(&mut cs.ns(|| format!("bit {}", i)), cond, t, f)
+            });
+        let mut bits = [Boolean::Constant(false); 8];
+        for (result, new) in bits.iter_mut().zip(selected_bits) {
+            *result = new?;
+        }
+
+        let value = cond.get_value().and_then(|cond| {
+            if cond {
+                true_value.get_value()
+            } else {
+                false_value.get_value()
+            }
+        });
+        Ok(Self {
+            bits: bits.to_vec(),
+            value,
+        })
+    }
+
+    fn cost() -> usize {
+        8 * <Boolean as CondSelectGadget<ConstraintF>>::cost()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::UInt8;
-    use crate::{prelude::*, test_constraint_system::TestConstraintSystem};
+    use crate::{boolean::AllocatedBit, prelude::*, test_constraint_system::TestConstraintSystem};
     use algebra::fields::bls12_381::Fr;
     use r1cs_core::ConstraintSystem;
-    use rand::{Rng, SeedableRng, RngCore};
+    use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     #[test]
@@ -355,7 +403,7 @@ mod test {
 
     #[test]
     fn test_uint8_alloc_input_vec() {
-        use algebra::{to_bytes, ToBytes, Field, PrimeField, FpParameters, UniformRand};
+        use algebra::{to_bytes, Field, FpParameters, PrimeField, ToBytes, UniformRand};
         use rand::thread_rng;
 
         let mut cs = TestConstraintSystem::<Fr>::new();
@@ -364,19 +412,20 @@ mod test {
         //Random test
         let samples = 100;
         for i in 0..samples {
-
             // Test with random field
             let byte_vals = to_bytes!(Fr::rand(rng)).unwrap();
-            let bytes = UInt8::alloc_input_vec(cs.ns(|| format!("alloc value {}", i)), &byte_vals).unwrap();
+            let bytes =
+                UInt8::alloc_input_vec(cs.ns(|| format!("alloc value {}", i)), &byte_vals).unwrap();
             assert_eq!(byte_vals.len(), bytes.len());
             for (native_byte, gadget_byte) in byte_vals.into_iter().zip(bytes) {
                 assert_eq!(gadget_byte.get_value().unwrap(), native_byte);
             }
 
             // Test with random bytes
-            let mut byte_vals = vec![0u8; rng.gen_range(1, 200)];
+            let mut byte_vals = vec![0u8; rng.gen_range(1..200)];
             rng.fill_bytes(byte_vals.as_mut_slice());
-            let bytes = UInt8::alloc_input_vec(cs.ns(|| format!("alloc random {}", i)), &byte_vals).unwrap();
+            let bytes = UInt8::alloc_input_vec(cs.ns(|| format!("alloc random {}", i)), &byte_vals)
+                .unwrap();
             assert_eq!(byte_vals.len(), bytes.len());
             for (native_byte, gadget_byte) in byte_vals.into_iter().zip(bytes) {
                 assert_eq!(gadget_byte.get_value().unwrap(), native_byte);
@@ -400,7 +449,12 @@ mod test {
         }
 
         //Test over the modulus byte vec
-        let byte_vals = vec![std::u8::MAX; ((<Fr as PrimeField>::Params::MODULUS_BITS + <Fr as PrimeField>::Params::REPR_SHAVE_BITS)/8) as usize];
+        let byte_vals = vec![
+            std::u8::MAX;
+            ((<Fr as PrimeField>::Params::MODULUS_BITS
+                + <Fr as PrimeField>::Params::REPR_SHAVE_BITS)
+                / 8) as usize
+        ];
         let bytes = UInt8::alloc_input_vec(cs.ns(|| "alloc all 1s byte vec"), &byte_vals).unwrap();
         assert_eq!(byte_vals.len(), bytes.len());
         for (native_byte, gadget_byte) in byte_vals.into_iter().zip(bytes) {
@@ -423,7 +477,7 @@ mod test {
                 match bit_gadget {
                     &Boolean::Constant(bit_gadget) => {
                         assert!(bit_gadget == ((b.value.unwrap() >> i) & 1 == 1));
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -432,8 +486,8 @@ mod test {
 
             for x in v.iter().zip(expected_to_be_same.iter()) {
                 match x {
-                    (&Boolean::Constant(true), &Boolean::Constant(true)) => {},
-                    (&Boolean::Constant(false), &Boolean::Constant(false)) => {},
+                    (&Boolean::Constant(true), &Boolean::Constant(true)) => {}
+                    (&Boolean::Constant(false), &Boolean::Constant(false)) => {}
                     _ => unreachable!(),
                 }
             }
@@ -468,16 +522,99 @@ mod test {
                 match b {
                     &Boolean::Is(ref b) => {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
-                    },
+                    }
                     &Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
-                    },
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
+                    }
                     &Boolean::Constant(b) => {
                         assert!(b == (expected & 1 == 1));
-                    },
+                    }
                 }
 
                 expected >>= 1;
+            }
+        }
+    }
+
+    #[derive(Copy, Clone, Debug)]
+    enum OperandType {
+        True,
+        False,
+        AllocatedTrue,
+        AllocatedFalse,
+        NegatedAllocatedTrue,
+        NegatedAllocatedFalse,
+    }
+
+    #[test]
+    fn test_uint8_cond_select() {
+        let variants = [
+            OperandType::True,
+            OperandType::False,
+            OperandType::AllocatedTrue,
+            OperandType::AllocatedFalse,
+            OperandType::NegatedAllocatedTrue,
+            OperandType::NegatedAllocatedFalse,
+        ];
+
+        use rand::thread_rng;
+        let rng = &mut thread_rng();
+
+        //random generates a and b numbers and check all the conditions for each couple
+        for _ in 0..1000 {
+            for condition in variants.iter().cloned() {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let cond;
+                let a;
+                let b;
+
+                {
+                    let mut dyn_construct = |operand, name| {
+                        let cs = cs.ns(|| name);
+
+                        match operand {
+                            OperandType::True => Boolean::constant(true),
+                            OperandType::False => Boolean::constant(false),
+                            OperandType::AllocatedTrue => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap())
+                            }
+                            OperandType::AllocatedFalse => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap())
+                            }
+                            OperandType::NegatedAllocatedTrue => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap()).not()
+                            }
+                            OperandType::NegatedAllocatedFalse => {
+                                Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap()).not()
+                            }
+                        }
+                    };
+
+                    cond = dyn_construct(condition, "cond");
+                    a = UInt8::constant(rng.gen());
+                    b = UInt8::constant(rng.gen());
+                }
+
+                let before = cs.num_constraints();
+                let c = UInt8::conditionally_select(&mut cs, &cond, &a, &b).unwrap();
+                let after = cs.num_constraints();
+
+                assert!(
+                    cs.is_satisfied(),
+                    "failed with operands: cond: {:?}, a: {:?}, b: {:?}",
+                    condition,
+                    a,
+                    b,
+                );
+                assert_eq!(
+                    c.get_value(),
+                    if cond.get_value().unwrap() {
+                        a.get_value()
+                    } else {
+                        b.get_value()
+                    }
+                );
+                assert!(<UInt8 as CondSelectGadget<Fr>>::cost() >= after - before);
             }
         }
     }

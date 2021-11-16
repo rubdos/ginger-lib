@@ -12,39 +12,40 @@ macro_rules! impl_prime_field_serializer {
                     return Err(SerializationError::NotEnoughSpace);
                 }
 
-                // Calculate the number of bytes required to represent a field element
-                // serialized with `flags`. If `F::BIT_SIZE < 8`,
-                // this is at most `$byte_size + 1`
+                // Get the minimum number of bytes required to represent the field element + the flags
                 let output_byte_size = buffer_byte_size(P::MODULUS_BITS as usize + F::BIT_SIZE);
 
                 // Write out `self` to a temporary buffer.
-                // The size of the buffer is $byte_size + 1 because `F::BIT_SIZE`
-                // is at most 8 bits.
-                let mut bytes = [0u8; $byte_size + 1];
+                // The size of the buffer is computed in this way because $byte_size
+                // may actually be bigger than output_byte_size: this happens when,
+                // for some reason, the number of bytes required to represent P::MODULUS_BITS
+                // is bigger than (P::MODULUS_BITS/8) + 1
+                let buffer_size = std::cmp::max($byte_size, output_byte_size);
+                let mut bytes = vec![0u8; buffer_size];
                 self.write(&mut bytes[..$byte_size])?;
 
                 // Mask out the bits of the last byte that correspond to the flag.
                 bytes[output_byte_size - 1] |= flags.u8_bitmask();
 
-                writer.write_all(&bytes[..output_byte_size])?;
+                writer.write_all(&bytes[..])?;
                 Ok(())
             }
 
-            // Let `m = 8 * n` for some `n` be the smallest multiple of 8 greater
-            // than `P::MODULUS_BITS`.
-            // If `(m - P::MODULUS_BITS) >= F::BIT_SIZE` , then this method returns `n`;
-            // otherwise, it returns `n + 1`.
+            // The size is computed in this way because $byte_size
+            // may actually be bigger than output_byte_size: this happens when,
+            // for some reason, the number of bytes required to represent P::MODULUS_BITS
+            // is bigger than (P::MODULUS_BITS/8) + 1
             fn serialized_size_with_flags<F: Flags>(&self) -> usize {
-                buffer_byte_size(P::MODULUS_BITS as usize + F::BIT_SIZE)
+                std::cmp::max(
+                    $byte_size,
+                    buffer_byte_size(P::MODULUS_BITS as usize + F::BIT_SIZE),
+                )
             }
         }
 
         impl<P: $params> CanonicalSerialize for $field<P> {
             #[inline]
-            fn serialize<W: Write>(
-                &self,
-                writer: W,
-            ) -> Result<(), SerializationError> {
+            fn serialize<W: Write>(&self, writer: W) -> Result<(), SerializationError> {
                 self.serialize_with_flags(writer, EmptyFlags)
             }
 
@@ -63,18 +64,24 @@ macro_rules! impl_prime_field_serializer {
                 if F::BIT_SIZE > 8 {
                     return Err(SerializationError::NotEnoughSpace);
                 }
-                // Calculate the number of bytes required to represent a field element
-                // serialized with `flags`. If `F::BIT_SIZE < 8`,
-                // this is at most `$byte_size + 1`
+
+                // Get the minimum number of bytes required to represent the field element + the flags
                 let output_byte_size = buffer_byte_size(P::MODULUS_BITS as usize + F::BIT_SIZE);
 
-                let mut masked_bytes = [0; $byte_size + 1];
-                reader.read_exact(&mut masked_bytes[..output_byte_size])?;
+                // The size of the buffer is computed in this way because $byte_size
+                // may actually be bigger than output_byte_size: this happens when,
+                // for some reason, the number of bytes required to represent P::MODULUS_BITS
+                // is bigger than (P::MODULUS_BITS/8) + 1
+                let buffer_size = std::cmp::max($byte_size, output_byte_size);
+                let mut bytes = vec![0; buffer_size];
+                reader.read_exact(&mut bytes[..])?;
 
-                let flags = F::from_u8_remove_flags(&mut masked_bytes[output_byte_size - 1])
+                // Remove the flags in the expected position
+                let flags = F::from_u8_remove_flags(&mut bytes[output_byte_size - 1])
                     .ok_or(SerializationError::UnexpectedFlags)?;
 
-                Ok((Self::read(&masked_bytes[..])?, flags))
+                // Read the field element and return it along with the flags
+                Ok((Self::read(&bytes[..$byte_size])?, flags))
             }
         }
 
@@ -118,12 +125,18 @@ macro_rules! impl_Fp {
         }
 
         impl<P: $FpParameters> $Fp<P> {
+            /// Perform modular reduction on `self`.
+            /// NOTE: This function simply subtracts `P::MODULUS` from `self`,
+            /// so the modular reduction is correct if and only if `self` is
+            /// not larger than `2 * P::MODULUS`
             #[inline]
             fn reduce(&mut self) {
                 if !self.is_valid() {
                     self.0.sub_noborrow(&P::MODULUS);
                 }
             }
+
+            impl_montgomery_reduction!($limbs);
         }
 
         impl<P: $FpParameters> Field for $Fp<P> {
@@ -184,60 +197,72 @@ macro_rules! impl_Fp {
 
             impl_field_square_in_place!($limbs);
 
+            /// [Guajardo Kumar Paar Pelzl]: https://link.springer.com/article/10.1007/s10440-006-9046-1
+            /// Efficient Software-Implementation of Finite Fields with Applications to
+            /// Cryptography
+            /// Algorithm 17 (Montgomery Inversion in Fp).
             #[inline]
             fn inverse(&self) -> Option<Self> {
                 if self.is_zero() {
                     None
                 } else {
-                    // Guajardo Kumar Paar Pelzl
-                    // Efficient Software-Implementation of Finite Fields with Applications to
-                    // Cryptography
-                    // Algorithm 16 (BEA for Inversion in Fp)
+                    let zero = $BigInteger::from(0);
 
-                    let one = $BigInteger::from(1);
-
-                    let mut u = self.0;
-                    let mut v = P::MODULUS;
-                    let mut b = $Fp::<P>(P::R2, PhantomData); // Avoids unnecessary reduction step.
-                    let mut c = Self::zero();
-
-                    while u != one && v != one {
+                    let mut v = self.0;
+                    let mut u = P::MODULUS;
+                    let mut r = $BigInteger::from(0);
+                    let mut s = $BigInteger::from(1);
+                    let mut k: u16 = 0;
+                    // TODO: Make it independent from the limb size
+                    let two_n : u16 = 2 * 64 * $limbs; // R2 = 2^two_n mod MODULUS
+                    // At each step we want to have the following equalities:
+                    // something * p + r*A = - u,    something * p + s*A = v
+                    // The inverse at the end will be -r mod p. The sign is due to the fact
+                    // that our big integers are unsigned so we can work with positive numbers.
+                    // The arithmetic can be improved drastically since, at the beginning,
+                    // r and s are very small.
+                    while v != zero {
                         while u.is_even() {
                             u.div2();
-
-                            if b.0.is_even() {
-                                b.0.div2();
+                            if v.is_even() {
+                                v.div2();
                             } else {
-                                b.0.add_nocarry(&P::MODULUS);
-                                b.0.div2();
+                                s.mul2();
                             }
+                            k += 1;
                         }
 
                         while v.is_even() {
                             v.div2();
-
-                            if c.0.is_even() {
-                                c.0.div2();
-                            } else {
-                                c.0.add_nocarry(&P::MODULUS);
-                                c.0.div2();
-                            }
+                            r.mul2();
+                            k += 1;
                         }
 
-                        if v < u {
+                        if u > v {
                             u.sub_noborrow(&v);
-                            b.sub_assign(&c);
+                            u.div2();
+                            r.add_nocarry(&s);
+                            s.mul2();
                         } else {
                             v.sub_noborrow(&u);
-                            c.sub_assign(&b);
+                            v.div2();
+                            s.add_nocarry(&r);
+                            r.mul2();
+                        }
+                        k += 1;
+                    }
+                    // Up to now, r*A = - 2^k mod p for k in range(n,2n)
+                    k = two_n - k;
+                    if r >= P::MODULUS {
+                        r.sub_noborrow(&P::MODULUS);
+                    }
+                    for _ in 0..k {
+                        r.mul2();
+                        if r >= P::MODULUS {
+                            r.sub_noborrow(&P::MODULUS);
                         }
                     }
-
-                    if u == one {
-                        Some(b)
-                    } else {
-                        Some(c)
-                    }
+                    return Some(-Self::from_repr_raw(r));
                 }
             }
 
@@ -251,6 +276,8 @@ macro_rules! impl_Fp {
             }
 
             #[inline]
+            // TODO: Let byte_size = $limbs * 8. Generalize this function to the case in which
+            //       byte_size + 1 > output_byte_size
             fn from_random_bytes_with_flags<F: Flags>(bytes: &[u8]) -> Option<(Self, F)> {
                 if F::BIT_SIZE > 8 {
                     return None
@@ -347,8 +374,11 @@ macro_rules! impl_Fp {
             }
 
             #[inline]
-            fn full_root_of_unity() -> Self {
-                $Fp::<P>(P::FULL_ROOT_OF_UNITY.unwrap(), PhantomData)
+            fn full_root_of_unity() -> Option<Self> {
+                match P::FULL_ROOT_OF_UNITY {
+                    Some(v) => Some($Fp::<P>(v, PhantomData)),
+                    None => None
+                }
             }
         }
 
@@ -357,11 +387,13 @@ macro_rules! impl_Fp {
             fn legendre(&self) -> LegendreSymbol {
                 use crate::fields::LegendreSymbol::*;
 
+                if self.is_zero() {
+                    return Zero;
+                }
+
                 // s = self^((MODULUS - 1) // 2)
                 let s = self.pow(P::MODULUS_MINUS_ONE_DIV_TWO);
-                if s.is_zero() {
-                    Zero
-                } else if s.is_one() {
+                if s.is_one() {
                     QuadraticResidue
                 } else {
                     QuadraticNonResidue

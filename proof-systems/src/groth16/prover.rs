@@ -1,11 +1,10 @@
 use rand::Rng;
 use rayon::prelude::*;
 
-use algebra::{
-    groups::Group, AffineCurve, Field, PairingEngine, PrimeField,
-    ProjectiveCurve, UniformRand,
-};
 use algebra::msm::VariableBaseMSM;
+use algebra::{
+    groups::Group, AffineCurve, Field, PairingEngine, PrimeField, ProjectiveCurve, UniformRand,
+};
 
 use crate::groth16::{push_constraints, r1cs_to_qap::R1CStoQAP, Parameters, Proof};
 
@@ -26,7 +25,7 @@ pub struct ProvingAssignment<E: PairingEngine> {
 
     // Assignments of variables
     pub(crate) input_assignment: Vec<E::Fr>,
-    pub(crate) aux_assignment:   Vec<E::Fr>,
+    pub(crate) aux_assignment: Vec<E::Fr>,
 }
 
 impl<E: PairingEngine> ConstraintSystem<E::Fr> for ProvingAssignment<E> {
@@ -119,9 +118,9 @@ pub fn create_proof_no_zk<E, C>(
     circuit: C,
     params: &Parameters<E>,
 ) -> Result<Proof<E>, SynthesisError>
-    where
-        E: PairingEngine,
-        C: ConstraintSynthesizer<E::Fr>,
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
 {
     create_proof::<E, C>(circuit, params, E::Fr::zero(), E::Fr::zero())
 }
@@ -138,11 +137,11 @@ where
 {
     let prover_time = start_timer!(|| "Prover");
     let mut prover = ProvingAssignment {
-        at:               vec![],
-        bt:               vec![],
-        ct:               vec![],
+        at: vec![],
+        bt: vec![],
+        ct: vec![],
         input_assignment: vec![],
-        aux_assignment:   vec![],
+        aux_assignment: vec![],
     };
 
     // Allocate the "one" input variable
@@ -159,13 +158,14 @@ where
 
     let input_assignment = Arc::new(
         prover.input_assignment[1..]
-            .into_iter()
+            .iter()
             .map(|s| s.into_repr())
             .collect::<Vec<_>>(),
     );
 
     let aux_assignment = Arc::new(
-        prover.aux_assignment
+        prover
+            .aux_assignment
             .into_par_iter()
             .map(|s| s.into_repr())
             .collect::<Vec<_>>(),
@@ -180,7 +180,7 @@ where
 
     let a_query = params.get_a_query_full()?;
     let r_g1 = params.delta_g1.mul(r);
-    let g_a = calculate_coeff(r_g1, a_query, &params.alpha_g1, &assignment);
+    let g_a = calculate_coeff(r_g1, a_query, &params.alpha_g1, &assignment)?;
 
     end_timer!(a_acc_time);
 
@@ -190,7 +190,7 @@ where
 
         let s_g1 = params.delta_g1.mul(s);
         let b_query = params.get_b_g1_query_full()?;
-        let g1_b = calculate_coeff(s_g1, b_query, &params.beta_g1, &assignment);
+        let g1_b = calculate_coeff(s_g1, b_query, &params.beta_g1, &assignment)?;
 
         end_timer!(b_g1_acc_time);
         g1_b
@@ -198,13 +198,12 @@ where
         <E::G1Projective as ProjectiveCurve>::zero()
     };
 
-
     // Compute B in G2
     let b_g2_acc_time = start_timer!(|| "Compute B in G2");
 
     let b_query = params.get_b_g2_query_full()?;
     let s_g2 = params.delta_g2.mul(s);
-    let g2_b = calculate_coeff(s_g2, b_query, &params.beta_g2, &assignment);
+    let g2_b = calculate_coeff(s_g2, b_query, &params.beta_g2, &assignment)?;
 
     end_timer!(b_g2_acc_time);
 
@@ -212,10 +211,10 @@ where
     let c_acc_time = start_timer!(|| "Compute C");
 
     let h_query = params.get_h_query_full()?;
-    let h_acc = VariableBaseMSM::multi_scalar_mul(&h_query, &h_assignment);
+    let h_acc = VariableBaseMSM::multi_scalar_mul(&h_query, &h_assignment)?;
 
     let l_aux_source = params.get_l_query_full()?;
-    let l_aux_acc = VariableBaseMSM::multi_scalar_mul(l_aux_source, &aux_assignment);
+    let l_aux_acc = VariableBaseMSM::multi_scalar_mul(l_aux_source, &aux_assignment)?;
 
     let s_g_a = g_a.mul(&s);
     let r_g1_b = g1_b.mul(&r);
@@ -243,14 +242,14 @@ fn calculate_coeff<G: AffineCurve>(
     query: &[G],
     vk_param: &G,
     assignment: &[<G::ScalarField as PrimeField>::BigInt],
-) -> G::Projective {
+) -> Result<G::Projective, SynthesisError> {
     let el = query[0];
-    let acc = VariableBaseMSM::multi_scalar_mul(&query[1..], assignment);
+    let acc = VariableBaseMSM::multi_scalar_mul(&query[1..], assignment)?;
 
     let mut res = initial;
     res.add_assign_mixed(&el);
     res += &acc;
     res.add_assign_mixed(vk_param);
 
-    res
+    Ok(res)
 }

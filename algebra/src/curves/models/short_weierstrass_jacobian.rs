@@ -1,12 +1,25 @@
-use rand::{Rng, distributions::{Standard, Distribution}};
+use crate::{
+    bytes::{FromBytes, ToBytes},
+    curves::{
+        models::{EndoMulParameters as EndoParameters, SWModelParameters as Parameters},
+        AffineCurve, EndoMulCurve, ProjectiveCurve,
+    },
+    fields::{BitIterator, Field, PrimeField, SquareRootField},
+    BitSerializationError, CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
+    CanonicalSerializeWithFlags, Error, FromBytesChecked, FromCompressedBits, SWFlags,
+    SemanticallyValid, SerializationError, ToCompressedBits, UniformRand,
+};
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
+use serde::{Deserialize, Serialize};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
-    io::{Read, Result as IoResult, Write, Error as IoError, ErrorKind},
+    io::{Error as IoError, ErrorKind, Read, Result as IoResult, Write},
     marker::PhantomData,
 };
-use crate::{bytes::{FromBytes, ToBytes}, curves::{AffineCurve, ProjectiveCurve, models::SWModelParameters as Parameters}, fields::{BitIterator, Field, PrimeField, SquareRootField}, CanonicalSerialize, SerializationError, CanonicalSerializeWithFlags, CanonicalDeserialize, CanonicalDeserializeWithFlags, UniformRand, SemanticallyValid, Error, FromBytesChecked, BitSerializationError, FromCompressedBits, ToCompressedBits, SWFlags};
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use serde::{Serialize, Deserialize};
 
 #[derive(Derivative)]
 #[derivative(
@@ -64,6 +77,11 @@ impl<P: Parameters> GroupAffine<P> {
         self.mul_bits(cofactor)
     }
 
+    /// WARNING: This implementation doesn't take costant time with respect
+    /// to the exponent, and therefore is susceptible to side-channel attacks.
+    /// Be sure to use it in applications where timing (or similar) attacks
+    /// are not possible.
+    /// TODO: Add a side-channel secure variant.
     pub(crate) fn mul_bits<S: AsRef<[u64]>>(&self, bits: BitIterator<S>) -> GroupProjective<P> {
         let mut res = GroupProjective::zero();
         for i in bits {
@@ -97,7 +115,7 @@ impl<P: Parameters> GroupAffine<P> {
     ///
     /// If and only if `parity` is set will the odd y-coordinate be selected.
     #[allow(dead_code)]
-    pub(crate) fn get_point_from_x_and_parity(x: P::BaseField, parity: bool) -> Option<Self> {
+    pub fn get_point_from_x_and_parity(x: P::BaseField, parity: bool) -> Option<Self> {
         // Compute x^3 + ax + b
         let x3b = P::add_b(&((x.square() * &x) + &P::mul_by_a(&x)));
 
@@ -151,8 +169,8 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
             // point as infinity. For all other choices, get the original point.
             if x.is_zero() && flags.is_infinity() {
                 Some(Self::zero())
-            } else if let Some(y_is_positive) = flags.is_positive() {
-                Self::get_point_from_x(x, y_is_positive) // Unwrap is safe because it's not zero.
+            } else if let Some(y_is_odd) = flags.is_odd() {
+                Self::get_point_from_x_and_parity(x, y_is_odd) // Unwrap is safe because it's not zero.
             } else {
                 None
             }
@@ -166,7 +184,12 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
 
     #[inline]
     fn group_membership_test(&self) -> bool {
-        self.is_on_curve() && self.is_in_correct_subgroup_assuming_on_curve()
+        self.is_on_curve()
+            && if !self.is_zero() {
+                self.is_in_correct_subgroup_assuming_on_curve()
+            } else {
+                true
+            }
     }
 
     fn add_points(to_add: &mut [Vec<Self>]) {
@@ -177,13 +200,23 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
 
         while to_add.iter().position(|x| x.len() > 1) != None {
             let mut dx: usize = 0;
-            for p in to_add.iter_mut(){
-                if p.len() < 2 { continue }
-                let len = if p.len() % 2 == 0 { p.len() } else { p.len() - 1 };
-                for i in (0..len).step_by(2){
+            for p in to_add.iter_mut() {
+                if p.len() < 2 {
+                    continue;
+                }
+                let len = if p.len() % 2 == 0 {
+                    p.len()
+                } else {
+                    p.len() - 1
+                };
+                for i in (0..len).step_by(2) {
                     denoms[dx] = {
                         if p[i].x == p[i + 1].x {
-                            if p[i + 1].y == zero { one } else { p[i + 1].y.double() }
+                            if p[i + 1].y == zero {
+                                one
+                            } else {
+                                p[i + 1].y.double()
+                            }
                         } else {
                             p[i].x - &p[i + 1].x
                         }
@@ -197,25 +230,25 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
             dx = 0;
 
             for p in to_add.iter_mut() {
-                if p.len() < 2 { continue }
-                let len = if p.len() % 2 == 0 { p.len() } else { p.len() - 1 };
+                if p.len() < 2 {
+                    continue;
+                }
+                let len = if p.len() % 2 == 0 {
+                    p.len()
+                } else {
+                    p.len() - 1
+                };
 
                 for i in (0..len).step_by(2) {
-                    let j = i/2;
-                    if p[i+1].is_zero()
-                    {
+                    let j = i / 2;
+                    if p[i + 1].is_zero() {
                         p[j] = p[i];
-                    }
-                    else if p[i].is_zero()
-                    {
-                        p[j] = p[i+1];
-                    }
-                    else if p[i+1].x == p[i].x && (p[i+1].y != p[i].y || p[i+1].y.is_zero())
+                    } else if p[i].is_zero() {
+                        p[j] = p[i + 1];
+                    } else if p[i + 1].x == p[i].x && (p[i + 1].y != p[i].y || p[i + 1].y.is_zero())
                     {
                         p[j] = Self::zero();
-                    }
-                    else if p[i+1].x == p[i].x && p[i+1].y == p[i].y
-                    {
+                    } else if p[i + 1].x == p[i].x && p[i + 1].y == p[i].y {
                         let sq = p[i].x.square();
                         let s = (sq.double() + &sq + &P::COEFF_A) * &denoms[dx];
                         let x = s.square() - &p[i].x.double();
@@ -223,11 +256,9 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
                         p[j].x = x;
                         p[j].y = y;
                         p[j].infinity = false;
-                    }
-                    else
-                    {
-                        let s = (p[i].y - &p[i+1].y) * &denoms[dx];
-                        let x = s.square() - &p[i].x - &p[i+1].x;
+                    } else {
+                        let s = (p[i].y - &p[i + 1].y) * &denoms[dx];
+                        let x = s.square() - &p[i].x - &p[i + 1].x;
                         let y = -p[i].y - &(s * &(x - &p[i].x));
                         p[j].x = x;
                         p[j].y = y;
@@ -237,14 +268,11 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
                 }
 
                 let len = p.len();
-                if len % 2 == 1
-                {
-                    p[len/2] = p[len-1];
-                    p.truncate(len/2+1);
-                }
-                else
-                {
-                    p.truncate(len/2);
+                if len % 2 == 1 {
+                    p[len / 2] = p[len - 1];
+                    p.truncate(len / 2 + 1);
+                } else {
+                    p.truncate(len / 2);
                 }
             }
         }
@@ -270,12 +298,92 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
     }
 }
 
-impl<P: Parameters> SemanticallyValid for GroupAffine<P>
-{
+impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
+    fn apply_endomorphism(&self) -> Self {
+        let mut self_e = self.clone();
+        self_e.x.mul_assign(P::ENDO_COEFF);
+        self_e
+    }
+
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Result<Self::ScalarField, Error> {
+        let mut a: P::ScalarField = 2u64.into();
+        let mut b: P::ScalarField = 2u64.into();
+
+        let one = P::ScalarField::one();
+        let one_neg = one.neg();
+
+        let mut bits = bits;
+        if bits.len() % 2 == 1 {
+            bits.push(false);
+        }
+
+        if bits.len() > P::LAMBDA {
+            Err("Endo mul bits length exceeds LAMBDA")?
+        }
+
+        for i in (0..(bits.len() / 2)).rev() {
+            a.double_in_place();
+            b.double_in_place();
+
+            let s = if bits[i * 2] { &one } else { &one_neg };
+
+            if bits[i * 2 + 1] {
+                a.add_assign(s);
+            } else {
+                b.add_assign(s);
+            }
+        }
+
+        Ok(a.mul(P::ENDO_SCALAR) + &b)
+    }
+
+    /// Endomorphism-based multiplication of a curve point
+    /// with a scalar in little-endian endomorphism representation.
+    fn endo_mul(&self, bits: Vec<bool>) -> Result<Self::Projective, Error> {
+        let self_neg = self.neg();
+
+        let self_e = self.apply_endomorphism();
+        let self_e_neg = self_e.neg();
+
+        let mut acc = self_e.into_projective();
+        acc.add_assign_mixed(&self);
+        acc.double_in_place();
+
+        let mut bits = bits;
+        if bits.len() % 2 == 1 {
+            bits.push(false);
+        }
+
+        if bits.len() > P::LAMBDA {
+            Err("Endo mul bits length exceeds LAMBDA")?
+        }
+
+        for i in (0..(bits.len() / 2)).rev() {
+            let s = if bits[i * 2 + 1] {
+                if bits[i * 2] {
+                    &self_e
+                } else {
+                    &self_e_neg
+                }
+            } else {
+                if bits[i * 2] {
+                    &self
+                } else {
+                    &self_neg
+                }
+            };
+
+            acc.double_in_place();
+            acc.add_assign_mixed(s);
+        }
+
+        Ok(acc)
+    }
+}
+
+impl<P: Parameters> SemanticallyValid for GroupAffine<P> {
     fn is_valid(&self) -> bool {
-        self.x.is_valid() &&
-        self.y.is_valid() &&
-        self.group_membership_test()
+        self.x.is_valid() && self.y.is_valid() && self.group_membership_test()
     }
 }
 
@@ -320,20 +428,26 @@ impl<P: Parameters> FromBytesChecked for GroupAffine<P> {
         let infinity = bool::read(reader)?;
         let point = Self::new(x, y, infinity);
         if !point.group_membership_test() {
-            return Err(IoError::new(ErrorKind::InvalidData, "invalid point: group membership test failed"));
+            return Err(IoError::new(
+                ErrorKind::InvalidData,
+                "invalid point: group membership test failed",
+            ));
         }
         Ok(point)
     }
 }
 
-use crate::{ToBits, FromBits};
-impl<P: Parameters> ToCompressedBits for GroupAffine<P>
-{
+use crate::{FromBits, ToBits};
+impl<P: Parameters> ToCompressedBits for GroupAffine<P> {
     #[inline]
     fn compress(&self) -> Vec<bool> {
         // Strictly speaking, self.x is zero already when self.infinity is true, but
         // to guard against implementation mistakes we do not assume this.
-        let p = if self.infinity {P::BaseField::zero()} else {self.x};
+        let p = if self.infinity {
+            P::BaseField::zero()
+        } else {
+            self.x
+        };
         let mut res = p.write_bits();
 
         // Add infinity flag
@@ -346,8 +460,7 @@ impl<P: Parameters> ToCompressedBits for GroupAffine<P>
     }
 }
 
-impl<P: Parameters> FromCompressedBits for GroupAffine<P>
-{
+impl<P: Parameters> FromCompressedBits for GroupAffine<P> {
     #[inline]
     fn decompress(compressed: Vec<bool>) -> Result<Self, Error> {
         let len = compressed.len() - 1;
@@ -357,7 +470,6 @@ impl<P: Parameters> FromCompressedBits for GroupAffine<P>
         //Mask away the flag bits and try to get the x coordinate
         let x = P::BaseField::read_bits(compressed[0..(len - 1)].to_vec())?;
         match (infinity_flag_set, parity_flag_set, x.is_zero()) {
-
             //If the infinity flag is set, return the value assuming
             //the x-coordinate is zero and the parity bit is not set.
             (true, false, true) => Ok(Self::zero()),
@@ -365,23 +477,20 @@ impl<P: Parameters> FromCompressedBits for GroupAffine<P>
             //If infinity flag is not set, then we attempt to construct
             //a point from the x coordinate and the parity.
             (false, _, _) => {
-
                 //Attempt to get the y coordinate from its parity and x
                 match Self::get_point_from_x_and_parity(x, parity_flag_set) {
-
                     //Check p belongs to the subgroup we expect
                     Some(p) => {
                         if p.is_in_correct_subgroup_assuming_on_curve() {
                             Ok(p)
-                        }
-                        else {
+                        } else {
                             let e = BitSerializationError::NotInCorrectSubgroup;
                             Err(Box::new(e))
                         }
                     }
                     _ => Err(Box::new(BitSerializationError::NotOnCurve)),
                 }
-            },
+            }
 
             //Other combinations are illegal
             _ => Err(Box::new(BitSerializationError::InvalidFlags)),
@@ -406,9 +515,9 @@ impl<P: Parameters> Default for GroupAffine<P> {
 )]
 #[derive(Serialize, Deserialize)]
 pub struct GroupProjective<P: Parameters> {
-    pub x:   P::BaseField,
-    pub y:   P::BaseField,
-    pub z:   P::BaseField,
+    pub x: P::BaseField,
+    pub y: P::BaseField,
+    pub z: P::BaseField,
     #[derivative(Debug = "ignore")]
     #[serde(skip)]
     _params: PhantomData<P>,
@@ -436,16 +545,15 @@ impl<P: Parameters> PartialEq for GroupProjective<P> {
         let z1 = self.z.square();
         let z2 = other.z.square();
 
-        if self.x * &z2 != other.x * &z1 {
-            false
-        } else if self.y * &(z2 * &other.z) != other.y * &(z1 * &self.z) {
+        if (self.x * &z2 != other.x * &z1)
+            || (self.y * &(z2 * &other.z) != other.y * &(z1 * &self.z))
+        {
             false
         } else {
             true
         }
     }
 }
-
 
 impl<P: Parameters> Distribution<GroupProjective<P>> for Standard {
     #[inline]
@@ -455,7 +563,6 @@ impl<P: Parameters> Distribution<GroupProjective<P>> for Standard {
         res
     }
 }
-
 
 impl<P: Parameters> ToBytes for GroupProjective<P> {
     #[inline]
@@ -483,8 +590,11 @@ impl<P: Parameters> FromBytesChecked for GroupProjective<P> {
         let z = P::BaseField::read_checked(reader)?;
         let point = Self::new(x, y, z);
         if !point.group_membership_test() {
-            return Err(IoError::new(ErrorKind::InvalidData, "invalid point: group membership test failed"));
-    }
+            return Err(IoError::new(
+                ErrorKind::InvalidData,
+                "invalid point: group membership test failed",
+            ));
+        }
         Ok(point)
     }
 }
@@ -548,7 +658,8 @@ impl<P: Parameters> ProjectiveCurve for GroupProjective<P> {
         // First pass: compute [a, ab, abc, ...]
         let mut prod = Vec::with_capacity(v.len());
         let mut tmp = P::BaseField::one();
-        for g in v.iter_mut()
+        for g in v
+            .iter_mut()
             // Ignore normalized elements
             .filter(|g| !g.is_normalized())
         {
@@ -560,13 +671,19 @@ impl<P: Parameters> ProjectiveCurve for GroupProjective<P> {
         tmp = tmp.inverse().unwrap(); // Guaranteed to be nonzero.
 
         // Second pass: iterate backwards to compute inverses
-        for (g, s) in v.iter_mut()
+        for (g, s) in v
+            .iter_mut()
             // Backwards
             .rev()
             // Ignore normalized elements
             .filter(|g| !g.is_normalized())
             // Backwards, skip last element, fill in one for last term.
-            .zip(prod.into_iter().rev().skip(1).chain(Some(P::BaseField::one())))
+            .zip(
+                prod.into_iter()
+                    .rev()
+                    .skip(1)
+                    .chain(Some(P::BaseField::one())),
+            )
         {
             // tmp := tmp * g.z; g.z := tmp * s = 1/z
             let newtmp = tmp * &g.z;
@@ -737,6 +854,11 @@ impl<P: Parameters> ProjectiveCurve for GroupProjective<P> {
         }
     }
 
+    /// WARNING: This implementation doesn't take costant time with respect
+    /// to the exponent, and therefore is susceptible to side-channel attacks.
+    /// Be sure to use it in applications where timing (or similar) attacks
+    /// are not possible.
+    /// TODO: Add a side-channel secure variant.
     fn mul_assign<S: Into<<Self::ScalarField as PrimeField>::BigInt>>(&mut self, other: S) {
         let mut res = Self::zero();
 
@@ -778,13 +900,9 @@ impl<P: Parameters> ProjectiveCurve for GroupProjective<P> {
     }
 }
 
-impl<P: Parameters> SemanticallyValid for GroupProjective<P>
-{
+impl<P: Parameters> SemanticallyValid for GroupProjective<P> {
     fn is_valid(&self) -> bool {
-        self.x.is_valid() &&
-        self.y.is_valid() &&
-        self.z.is_valid() &&
-        self.group_membership_test()
+        self.x.is_valid() && self.y.is_valid() && self.z.is_valid() && self.group_membership_test()
     }
 }
 
@@ -960,7 +1078,7 @@ impl<P: Parameters> CanonicalSerialize for GroupAffine<P> {
             // Serialize 0.
             P::BaseField::zero().serialize_with_flags(writer, flags)
         } else {
-            let flags = SWFlags::from_y_sign(self.y > -self.y);
+            let flags = SWFlags::from_y_parity(self.y.is_odd());
             self.x.serialize_with_flags(writer, flags)
         }
     }
@@ -1020,34 +1138,40 @@ impl<P: Parameters> CanonicalSerialize for GroupProjective<P> {
 impl<P: Parameters> CanonicalDeserialize for GroupAffine<P> {
     #[allow(unused_qualifications)]
     fn deserialize<R: Read>(reader: R) -> Result<Self, SerializationError> {
-        let (x, flags): (P::BaseField, SWFlags) =
-            CanonicalDeserializeWithFlags::deserialize_with_flags(reader)?;
-        if flags.is_infinity() {
-            Ok(Self::zero())
-        } else {
-            let p = GroupAffine::<P>::get_point_from_x(x, flags.is_positive().unwrap())
-                .ok_or(SerializationError::InvalidData)?;
-            if !p.is_in_correct_subgroup_assuming_on_curve() {
-                return Err(SerializationError::InvalidData);
-            }
-            Ok(p)
-        }
-    }
-
-    #[allow(unused_qualifications)]
-    fn deserialize_uncompressed<R: Read>(
-        reader: R,
-    ) -> Result<Self, SerializationError> {
         let p = Self::deserialize_unchecked(reader)?;
-
-        if !p.is_in_correct_subgroup_assuming_on_curve() {
+        if !p.is_zero() && !p.is_in_correct_subgroup_assuming_on_curve() {
             return Err(SerializationError::InvalidData);
         }
         Ok(p)
     }
 
     #[allow(unused_qualifications)]
-    fn deserialize_unchecked<R: Read>(mut reader: R) -> Result<Self, SerializationError> {
+    fn deserialize_unchecked<R: Read>(reader: R) -> Result<Self, SerializationError> {
+        let (x, flags): (P::BaseField, SWFlags) =
+            CanonicalDeserializeWithFlags::deserialize_with_flags(reader)?;
+        if flags.is_infinity() {
+            Ok(Self::zero())
+        } else {
+            let p = GroupAffine::<P>::get_point_from_x_and_parity(x, flags.is_odd().unwrap())
+                .ok_or(SerializationError::InvalidData)?;
+            Ok(p)
+        }
+    }
+
+    #[allow(unused_qualifications)]
+    fn deserialize_uncompressed<R: Read>(reader: R) -> Result<Self, SerializationError> {
+        let p = Self::deserialize_uncompressed_unchecked(reader)?;
+
+        if !p.group_membership_test() {
+            return Err(SerializationError::InvalidData);
+        }
+        Ok(p)
+    }
+
+    #[allow(unused_qualifications)]
+    fn deserialize_uncompressed_unchecked<R: Read>(
+        mut reader: R,
+    ) -> Result<Self, SerializationError> {
         let x: P::BaseField = CanonicalDeserialize::deserialize(&mut reader)?;
         let (y, flags): (P::BaseField, SWFlags) =
             CanonicalDeserializeWithFlags::deserialize_with_flags(&mut reader)?;
@@ -1064,14 +1188,20 @@ impl<P: Parameters> CanonicalDeserialize for GroupProjective<P> {
     }
 
     #[allow(unused_qualifications)]
+    fn deserialize_unchecked<R: Read>(reader: R) -> Result<Self, SerializationError> {
+        let aff = GroupAffine::<P>::deserialize_unchecked(reader)?;
+        Ok(aff.into())
+    }
+
+    #[allow(unused_qualifications)]
     fn deserialize_uncompressed<R: Read>(reader: R) -> Result<Self, SerializationError> {
         let aff = GroupAffine::<P>::deserialize_uncompressed(reader)?;
         Ok(aff.into())
     }
 
     #[allow(unused_qualifications)]
-    fn deserialize_unchecked<R: Read>(reader: R) -> Result<Self, SerializationError> {
-        let aff = GroupAffine::<P>::deserialize_unchecked(reader)?;
+    fn deserialize_uncompressed_unchecked<R: Read>(reader: R) -> Result<Self, SerializationError> {
+        let aff = GroupAffine::<P>::deserialize_uncompressed_unchecked(reader)?;
         Ok(aff.into())
     }
 }

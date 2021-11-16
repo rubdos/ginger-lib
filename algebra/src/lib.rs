@@ -7,6 +7,17 @@
 #![cfg_attr(use_asm, feature(llvm_asm))]
 #![cfg_attr(not(use_asm), forbid(unsafe_code))]
 #![cfg_attr(use_asm, deny(unsafe_code))]
+#![allow(
+    clippy::upper_case_acronyms,
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::try_err,
+    clippy::map_collect_result_unit,
+    clippy::not_unsafe_ptr_arg_deref,
+    clippy::suspicious_op_assign_impl,
+    clippy::suspicious_arithmetic_impl,
+    clippy::assertions_on_constants
+)]
 
 #[macro_use]
 extern crate derivative;
@@ -62,17 +73,6 @@ pub use self::fft::*;
 pub type Error = Box<dyn std::error::Error>;
 
 /// Returns the ceiling of the base-2 logarithm of `x`.
-/// ```
-/// use algebra::log2;
-///
-/// assert_eq!(log2(16), 4);
-/// assert_eq!(log2(17), 5);
-/// assert_eq!(log2(1), 0);
-/// assert_eq!(log2(0), 0);
-/// assert_eq!(log2(usize::MAX), (std::mem::size_of::<usize>() * 8) as u32);
-/// assert_eq!(log2(1 << 15), 15);
-/// assert_eq!(log2(2usize.pow(18)), 18);
-/// ```
 #[inline]
 pub fn log2(x: usize) -> u32 {
     if x == 0 {
@@ -85,18 +85,6 @@ pub fn log2(x: usize) -> u32 {
 }
 
 /// Returns the floor of the base-2 logarithm of `x`.
-/// ```
-/// use algebra::log2_floor;
-///    assert_eq!(log2_floor(0), 0);
-///    assert_eq!(log2_floor(1), 0);
-///    assert_eq!(log2_floor(2), 1);
-///    assert_eq!(log2_floor(3), 1);
-///    assert_eq!(log2_floor(4), 2);
-///    assert_eq!(log2_floor(5), 2);
-///    assert_eq!(log2_floor(6), 2);
-///    assert_eq!(log2_floor(7), 2);
-///    assert_eq!(log2_floor(8), 3);
-/// ```
 #[inline]
 pub fn log2_floor(x: usize) -> u32 {
     if x == 0 {

@@ -1,11 +1,11 @@
 //! A polynomial represented in coefficient form.
 
-use std::fmt;
-use std::ops::{Add, AddAssign, Deref, DerefMut, Div, Mul, Neg, Sub, SubAssign};
-use crate::{Field, PrimeField, ToBytes, FromBytes, serialize::*};
-use crate::{Evaluations, EvaluationDomain, DenseOrSparsePolynomial, get_best_evaluation_domain};
+use crate::{get_best_evaluation_domain, DenseOrSparsePolynomial, EvaluationDomain, Evaluations};
+use crate::{serialize::*, Field, FromBytes, PrimeField, ToBytes};
 use rand::Rng;
 use rayon::prelude::*;
+use std::fmt;
+use std::ops::{Add, AddAssign, Deref, DerefMut, Div, Mul, Neg, Sub, SubAssign};
 
 /// Stores a polynomial in coefficient form.
 #[derive(Clone, PartialEq, Eq, Hash, Default, CanonicalSerialize, CanonicalDeserialize)]
@@ -14,8 +14,7 @@ pub struct DensePolynomial<F: Field> {
     pub coeffs: Vec<F>,
 }
 
-impl<F: Field> ToBytes for DensePolynomial<F>
-{
+impl<F: Field> ToBytes for DensePolynomial<F> {
     fn write<W: Write>(&self, mut w: W) -> std::io::Result<()> {
         (self.coeffs.len() as u64).write(&mut w)?;
         for c in self.coeffs.iter() {
@@ -25,8 +24,7 @@ impl<F: Field> ToBytes for DensePolynomial<F>
     }
 }
 
-impl<F: Field> FromBytes for DensePolynomial<F>
-{
+impl<F: Field> FromBytes for DensePolynomial<F> {
     fn read<Read: std::io::Read>(mut reader: Read) -> std::io::Result<DensePolynomial<F>> {
         let mut coeffs = vec![];
         let coeffs_count = u64::read(&mut reader)
@@ -86,15 +84,12 @@ impl<F: Field> DensePolynomial<F> {
     }
 
     /// Constructs a new polynomial from a list of coefficients.
-    pub fn from_coefficients_vec(mut coeffs: Vec<F>) -> Self {
+    pub fn from_coefficients_vec(coeffs: Vec<F>) -> Self {
+        let mut result = Self { coeffs };
         // While there are zeros at the end of the coefficient vector, pop them off.
-        while coeffs.last().map_or(false, |c| c.is_zero()) {
-            coeffs.pop();
-        }
-        // Check that either the coefficients vec is empty or that the last coeff is non-zero.
-        assert!(coeffs.last().map_or(true, |coeff| !coeff.is_zero()));
+        result.truncate_leading_zeros();
 
-        Self { coeffs }
+        result
     }
 
     /// Returns the degree of the polynomial.
@@ -102,7 +97,7 @@ impl<F: Field> DensePolynomial<F> {
         if self.is_zero() {
             0
         } else {
-            assert!(self.coeffs.last().map_or(false, |coeff| !coeff.is_zero()));
+            debug_assert!(self.coeffs.last().map_or(false, |coeff| !coeff.is_zero()));
             self.coeffs.len() - 1
         }
     }
@@ -118,8 +113,9 @@ impl<F: Field> DensePolynomial<F> {
             powers_of_point.push(cur);
             cur *= &point;
         }
-        assert_eq!(powers_of_point.len(), self.coeffs.len());
         let zero = F::zero();
+        // Same length of powers_of_point and self.coeffs is
+        // guaranted by assertion in degree() call
         powers_of_point
             .into_par_iter()
             .zip(&self.coeffs)
@@ -151,21 +147,32 @@ impl<F: Field> DensePolynomial<F> {
         }
         Self::from_coefficients_vec(random_coeffs)
     }
+
+    fn truncate_leading_zeros(&mut self) {
+        while self.coeffs.last().map_or(false, |c| c.is_zero()) {
+            self.coeffs.pop();
+        }
+    }
 }
 
 impl<F: PrimeField> DensePolynomial<F> {
     /// Multiply `self` by the vanishing polynomial for the domain `domain`.
-    /// Returns the quotient and remainder of the division.
     pub fn mul_by_vanishing_poly(&self, domain_size: usize) -> DensePolynomial<F> {
         let mut shifted = vec![F::zero(); domain_size];
         shifted.extend_from_slice(&self.coeffs);
-        shifted.par_iter_mut().zip(&self.coeffs).for_each(|(s, c)| *s -= c);
+        shifted
+            .par_iter_mut()
+            .zip(&self.coeffs)
+            .for_each(|(s, c)| *s -= c);
         DensePolynomial::from_coefficients_vec(shifted)
     }
 
     /// Divide `self` by the vanishing polynomial for the domain `domain`.
     /// Returns the quotient and remainder of the division.
-    pub fn divide_by_vanishing_poly(&self, domain: &Box<dyn EvaluationDomain<F>>) -> Option<(DensePolynomial<F>, DensePolynomial<F>)> {
+    pub fn divide_by_vanishing_poly(
+        &self,
+        domain: &Box<dyn EvaluationDomain<F>>,
+    ) -> Option<(DensePolynomial<F>, DensePolynomial<F>)> {
         let self_poly: DenseOrSparsePolynomial<F> = self.into();
         let vanishing_poly: DenseOrSparsePolynomial<F> = domain.vanishing_polynomial().into();
         self_poly.divide_with_q_and_r(&vanishing_poly)
@@ -176,7 +183,7 @@ impl<'a, 'b, F: Field> Add<&'a DensePolynomial<F>> for &'b DensePolynomial<F> {
     type Output = DensePolynomial<F>;
 
     fn add(self, other: &'a DensePolynomial<F>) -> DensePolynomial<F> {
-        if self.is_zero() {
+        let mut result = if self.is_zero() {
             other.clone()
         } else if other.is_zero() {
             self.clone()
@@ -192,13 +199,11 @@ impl<'a, 'b, F: Field> Add<&'a DensePolynomial<F>> for &'b DensePolynomial<F> {
                 for (a, b) in result.coeffs.iter_mut().zip(&self.coeffs) {
                     *a += b
                 }
-                // If the leading coefficient ends up being zero, pop it off.
-                while result.coeffs.last().unwrap().is_zero() {
-                    result.coeffs.pop();
-                }
                 result
             }
-        }
+        };
+        result.truncate_leading_zeros();
+        result
     }
 }
 
@@ -220,12 +225,9 @@ impl<'a, 'b, F: Field> AddAssign<&'a DensePolynomial<F>> for DensePolynomial<F> 
                 for (a, b) in self.coeffs.iter_mut().zip(&other.coeffs) {
                     *a += b
                 }
-                // If the leading coefficient ends up being zero, pop it off.
-                while self.coeffs.last().unwrap().is_zero() {
-                    self.coeffs.pop();
-                }
             }
         }
+        self.truncate_leading_zeros();
     }
 }
 
@@ -248,18 +250,18 @@ impl<'a, 'b, F: Field> AddAssign<(F, &'a DensePolynomial<F>)> for DensePolynomia
                 for (a, b) in self.coeffs.iter_mut().zip(&other.coeffs) {
                     *a += &(f * b);
                 }
-                // If the leading coefficient ends up being zero, pop it off.
-                while self.coeffs.last().unwrap().is_zero() {
-                    self.coeffs.pop();
-                }
             }
         }
+        self.truncate_leading_zeros();
     }
 }
 
 impl<F: PrimeField> DensePolynomial<F> {
     /// Evaluate `self` over `domain`.
-    pub fn evaluate_over_domain_by_ref(&self, domain: Box<dyn EvaluationDomain<F>>) -> Evaluations<F> {
+    pub fn evaluate_over_domain_by_ref(
+        &self,
+        domain: Box<dyn EvaluationDomain<F>>,
+    ) -> Evaluations<F> {
         let poly: DenseOrSparsePolynomial<'_, F> = self.into();
         DenseOrSparsePolynomial::<F>::evaluate_over_domain(poly, domain)
     }
@@ -288,7 +290,7 @@ impl<'a, 'b, F: Field> Sub<&'a DensePolynomial<F>> for &'b DensePolynomial<F> {
 
     #[inline]
     fn sub(self, other: &'a DensePolynomial<F>) -> DensePolynomial<F> {
-        if self.is_zero() {
+        let mut result = if self.is_zero() {
             let mut result = other.clone();
             for coeff in &mut result.coeffs {
                 *coeff = -(*coeff);
@@ -309,16 +311,11 @@ impl<'a, 'b, F: Field> Sub<&'a DensePolynomial<F>> for &'b DensePolynomial<F> {
                 for (a, b) in result.coeffs.iter_mut().zip(&other.coeffs) {
                     *a -= b;
                 }
-                if !result.is_zero() {
-                    // If the leading coefficient ends up being zero, pop it off.
-                    while result.coeffs.last().unwrap().is_zero() {
-                        result.coeffs.pop();
-                    }
-                }
-
                 result
             }
-        }
+        };
+        result.truncate_leading_zeros();
+        result
     }
 }
 
@@ -343,12 +340,9 @@ impl<'a, 'b, F: Field> SubAssign<&'a DensePolynomial<F>> for DensePolynomial<F> 
                 for (a, b) in self.coeffs.iter_mut().zip(&other.coeffs) {
                     *a -= b
                 }
-                // If the leading coefficient ends up being zero, pop it off.
-                while self.coeffs.last().unwrap().is_zero() {
-                    self.coeffs.pop();
-                }
             }
         }
+        self.truncate_leading_zeros();
     }
 }
 
@@ -382,12 +376,12 @@ impl<'a, 'b, F: PrimeField> Mul<&'a DensePolynomial<F>> for &'b DensePolynomial<
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bls12_381"))]
 mod tests {
     use crate::domain::get_best_evaluation_domain;
-    use crate::polynomial::*;
     use crate::fields::bls12_381::fr::Fr;
     use crate::fields::Field;
+    use crate::polynomial::*;
     use crate::UniformRand;
     use rand::thread_rng;
 
@@ -424,7 +418,9 @@ mod tests {
                 let mut p1 = DensePolynomial::rand(a_degree, rng);
                 let p2 = DensePolynomial::rand(b_degree, rng);
                 let f = Fr::rand(rng);
-                let f_p2 = DensePolynomial::from_coefficients_vec(p2.coeffs.iter().map(|c| f * c).collect());
+                let f_p2 = DensePolynomial::from_coefficients_vec(
+                    p2.coeffs.iter().map(|c| f * c).collect(),
+                );
                 let res2 = &f_p2 + &p1;
                 p1 += (f, &p2);
                 let res1 = p1;
@@ -474,7 +470,10 @@ mod tests {
             for b_degree in 0..70 {
                 let dividend = DensePolynomial::<Fr>::rand(a_degree, rng);
                 let divisor = DensePolynomial::<Fr>::rand(b_degree, rng);
-                if let Some((quotient, remainder)) = DenseOrSparsePolynomial::divide_with_q_and_r(&(&dividend).into(), &(&divisor).into()) {
+                if let Some((quotient, remainder)) = DenseOrSparsePolynomial::divide_with_q_and_r(
+                    &(&dividend).into(),
+                    &(&divisor).into(),
+                ) {
                     assert_eq!(dividend, &(&divisor * &quotient) + &remainder)
                 }
             }

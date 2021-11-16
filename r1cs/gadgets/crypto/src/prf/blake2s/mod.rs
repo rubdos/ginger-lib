@@ -77,7 +77,7 @@ const SIGMA: [[usize; 16]; 10] = [
 //
 
 fn mixing_g<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>>(
-    mut cs: CS,
+    cs: CS,
     v: &mut [UInt32],
     a: usize,
     b: usize,
@@ -86,6 +86,8 @@ fn mixing_g<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>>(
     x: &UInt32,
     y: &UInt32,
 ) -> Result<(), SynthesisError> {
+    let mut cs = MultiEq::new(cs);
+
     v[a] = UInt32::addmany(
         cs.ns(|| "mixing step 1"),
         &[v[a].clone(), v[b].clone(), x.clone()],
@@ -371,6 +373,7 @@ pub fn blake2s_gadget<ConstraintF: PrimeField, CS: ConstraintSystem<ConstraintF>
 }
 
 use primitives::prf::Blake2s;
+use r1cs_std::eq::MultiEq;
 
 pub struct Blake2sGadget;
 #[derive(Clone, Debug)]
@@ -389,7 +392,7 @@ impl<ConstraintF: PrimeField> EqGadget<ConstraintF> for Blake2sOutputGadget {
     fn is_eq<CS: ConstraintSystem<ConstraintF>>(
         &self,
         cs: CS,
-        other: &Self
+        other: &Self,
     ) -> Result<Boolean, SynthesisError> {
         self.0.is_eq(cs, &other.0)
     }
@@ -507,14 +510,14 @@ impl<ConstraintF: PrimeField> PRFGadget<Blake2s, ConstraintF> for Blake2sGadget 
 
 #[cfg(test)]
 mod test {
+    use crate::prf::blake2s::blake2s_gadget;
     use algebra::fields::bls12_377::fr::Fr;
-    use digest::{FixedOutput, Input};
+    use blake2::Blake2s;
+    use digest::{Digest, FixedOutput};
+    use primitives::prf::blake2s::Blake2s as B2SPRF;
+    use r1cs_core::ConstraintSystem;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use primitives::prf::blake2s::Blake2s as B2SPRF;
-    use crate::prf::blake2s::blake2s_gadget;
-    use blake2::Blake2s;
-    use r1cs_core::ConstraintSystem;
 
     use super::Blake2sGadget;
     use r1cs_std::{
@@ -533,13 +536,13 @@ mod test {
             .collect();
         blake2s_gadget(&mut cs, &input_bits).unwrap();
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 21792);
+        assert_eq!(cs.num_constraints(), 21552);
     }
 
     #[test]
     fn test_blake2s_prf() {
-        use primitives::prf::PRF;
         use crate::prf::PRFGadget;
+        use primitives::prf::PRF;
         use rand::Rng;
 
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
@@ -596,7 +599,7 @@ mod test {
             .collect();
         blake2s_gadget(&mut cs, &input_bits).unwrap();
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 21792);
+        assert_eq!(cs.num_constraints(), 21552);
     }
 
     #[test]
@@ -608,17 +611,16 @@ mod test {
         assert_eq!(cs.num_constraints(), 0);
     }
 
-    #[ignore]
     #[test]
-    fn test_blake2s() {
+    fn native_test() {
         let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
 
         for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
-            let mut h = Blake2s::new_keyed(&[], 32);
+            let mut h = Blake2s::new();
 
             let data: Vec<u8> = (0..input_len).map(|_| rng.gen()).collect();
 
-            h.process(&data);
+            h.input(&data);
 
             let hash_result = h.fixed_result();
 
@@ -652,14 +654,14 @@ mod test {
                     match b {
                         Boolean::Is(b) => {
                             assert!(s.next().unwrap() == b.get_value().unwrap());
-                        },
+                        }
                         Boolean::Not(b) => {
                             assert!(s.next().unwrap() != b.get_value().unwrap());
-                        },
+                        }
                         Boolean::Constant(b) => {
                             assert!(input_len == 0);
                             assert!(s.next().unwrap() == b);
-                        },
+                        }
                     }
                 }
             }

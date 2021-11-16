@@ -1,8 +1,15 @@
-use crate::{curves::{
-    sw6::{G1Affine, G1Projective, G2Affine, G2Projective, SW6, g1::SW6G1Parameters, g2::SW6G2Parameters},
-    tests::{curve_tests, sw_jacobian_tests},
-    AffineCurve, PairingEngine,
-}, groups::tests::group_test, SemanticallyValid};
+use crate::{
+    curves::{
+        sw6::{
+            g1::SW6G1Parameters, g2::SW6G2Parameters, G1Affine, G1Projective, G2Affine,
+            G2Projective, SW6,
+        },
+        tests::{curve_tests, sw_jacobian_tests},
+        AffineCurve, PairingEngine,
+    },
+    groups::tests::group_test,
+    SemanticallyValid,
+};
 
 #[test]
 fn test_g1_projective_curve() {
@@ -57,9 +64,9 @@ fn test_bilinearity() {
     let sa = a * &s;
     let sb = b * &s;
 
-    let ans1 = SW6::pairing(sa, b);
-    let ans2 = SW6::pairing(a, sb);
-    let ans3 = SW6::pairing(a, b).pow(s.into_repr());
+    let ans1 = SW6::pairing(sa, b).unwrap();
+    let ans2 = SW6::pairing(a, sb).unwrap();
+    let ans3 = SW6::pairing(a, b).unwrap().pow(s.into_repr());
 
     assert_eq!(ans1, ans2);
     assert_eq!(ans2, ans3);

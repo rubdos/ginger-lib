@@ -29,11 +29,8 @@ use csv;
 
 // For randomness (during paramgen and proof generation)
 use algebra::{
-    curves::{
-        mnt4753::MNT4 as MNT4_753,
-        mnt6753::MNT6 as MNT6_753,
-    },
-    UniformRand, PairingEngine
+    curves::{mnt4753::MNT4 as MNT4_753, mnt6753::MNT6 as MNT6_753},
+    PairingEngine, UniformRand,
 };
 
 use r1cs_std::instantiated::{
@@ -180,7 +177,7 @@ fn run<C: CurvePair>(
         total_proving_inner += start.elapsed();
 
         // Verify inner proof.
-        let pvk = prepare_verifying_key(&params_inner.vk);
+        let pvk = prepare_verifying_key(&params_inner.vk)?;
         assert!(verify_proof(&pvk, &proof_inner, &inputs).unwrap());
 
         // Create parameters for our middle circuit
@@ -205,7 +202,7 @@ fn run<C: CurvePair>(
         };
         total_proving_middle += start.elapsed();
         {
-            let pvk = prepare_verifying_key(&params_middle.vk);
+            let pvk = prepare_verifying_key(&params_middle.vk)?;
             assert!(
                 verify_proof(&pvk, &proof_middle, &MiddleCircuit::<C>::inputs(&inputs)).unwrap()
             );
@@ -221,7 +218,7 @@ fn run<C: CurvePair>(
         };
 
         // Prepare the verification key (for proof verification)
-        let pvk = prepare_verifying_key(&params_outer.vk);
+        let pvk = prepare_verifying_key(&params_outer.vk)?;
         total_setup_outer += start.elapsed();
 
         // proof_vec.truncate(0);

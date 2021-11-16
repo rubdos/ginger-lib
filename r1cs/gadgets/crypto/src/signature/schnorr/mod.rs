@@ -6,36 +6,38 @@ use crate::signature::SigRandomizePkGadget;
 
 use std::{borrow::Borrow, marker::PhantomData};
 
-use primitives::signature::schnorr::{SchnorrPublicKey, SchnorrSigParameters, SchnorrSignature};
 use digest::Digest;
+use primitives::signature::schnorr::{SchnorrPublicKey, SchnorrSigParameters, SchnorrSignature};
 
 pub mod field_based_schnorr;
 
+// TODO: Can we declare generator as a constant instead of a gadget ? Are there any applications
+//       in which having it as gadget is useful ?
 pub struct SchnorrSigGadgetParameters<G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>>
 {
     generator: GG,
-    _group:    PhantomData<*const G>,
-    _engine:   PhantomData<*const ConstraintF>,
+    _group: PhantomData<*const G>,
+    _engine: PhantomData<*const ConstraintF>,
 }
 
 impl<G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>> Clone
-for SchnorrSigGadgetParameters<G, ConstraintF, GG>
+    for SchnorrSigGadgetParameters<G, ConstraintF, GG>
 {
     fn clone(&self) -> Self {
         Self {
             generator: self.generator.clone(),
-            _group:    PhantomData,
-            _engine:   PhantomData,
+            _group: PhantomData,
+            _engine: PhantomData,
         }
     }
 }
 
 #[derive(Derivative)]
 #[derivative(
-Debug(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>"),
-Clone(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>"),
-PartialEq(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>"),
-Eq(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>")
+    Debug(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>"),
+    Clone(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>"),
+    PartialEq(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>"),
+    Eq(bound = "G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>")
 )]
 pub struct SchnorrSigGadgetPk<G: Group, ConstraintF: Field, GG: GroupGadget<G, ConstraintF>> {
     pub_key: GG,
@@ -55,12 +57,12 @@ pub struct SchnorrRandomizePkGadget<G: Group, ConstraintF: Field, GG: GroupGadge
 }
 
 impl<G, GG, D, ConstraintF> SigRandomizePkGadget<SchnorrSignature<G, D>, ConstraintF>
-for SchnorrRandomizePkGadget<G, ConstraintF, GG>
-    where
-        G: Group,
-        GG: GroupGadget<G, ConstraintF>,
-        D: Digest + Send + Sync,
-        ConstraintF: Field,
+    for SchnorrRandomizePkGadget<G, ConstraintF, GG>
+where
+    G: Group,
+    GG: GroupGadget<G, ConstraintF>,
+    D: Digest + Send + Sync,
+    ConstraintF: Field,
 {
     type ParametersGadget = SchnorrSigGadgetParameters<G, ConstraintF, GG>;
     type PublicKeyGadget = SchnorrSigGadgetPk<G, ConstraintF, GG>;
@@ -76,31 +78,33 @@ for SchnorrRandomizePkGadget<G, ConstraintF, GG>
             .iter()
             .flat_map(|b| b.into_bits_le())
             .collect::<Vec<_>>();
-        let rand_pk = base.mul_bits(
-            &mut cs.ns(|| "Compute Randomizer"),
-            &public_key.pub_key,
-            randomness.iter(),
-        )?;
+        let rand_pk = {
+            let base_pow_rand =
+                base.mul_bits(&mut cs.ns(|| "Compute randomizer"), randomness.iter())?;
+            public_key
+                .pub_key
+                .add(cs.ns(|| "Randomize pk"), &base_pow_rand)
+        }?;
         Ok(SchnorrSigGadgetPk {
             pub_key: rand_pk,
-            _group:  PhantomData,
+            _group: PhantomData,
             _engine: PhantomData,
         })
     }
 }
 
 impl<G, ConstraintF, GG, D> AllocGadget<SchnorrSigParameters<G, D>, ConstraintF>
-for SchnorrSigGadgetParameters<G, ConstraintF, GG>
-    where
-        G: Group,
-        ConstraintF: Field,
-        GG: GroupGadget<G, ConstraintF>,
-        D: Digest,
+    for SchnorrSigGadgetParameters<G, ConstraintF, GG>
+where
+    G: Group,
+    ConstraintF: Field,
+    GG: GroupGadget<G, ConstraintF>,
+    D: Digest,
 {
     fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
-        where
-            F: FnOnce() -> Result<T, SynthesisError>,
-            T: Borrow<SchnorrSigParameters<G, D>>,
+    where
+        F: FnOnce() -> Result<T, SynthesisError>,
+        T: Borrow<SchnorrSigParameters<G, D>>,
     {
         let generator = GG::alloc_checked(cs, || f().map(|pp| pp.borrow().generator))?;
         Ok(Self {
@@ -114,9 +118,9 @@ for SchnorrSigGadgetParameters<G, ConstraintF, GG>
         cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
-        where
-            F: FnOnce() -> Result<T, SynthesisError>,
-            T: Borrow<SchnorrSigParameters<G, D>>,
+    where
+        F: FnOnce() -> Result<T, SynthesisError>,
+        T: Borrow<SchnorrSigParameters<G, D>>,
     {
         let generator = GG::alloc_input(cs, || f().map(|pp| pp.borrow().generator))?;
         Ok(Self {
@@ -128,16 +132,16 @@ for SchnorrSigGadgetParameters<G, ConstraintF, GG>
 }
 
 impl<G, ConstraintF, GG> AllocGadget<SchnorrPublicKey<G>, ConstraintF>
-for SchnorrSigGadgetPk<G, ConstraintF, GG>
-    where
-        G: Group,
-        ConstraintF: Field,
-        GG: GroupGadget<G, ConstraintF>,
+    for SchnorrSigGadgetPk<G, ConstraintF, GG>
+where
+    G: Group,
+    ConstraintF: Field,
+    GG: GroupGadget<G, ConstraintF>,
 {
     fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(cs: CS, f: F) -> Result<Self, SynthesisError>
-        where
-            F: FnOnce() -> Result<T, SynthesisError>,
-            T: Borrow<SchnorrPublicKey<G>>,
+    where
+        F: FnOnce() -> Result<T, SynthesisError>,
+        T: Borrow<SchnorrPublicKey<G>>,
     {
         let pub_key = GG::alloc_input(cs, || f().map(|pk| *pk.borrow()))?;
         Ok(Self {
@@ -151,9 +155,9 @@ for SchnorrSigGadgetPk<G, ConstraintF, GG>
         cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
-        where
-            F: FnOnce() -> Result<T, SynthesisError>,
-            T: Borrow<SchnorrPublicKey<G>>,
+    where
+        F: FnOnce() -> Result<T, SynthesisError>,
+        T: Borrow<SchnorrPublicKey<G>>,
     {
         let pub_key = GG::alloc_input(cs, || f().map(|pk| *pk.borrow()))?;
         Ok(Self {
@@ -165,16 +169,16 @@ for SchnorrSigGadgetPk<G, ConstraintF, GG>
 }
 
 impl<G, ConstraintF, GG> EqGadget<ConstraintF> for SchnorrSigGadgetPk<G, ConstraintF, GG>
-    where
-        G: Group,
-        ConstraintF: Field,
-        GG: GroupGadget<G, ConstraintF>,
+where
+    G: Group,
+    ConstraintF: Field,
+    GG: GroupGadget<G, ConstraintF>,
 {
     #[inline]
     fn is_eq<CS: ConstraintSystem<ConstraintF>>(
         &self,
         cs: CS,
-        other: &Self
+        other: &Self,
     ) -> Result<Boolean, SynthesisError> {
         self.pub_key.is_eq(cs, &other.pub_key)
     }
@@ -203,10 +207,10 @@ impl<G, ConstraintF, GG> EqGadget<ConstraintF> for SchnorrSigGadgetPk<G, Constra
 }
 
 impl<G, ConstraintF, GG> ToBytesGadget<ConstraintF> for SchnorrSigGadgetPk<G, ConstraintF, GG>
-    where
-        G: Group,
-        ConstraintF: Field,
-        GG: GroupGadget<G, ConstraintF>,
+where
+    G: Group,
+    ConstraintF: Field,
+    GG: GroupGadget<G, ConstraintF>,
 {
     fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
         &self,

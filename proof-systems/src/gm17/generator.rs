@@ -1,18 +1,14 @@
+use algebra::fft::domain::{get_best_evaluation_domain, sample_element_outside_domain};
 use algebra::msm::FixedBaseMSM;
-use algebra::fft::domain::{
-    get_best_evaluation_domain, sample_element_outside_domain,
-};
-use algebra::{
-    UniformRand,
-    AffineCurve, Field, PairingEngine, PrimeField, ProjectiveCurve,
-};
+use algebra::{AffineCurve, Field, PairingEngine, PrimeField, ProjectiveCurve, UniformRand};
 
+use r1cs_core::{
+    ConstraintSynthesizer, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable,
+};
 use rand::Rng;
 use rayon::prelude::*;
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
-use crate::gm17::{Parameters, VerifyingKey, r1cs_to_sap::R1CStoSAP};
-
+use crate::gm17::{r1cs_to_sap::R1CStoSAP, Parameters, VerifyingKey};
 
 /// Generates a random common reference string for
 /// a circuit.
@@ -37,12 +33,12 @@ where
 /// This is our assembly structure that we'll use to synthesize the
 /// circuit into a SAP.
 pub struct KeypairAssembly<E: PairingEngine> {
-    pub(crate) num_inputs:      usize,
-    pub(crate) num_aux:         usize,
+    pub(crate) num_inputs: usize,
+    pub(crate) num_aux: usize,
     pub(crate) num_constraints: usize,
-    pub(crate) at:              Vec<Vec<(E::Fr, Index)>>,
-    pub(crate) bt:              Vec<Vec<(E::Fr, Index)>>,
-    pub(crate) ct:              Vec<Vec<(E::Fr, Index)>>,
+    pub(crate) at: Vec<Vec<(E::Fr, Index)>>,
+    pub(crate) bt: Vec<Vec<(E::Fr, Index)>>,
+    pub(crate) ct: Vec<Vec<(E::Fr, Index)>>,
 }
 
 impl<E: PairingEngine> ConstraintSystem<E::Fr> for KeypairAssembly<E> {
@@ -161,12 +157,12 @@ where
     R: Rng,
 {
     let mut assembly = KeypairAssembly {
-        num_inputs:      0,
-        num_aux:         0,
+        num_inputs: 0,
+        num_aux: 0,
         num_constraints: 0,
-        at:              vec![],
-        bt:              vec![],
-        ct:              vec![],
+        at: vec![],
+        bt: vec![],
+        ct: vec![],
     };
 
     // Allocate the "one" input variable
@@ -228,7 +224,7 @@ where
         g_window,
         &g_table,
         &a.par_iter().map(|a| *a * &gamma).collect::<Vec<_>>(),
-    );
+    )?;
     end_timer!(a_time);
 
     // Compute the G_gamma-query
@@ -253,7 +249,7 @@ where
             .into_par_iter()
             .map(|i| gamma2_z_t * &(t.pow([i as u64])))
             .collect::<Vec<_>>(),
-    );
+    )?;
     end_timer!(g_gamma_time);
 
     // Compute the C_1-query
@@ -266,7 +262,7 @@ where
             .into_par_iter()
             .map(|i| c[i] * &gamma + &(a[i] * &alpha_beta))
             .collect::<Vec<_>>(),
-    );
+    )?;
     let (verifier_query, c_query_1) = result.split_at(assembly.num_inputs);
     end_timer!(c1_time);
 
@@ -281,7 +277,7 @@ where
             .into_par_iter()
             .map(|i| a[i] * &double_gamma2_z)
             .collect::<Vec<_>>(),
-    );
+    )?;
     drop(g_table);
     end_timer!(c2_time);
 
@@ -299,10 +295,8 @@ where
         h_gamma_window,
         &h_gamma_table,
         &a,
-    );
+    )?;
     end_timer!(b_time);
-
-
 
     end_timer!(proving_key_time);
 
@@ -313,12 +307,12 @@ where
     end_timer!(verifying_key_time);
 
     let vk = VerifyingKey::<E> {
-        h_g2:       h.into_affine(),
+        h_g2: h.into_affine(),
         g_alpha_g1: g_alpha.into_affine(),
-        h_beta_g2:  h_beta.into_affine(),
+        h_beta_g2: h_beta.into_affine(),
         g_gamma_g1: g_gamma.into_affine(),
         h_gamma_g2: h_gamma.into_affine(),
-        query:      verifier_query
+        query: verifier_query
             .into_par_iter()
             .map(|e| e.into_affine())
             .collect(),

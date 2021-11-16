@@ -1,13 +1,17 @@
 use crate::{
-    bytes::{FromBytes, ToBytes}, fields::BitIterator,
-    UniformRand, CanonicalSerialize, CanonicalDeserialize, SerializationError
+    bytes::{FromBytes, ToBytes},
+    fields::BitIterator,
+    CanonicalDeserialize, CanonicalSerialize, SerializationError, UniformRand,
 };
-use rand::{Rng, distributions::{Distribution, Standard}};
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display},
     io::{Read, Result as IoResult, Write},
 };
-use serde::{Serialize, Deserialize};
 
 #[macro_use]
 mod macros;
@@ -29,7 +33,7 @@ pub trait BigInteger:
     ToBytes
     + FromBytes
     + Serialize
-    + for <'a> Deserialize<'a>
+    + for<'a> Deserialize<'a>
     + CanonicalSerialize
     + CanonicalDeserialize
     + Copy
@@ -90,6 +94,8 @@ pub trait BigInteger:
 
     /// Returns the bit representation in a big endian boolean array, without
     /// leading zeros.
+    // TODO: the current implementation does not seem to skip leading zeroes.
+    // Let us check its usage and determine if a change is reasonable.
     fn to_bits(&self) -> Vec<bool>;
 
     /// Returns a vector for wnaf.

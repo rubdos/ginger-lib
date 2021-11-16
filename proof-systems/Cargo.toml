@@ -1,6 +1,6 @@
 [package]
 name = "proof-systems"
-version = "0.1.0"
+version = "0.3.0"
 authors = [
     "Sean Bowe",
     "Alessandro Chiesa",
@@ -9,8 +9,11 @@ authors = [
     "Pratyush Mishra",
     "Howard Wu",
     "Daniele Di Benedetto <daniele@horizenlabs.io>",
-    "Marcelo Kaihara <marcelo@horizenlabs.io>",
-    "Ulrich Haboeck <ulrich@horizenlabs.io>"
+    "Marcelo Kaihara",
+    "Ulrich Haboeck <ulrich@horizenlabs.io>",
+    "Maksym Vereshchak <phoinic@gmail.com>",
+    "Luigi Varriale <luigi@horizenlabs.io>",
+    "cronicc <cronic@horizenlabs.io>"
 ]
 description = "A library of zk proof systems"
 include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
@@ -20,8 +23,8 @@ edition = "2018"
 ################################# Dependencies ################################
 
 [dependencies]
-algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development_tmp", features = [ "parallel", "fft"] }
-r1cs-core = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development_tmp" }
+algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development", features = [ "parallel", "fft"] }
+r1cs-core = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development" }
 bench-utils = { path = "../bench-utils" }
 
 # marlin = { git = "https://github.com/HorizenLabs/marlin", branch = "dev", optional = true }
@@ -29,21 +32,21 @@ bench-utils = { path = "../bench-utils" }
 
 r1cs-std = { path = "../r1cs/gadgets/std", optional = true }
 
-rand = { version = "0.7" }
+rand = { version = "0.8.4" }
 rayon = { version = "1" }
-smallvec = { version = "0.6" }
+smallvec = { version = "1.6.1" }
 byteorder = { version = "1" }
 digest = { version = "0.8", optional = true }
 serde = { version = "1.0.117", features = ["derive"]}
-derivative = { version = "1", optional = true }
+derivative = { version = "2.2.0", optional = true }
 
 [dev-dependencies]
 csv = { version = "1" }
 criterion = "0.3"
-rand_xorshift = { version = "0.2" }
-blake2 = { version = "0.8", default-features = false }
+rand_xorshift = { version = "0.3.0" }
+blake2 = { version = "0.8.1", default-features = false }
 
-algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development_tmp", features = ["full", "parallel", "fft"] }
+algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development", features = ["full", "parallel", "fft"] }
 r1cs-crypto = { path = "../r1cs/gadgets/crypto", features = ["nizk"] }
 
 [features]
@@ -77,26 +80,26 @@ required-features = ["gm17", "r1cs-std/mnt4_753", "r1cs-std/mnt6_753" ]
 name = "gro16_bench"
 path = "src/groth16/benches/gro16_bench.rs"
 harness = false
-required-features = ["groth16", "algebra/bn_382"]
+required-features = ["groth16", "algebra/bn_382", "r1cs-std"]
 
 [[bench]]
 name = "bn382_gro16_test_circuits"
 path = "src/groth16/benches/bn382_gro16_test_circuits.rs"
 harness = false
-required-features = ["groth16", "algebra/bn_382"]
+required-features = ["groth16", "algebra/bn_382", "r1cs-std"]
 
-# [[bench]]
-# name = "darlin_batch_verification_bench"
-# path = "src/darlin/benches/batch_verification.rs"
-# harness = false
-# required-features = [
-#     "darlin", "llvm_asm", "algebra/tweedle",
-# ]
+[[bench]]
+name = "darlin_batch_verification_bench"
+path = "src/darlin/benches/batch_verification.rs"
+harness = false
+required-features = [
+   "darlin", "llvm_asm", "algebra/tweedle",
+]
 
-# [[bench]]
-# name = "darlin_accumulate_verify_bench"
-# path = "src/darlin/benches/accumulate_verify.rs"
-# harness = false
-# required-features = [
-#     "darlin", "llvm_asm", "algebra/tweedle",
-# ]
+[[bench]]
+name = "darlin_accumulate_verify_bench"
+path = "src/darlin/benches/accumulate_verify.rs"
+harness = false
+required-features = [
+   "darlin", "llvm_asm", "algebra/tweedle",
+]

@@ -1,19 +1,20 @@
 use crate::{
-    biginteger::BigInteger, bytes::{FromBytes, ToBytes}, UniformRand, bits::{ToBits, FromBits},
-    Error, BitSerializationError, SemanticallyValid, FromBytesChecked,
-    serialize:: {
-        CanonicalSerialize, CanonicalDeserialize,
-        CanonicalSerializeWithFlags, CanonicalDeserializeWithFlags,
-        Flags, EmptyFlags
-    }
+    biginteger::BigInteger,
+    bits::{FromBits, ToBits},
+    bytes::{FromBytes, ToBytes},
+    serialize::{
+        CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
+        CanonicalSerializeWithFlags, EmptyFlags, Flags,
+    },
+    BitSerializationError, Error, FromBytesChecked, SemanticallyValid, UniformRand,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     str::FromStr,
 };
-use serde::{Serialize, Deserialize};
 
 #[macro_use]
 mod macros;
@@ -51,6 +52,9 @@ pub mod sw6;
 #[cfg(feature = "tweedle")]
 pub mod tweedle;
 
+#[cfg(feature = "secp256k1")]
+pub mod secp256k1;
+
 #[cfg(test)]
 pub mod tests;
 
@@ -64,8 +68,8 @@ pub use self::models::*;
 macro_rules! field_new {
     ($name:ident, $c0:expr) => {
         $name {
-            0: $c0, 
-            1: std::marker::PhantomData
+            0: $c0,
+            1: std::marker::PhantomData,
         }
     };
     ($name:ident, $c0:expr, $c1:expr $(,)?) => {
@@ -86,7 +90,6 @@ macro_rules! field_new {
 }
 
 pub trait MulShort<Rhs = Self> {
-
     type Output;
 
     #[must_use]
@@ -94,7 +97,6 @@ pub trait MulShort<Rhs = Self> {
 }
 
 pub trait MulShortAssign<Rhs = Self> {
-
     fn mul_short_assign(&mut self, rhs: Rhs);
 }
 
@@ -106,7 +108,7 @@ pub trait Field:
     + ToBits
     + FromBits
     + Serialize
-    + for <'a> Deserialize<'a>
+    + for<'a> Deserialize<'a>
     + CanonicalSerialize
     + CanonicalSerializeWithFlags
     + CanonicalDeserialize
@@ -214,6 +216,11 @@ pub trait Field:
 
     /// Exponentiates this element by a number represented with `u64` limbs,
     /// least significant limb first.
+    /// WARNING: This implementation doesn't take costant time with respect
+    /// to the exponent, and therefore is susceptible to side-channel attacks.
+    /// Be sure to use it in applications where timing (or similar) attacks
+    /// are not possible.
+    /// TODO: Add a side-channel secure variant.
     fn pow<S: AsRef<[u64]>>(&self, exp: S) -> Self {
         let mut res = Self::one();
 
@@ -238,10 +245,11 @@ pub trait Field:
     }
 }
 
-use std::io::{ Read, Result as IoResult };
+use std::io::{Read, Result as IoResult};
 impl<F: Field> FromBytesChecked for F {
-    fn read_checked<R: Read>(reader: R) -> IoResult<Self>
-    { Self::read(reader) }
+    fn read_checked<R: Read>(reader: R) -> IoResult<Self> {
+        Self::read(reader)
+    }
 }
 
 /// A trait that defines parameters for a prime field.
@@ -327,7 +335,7 @@ pub trait PrimeField: Field<BasePrimeField = Self> + FromStr {
     fn root_of_unity() -> Self;
 
     ///Returns the full root of unity
-    fn full_root_of_unity() -> Self;
+    fn full_root_of_unity() -> Option<Self>;
 
     /// Return the a QNR^T
     fn qnr_to_t() -> Self {
@@ -353,7 +361,6 @@ pub trait PrimeField: Field<BasePrimeField = Self> + FromStr {
     fn modulus_minus_one_div_two() -> Self::BigInt {
         Self::Params::MODULUS_MINUS_ONE_DIV_TWO
     }
-
 }
 
 impl<F: PrimeField> ToBits for F {
@@ -374,12 +381,14 @@ impl<F: PrimeField> ToBits for F {
             tmp.push(b);
         }
 
-        assert_eq!(tmp.len(), num_bits as usize);
+        debug_assert_eq!(tmp.len(), num_bits as usize);
 
         tmp
     }
 }
 
+// Defines a prime field element from a big endian vector of booleans, which
+// does not exceed the length of the modulus.
 impl<F: PrimeField> FromBits for F {
     #[inline]
     fn read_bits(bits: Vec<bool>) -> Result<Self, Error> {
@@ -388,23 +397,24 @@ impl<F: PrimeField> FromBits for F {
         //NOTE: We allow bits having enough leading bits to zero s.t. the length will be <= F::MODULUS_BITS
         let leading_zeros = leading_zeros(bits.as_slice()) as usize;
         let bits = &bits.as_slice()[leading_zeros..];
-        match bits.len() <=  modulus_bits {
+        match bits.len() <= modulus_bits {
             true => {
                 let read_bigint = <Self as PrimeField>::BigInt::from_bits(bits);
                 match read_bigint < F::Params::MODULUS {
                     true => Ok(Self::from_repr(read_bigint)),
                     false => {
-                        let e = Box::new(
-                            BitSerializationError::InvalidFieldElement("element is over the field modulus".to_owned())
-                        );
+                        let e = Box::new(BitSerializationError::InvalidFieldElement(
+                            "element is over the field modulus".to_owned(),
+                        ));
                         Err(e)
                     }
                 }
-            },
+            }
             false => {
-               let e = Box::new(
-                   BitSerializationError::InvalidFieldElement(format!("bit vec length is greater than the modulus bits ({})", modulus_bits))
-               );
+                let e = Box::new(BitSerializationError::InvalidFieldElement(format!(
+                    "bit vec length is greater than the modulus bits ({})",
+                    modulus_bits
+                )));
                 Err(e)
             }
         }
@@ -521,7 +531,8 @@ pub fn batch_inversion<F: Field>(v: &mut [F]) {
     tmp = tmp.inverse().unwrap(); // Guaranteed to be nonzero.
 
     // Second pass: iterate backwards to compute inverses
-    for (f, s) in v.iter_mut()
+    for (f, s) in v
+        .iter_mut()
         // Backwards
         .rev()
         // Ignore normalized elements

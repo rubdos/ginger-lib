@@ -1,16 +1,17 @@
+use crate::UniformRand;
 use crate::{
+    bits::{FromCompressedBits, ToCompressedBits},
     bytes::{FromBytes, ToBytes},
     fields::{Field, PrimeField, SquareRootField},
-    groups::Group, SemanticallyValid, FromBytesChecked, bits::{FromCompressedBits, ToCompressedBits},
-    CanonicalSerialize, CanonicalDeserialize
+    groups::Group,
+    CanonicalDeserialize, CanonicalSerialize, Error, FromBytesChecked, SemanticallyValid,
 };
-use crate::UniformRand;
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
     ops::{Add, AddAssign, Neg, Sub, SubAssign},
 };
-use serde::{Serialize, Deserialize};
 
 pub mod models;
 
@@ -47,6 +48,9 @@ pub mod sw6;
 #[cfg(feature = "tweedle")]
 pub mod tweedle;
 
+#[cfg(feature = "secp256k1")]
+pub mod secp256k1;
+
 #[cfg(test)]
 pub mod tests;
 
@@ -68,8 +72,16 @@ pub trait PairingEngine: Sized + 'static + Copy + Debug + Sync + Send + Eq + Par
         + Into<Self::G1Prepared>;
 
     /// A G1 element that has been preprocessed for use in a pairing.
-    type G1Prepared: ToBytes + FromBytes + Serialize + for<'a> Deserialize<'a> + Default + Clone +
-                     Send + Sync + Debug + From<Self::G1Affine>;
+    type G1Prepared: ToBytes
+        + FromBytes
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Default
+        + Clone
+        + Send
+        + Sync
+        + Debug
+        + From<Self::G1Affine>;
 
     /// The projective representation of an element in G2.
     type G2Projective: ProjectiveCurve<BaseField = Self::Fqe, ScalarField = Self::Fr, Affine = Self::G2Affine>
@@ -83,8 +95,18 @@ pub trait PairingEngine: Sized + 'static + Copy + Debug + Sync + Send + Eq + Par
         + Into<Self::G2Prepared>;
 
     /// A G2 element that has been preprocessed for use in a pairing.
-    type G2Prepared: ToBytes + FromBytes + Serialize + for<'a> Deserialize<'a> + Default + Eq +
-                     PartialEq + Clone + Send + Sync + Debug + From<Self::G2Affine>;
+    type G2Prepared: ToBytes
+        + FromBytes
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Default
+        + Eq
+        + PartialEq
+        + Clone
+        + Send
+        + Sync
+        + Debug
+        + From<Self::G2Affine>;
 
     /// The base field that hosts G1.
     type Fq: PrimeField + SquareRootField;
@@ -97,29 +119,29 @@ pub trait PairingEngine: Sized + 'static + Copy + Debug + Sync + Send + Eq + Par
 
     /// Perform a miller loop with some number of (G1, G2) pairs.
     #[must_use]
-    fn miller_loop<'a, I>(i: I) -> Self::Fqk
-        where
-            I: IntoIterator<Item = &'a (Self::G1Prepared, Self::G2Prepared)>;
+    fn miller_loop<'a, I>(i: I) -> Result<Self::Fqk, Error>
+    where
+        I: IntoIterator<Item = &'a (Self::G1Prepared, Self::G2Prepared)>;
 
     /// Perform final exponentiation of the result of a miller loop.
     #[must_use]
-    fn final_exponentiation(_: &Self::Fqk) -> Option<Self::Fqk>;
+    fn final_exponentiation(_: &Self::Fqk) -> Result<Self::Fqk, Error>;
 
     /// Computes a product of pairings.
     #[must_use]
-    fn product_of_pairings<'a, I>(i: I) -> Self::Fqk
-        where
-            I: IntoIterator<Item = &'a (Self::G1Prepared, Self::G2Prepared)>,
+    fn product_of_pairings<'a, I>(i: I) -> Result<Self::Fqk, Error>
+    where
+        I: IntoIterator<Item = &'a (Self::G1Prepared, Self::G2Prepared)>,
     {
-        Self::final_exponentiation(&Self::miller_loop(i)).unwrap()
+        Self::final_exponentiation(&Self::miller_loop(i)?)
     }
 
     /// Performs multiple pairing operations
     #[must_use]
-    fn pairing<G1, G2>(p: G1, q: G2) -> Self::Fqk
-        where
-            G1: Into<Self::G1Affine>,
-            G2: Into<Self::G2Affine>,
+    fn pairing<G1, G2>(p: G1, q: G2) -> Result<Self::Fqk, Error>
+    where
+        G1: Into<Self::G1Affine>,
+        G2: Into<Self::G2Affine>,
     {
         let g1_prep = Self::G1Prepared::from(p.into());
         let g2_prep = Self::G2Prepared::from(q.into());
@@ -135,7 +157,7 @@ pub trait ProjectiveCurve:
     + ToBytes
     + FromBytes
     + Serialize
-    + for <'a> Deserialize<'a>
+    + for<'a> Deserialize<'a>
     + CanonicalSerialize
     + CanonicalDeserialize
     + SemanticallyValid
@@ -231,7 +253,7 @@ pub trait AffineCurve:
     + ToBytes
     + FromBytes
     + Serialize
-    + for <'a> Deserialize<'a>
+    + for<'a> Deserialize<'a>
     + CanonicalSerialize
     + CanonicalDeserialize
     + SemanticallyValid
@@ -297,6 +319,21 @@ pub trait AffineCurve:
     /// `Self::ScalarField`.
     #[must_use]
     fn mul_by_cofactor_inv(&self) -> Self;
+}
+
+/// The `EndoMulCurve` trait for curves that have a non-trivial endomorphism
+/// `Phi` of the form `Phi(x,y) = (zeta*x,y)`.
+pub trait EndoMulCurve: AffineCurve {
+    /// Apply `Phi`
+    fn apply_endomorphism(&self) -> Self;
+
+    /// Conversion of a bit sequence used in `endo_mul()` into its equivalent
+    /// scalar
+    fn endo_rep_to_scalar(bits: Vec<bool>) -> Result<Self::ScalarField, Error>;
+
+    /// Endomorphism-based multiplication of `&self` with `bits`, a little-endian
+    /// endomorphism representation.
+    fn endo_mul(&self, bits: Vec<bool>) -> Result<Self::Projective, Error>;
 }
 
 impl<C: ProjectiveCurve> Group for C {

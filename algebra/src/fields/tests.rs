@@ -1,5 +1,8 @@
-use crate::{fields::{Field, LegendreSymbol, PrimeField, SquareRootField}, ToBytes, to_bytes, Flags, CanonicalSerialize, CanonicalDeserialize, SWFlags};
-use rand::{Rng, SeedableRng, thread_rng};
+use crate::{
+    fields::{Field, LegendreSymbol, PrimeField, SquareRootField},
+    to_bytes, CanonicalDeserialize, CanonicalSerialize, Flags, SWFlags, ToBytes,
+};
+use rand::{thread_rng, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use std::io::Cursor;
 
@@ -227,13 +230,22 @@ fn field_canonical_serialization_test<F: Field>(buf_size: usize) {
         {
             let mut serialized = vec![0u8; buf_size + 1];
             let mut cursor = Cursor::new(&mut serialized[..]);
-            a.serialize_with_flags(&mut cursor, SWFlags::from_y_sign(true))
+            a.serialize_with_flags(&mut cursor, SWFlags::from_y_parity(true))
                 .unwrap();
             let mut cursor = Cursor::new(&serialized[..]);
             let (b, flags) = F::deserialize_with_flags::<_, SWFlags>(&mut cursor).unwrap();
-            assert_eq!(flags.is_positive(), Some(true));
+            assert_eq!(flags.is_odd(), Some(true));
             assert!(!flags.is_infinity());
             assert_eq!(a, b);
+        }
+
+        {
+            let mut serialized = vec![0; buf_size - 1];
+            let mut cursor = Cursor::new(&mut serialized[..]);
+            CanonicalSerialize::serialize(&a, &mut cursor).unwrap_err();
+
+            let mut cursor = Cursor::new(&serialized[..]);
+            <F as CanonicalDeserialize>::deserialize(&mut cursor).unwrap_err();
         }
 
         #[derive(Default, Clone, Copy, Debug)]
@@ -262,21 +274,12 @@ fn field_canonical_serialization_test<F: Field>(buf_size: usize) {
                 false
             });
             assert!(if let SerializationError::NotEnoughSpace =
-            F::deserialize_with_flags::<_, DummyFlags>(&mut &serialized[..]).unwrap_err()
+                F::deserialize_with_flags::<_, DummyFlags>(&mut &serialized[..]).unwrap_err()
             {
                 true
             } else {
                 false
             });
-        }
-
-        {
-            let mut serialized = vec![0; buf_size - 1];
-            let mut cursor = Cursor::new(&mut serialized[..]);
-            CanonicalSerialize::serialize(&a, &mut cursor).unwrap_err();
-
-            let mut cursor = Cursor::new(&serialized[..]);
-            <F as CanonicalDeserialize>::deserialize(&mut cursor).unwrap_err();
         }
     }
 }
@@ -392,23 +395,18 @@ pub fn from_str_test<F: PrimeField>() {
 
 pub fn field_test<F: Field>(a: F, b: F) {
     let zero = F::zero();
-    assert_eq!(zero, zero);
     assert_eq!(zero.is_zero(), true);
     assert_eq!(zero.is_one(), false);
 
     let one = F::one();
-    assert_eq!(one, one);
     assert_eq!(one.is_zero(), false);
     assert_eq!(one.is_one(), true);
     assert_eq!(zero + &one, one);
 
     let two = one + &one;
-    assert_eq!(two, two);
     assert_ne!(zero, two);
     assert_ne!(one, two);
 
-    // a == a
-    assert_eq!(a, a);
     // a + 0 = a
     assert_eq!(a + &zero, a);
     // a - 0 = a

@@ -19,23 +19,19 @@ pub use self::basic_radix_2_domain::*;
 pub mod mixed_radix_2_domain;
 pub use self::mixed_radix_2_domain::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bls12_381"))]
 mod test;
 
-use crate::{
-    SparsePolynomial,
-    multicore::Worker,
-};
 use crate::PrimeField;
+use crate::{multicore::Worker, Error, SparsePolynomial};
 use rayon::prelude::*;
 //use std::hash::Hash;
-use std::fmt::Debug;
-use std::any::Any;
 use rand::Rng;
+use std::any::Any;
+use std::fmt::Debug;
 
 /// Defines a domain over which finite field (I)FFTs can be performed.
-pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync
-{
+pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync {
     /// Returns the size of the domain
     fn size(&self) -> usize;
 
@@ -122,16 +118,25 @@ pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync
     /// evaluations in the domain.
     /// Returns the evaluations of the product over the domain.
     #[must_use]
-    fn mul_polynomials_in_evaluation_domain(&self, self_evals: &[F], other_evals: &[F]) -> Vec<F> {
-        assert_eq!(self_evals.len(), other_evals.len());
+    fn mul_polynomials_in_evaluation_domain(
+        &self,
+        self_evals: &[F],
+        other_evals: &[F],
+    ) -> Result<Vec<F>, Error> {
+        if self_evals.len() != other_evals.len() {
+            Err(format!("Evals sizes are not same"))?
+        }
         let mut result = self_evals.to_vec();
-        result.par_iter_mut().zip(other_evals).for_each(|(a,b)| *a *= b);
         result
+            .par_iter_mut()
+            .zip(other_evals)
+            .for_each(|(a, b)| *a *= b);
+        Ok(result)
     }
 
-    /// Given an arbitrary field element `tau`, compute the Lagrange kernel 
+    /// Given an arbitrary field element `tau`, compute the Lagrange kernel
     ///     L(z,tau) = 1/n * z * (1 - tau^n)/(z -tau).
-    /// The Lagrange kernel is useful when one needs to evaluate many polynomials given in 
+    /// The Lagrange kernel is useful when one needs to evaluate many polynomials given in
     /// Lagrange representation at that given point.
     /// This implementation works also if `tau` is selected from the domain.
     fn evaluate_all_lagrange_coefficients(&self, tau: F) -> Vec<F> {
@@ -161,7 +166,7 @@ pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync
             let mut u = vec![F::zero(); size];
             let mut ls = vec![F::zero(); size];
             // u[i] = tau - z  at z = g^i,
-            // ls[i] = (tau^n - 1)/n * g^i, 
+            // ls[i] = (tau^n - 1)/n * g^i,
             for i in 0..size {
                 u[i] = tau - &r;
                 ls[i] = l;
@@ -170,7 +175,7 @@ pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync
             }
 
             batch_inversion(u.as_mut_slice());
-            // We compute L(z,tau) = u[i]*ls[i]. 
+            // We compute L(z,tau) = u[i]*ls[i].
             u.par_iter_mut().zip(ls).for_each(|(tau_minus_r, l)| {
                 *tau_minus_r *= l;
             });
@@ -180,15 +185,24 @@ pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync
 
     /// Given an index which assumes the first elements of this domain are the elements of
     /// another (sub)domain with size size_s, this returns the actual index into this domain.
-    fn reindex_by_subdomain(&self, other_size: usize, index: usize) -> usize {
-        assert!(self.size() >= other_size);
+    fn reindex_by_subdomain(&self, other_size: usize, index: usize) -> Result<usize, Error> {
+        if self.size() < other_size {
+            Err(format!(
+                "'self' domain size must be bigger than 'other' domain size. 'self' size: {}, 'other' size: {}",
+                self.size(),
+                other_size
+            ))?
+        }
+        if other_size == 0 {
+            Err(format!("'other' size must be bigger than 0"))?
+        }
         // Let this subgroup be G, and the subgroup we're re-indexing by be S.
         // Since its a subgroup, the 0th element of S is at index 0 in G, the first element of S is at
         // index |G|/|S|, the second at 2*|G|/|S|, etc.
         // Thus for an index i that corresponds to S, the index in G is i*|G|/|S|
         let period = self.size() / other_size;
         if index < other_size {
-            index * period
+            Ok(index * period)
         } else {
             // Let i now be the index of this element in G \ S
             // Let x be the number of elements in G \ S, for every element in S. Then x = (|G|/|S| - 1).
@@ -197,9 +211,12 @@ pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync
             // The +1 is because index 0 of G is S_0, so the position is offset by at least one.
             // The floor(i / x) term is because after x elements in G \ S, there is one more element from S
             // that will have appeared in G.
+            if period <= 1 {
+                Err(format!("'period' must be bigger than 1"))?
+            }
             let i = index - other_size;
             let x = period - 1;
-            i + (i / x) + 1
+            Ok(i + (i / x) + 1)
         }
     }
 
@@ -209,27 +226,28 @@ pub trait EvaluationDomain<F: PrimeField>: Debug + Send + Sync
             cur_elem: F::one(),
             cur_pow: 0,
             size: self.size() as u64,
-            group_gen: self.group_gen()
+            group_gen: self.group_gen(),
         }
     }
 
     // Support to PartialEq to make this trait a trait object
-    fn eq(&self, other: & dyn EvaluationDomain<F>) -> bool;
+    fn eq(&self, other: &dyn EvaluationDomain<F>) -> bool;
 
-    fn as_any(&self) -> & dyn Any;
+    fn as_any(&self) -> &dyn Any;
 
     // Support to Clone to make this trait a trait object
     fn clone_and_box(&self) -> Box<dyn EvaluationDomain<F>>;
 }
 
-impl<'a, 'b, F: PrimeField> PartialEq<dyn EvaluationDomain<F>+'b> for dyn EvaluationDomain<F>+'a {
-    fn eq(&self, other: &(dyn EvaluationDomain<F>+'b)) -> bool {
+impl<'a, 'b, F: PrimeField> PartialEq<dyn EvaluationDomain<F> + 'b>
+    for dyn EvaluationDomain<F> + 'a
+{
+    fn eq(&self, other: &(dyn EvaluationDomain<F> + 'b)) -> bool {
         EvaluationDomain::<F>::eq(self, other)
     }
 }
 
-impl<F: PrimeField> Clone for Box<dyn EvaluationDomain<F>>
-{
+impl<F: PrimeField> Clone for Box<dyn EvaluationDomain<F>> {
     fn clone(&self) -> Box<dyn EvaluationDomain<F>> {
         self.clone_and_box()
     }
@@ -237,10 +255,10 @@ impl<F: PrimeField> Clone for Box<dyn EvaluationDomain<F>>
 
 /// An iterator over the elements of the domain.
 pub struct Elements<F: PrimeField> {
-    cur_elem:   F,
-    cur_pow:    u64,
-    size:       u64,
-    group_gen:  F,
+    cur_elem: F,
+    cur_pow: u64,
+    size: u64,
+    group_gen: F,
 }
 
 impl<F: PrimeField> Iterator for Elements<F> {
@@ -257,10 +275,10 @@ impl<F: PrimeField> Iterator for Elements<F> {
     }
 }
 
-pub fn sample_element_outside_domain<
-    F: PrimeField,
-    R: Rng
->(domain: &Box<dyn EvaluationDomain<F>>, rng: &mut R) -> F {
+pub fn sample_element_outside_domain<F: PrimeField, R: Rng>(
+    domain: &Box<dyn EvaluationDomain<F>>,
+    rng: &mut R,
+) -> F {
     let mut t = F::rand(rng);
     while domain.evaluate_vanishing_polynomial(t).is_zero() {
         t = F::rand(rng);
@@ -268,12 +286,12 @@ pub fn sample_element_outside_domain<
     t
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bls12_381"))]
 mod tests {
+    use crate::fields::bls12_381::fr::Fr;
     use crate::get_best_evaluation_domain;
     use crate::Field;
-    use crate::fields::bls12_381::fr::Fr;
-    use rand::{Rng, thread_rng};
+    use rand::{thread_rng, Rng};
 
     #[test]
     fn vanishing_polynomial_evaluation() {
@@ -284,7 +302,10 @@ mod tests {
             let z = domain.vanishing_polynomial();
             for _ in 0..100 {
                 let point = rng.gen();
-                assert_eq!(z.evaluate(point), domain.evaluate_vanishing_polynomial(point))
+                assert_eq!(
+                    z.evaluate(point),
+                    domain.evaluate_vanishing_polynomial(point)
+                )
             }
         }
     }
