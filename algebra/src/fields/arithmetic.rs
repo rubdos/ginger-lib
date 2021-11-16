@@ -91,8 +91,8 @@ macro_rules! impl_field_mul_short_assign {
         #[unroll_for_loops]
         // Partial, or short, Montgomery multiplication. Computes the product
         //      R*xy mod p = (R*x mod p)*(R_s * y mod p)
-        // for y having a 1-limb sized representation (R_s*y mod p) w.r.t. the 
-        // "short" Montgomery constant R_s = 2^64. 
+        // for y having a 1-limb sized representation (R_s*y mod p) w.r.t. the
+        // "short" Montgomery constant R_s = 2^64.
         //TODO: Can we write the assembly equivalent of this ? Is it worth ?
         //TODO: Probably there's a more compact way to write this
         fn mul_short_assign(&mut self, other: &Self) {

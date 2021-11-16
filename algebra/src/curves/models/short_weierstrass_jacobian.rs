@@ -1,9 +1,9 @@
 use crate::{
     bytes::{FromBytes, ToBytes},
-    curves::{models::{
-        SWModelParameters as Parameters,
-        EndoMulParameters as EndoParameters,
-    }, AffineCurve, ProjectiveCurve, EndoMulCurve},
+    curves::{
+        models::{EndoMulParameters as EndoParameters, SWModelParameters as Parameters},
+        AffineCurve, EndoMulCurve, ProjectiveCurve,
+    },
     fields::{BitIterator, Field, PrimeField, SquareRootField},
     BitSerializationError, CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
     CanonicalSerializeWithFlags, Error, FromBytesChecked, FromCompressedBits, SWFlags,
@@ -299,7 +299,6 @@ impl<P: Parameters> AffineCurve for GroupAffine<P> {
 }
 
 impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
-
     fn apply_endomorphism(&self) -> Self {
         let mut self_e = self.clone();
         self_e.x.mul_assign(P::ENDO_COEFF);
@@ -307,9 +306,8 @@ impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
     }
 
     fn endo_rep_to_scalar(bits: Vec<bool>) -> Result<Self::ScalarField, Error> {
-
-        let mut a : P::ScalarField = 2u64.into();
-        let mut b : P::ScalarField = 2u64.into();
+        let mut a: P::ScalarField = 2u64.into();
+        let mut b: P::ScalarField = 2u64.into();
 
         let one = P::ScalarField::one();
         let one_neg = one.neg();
@@ -327,12 +325,7 @@ impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
             a.double_in_place();
             b.double_in_place();
 
-            let s =
-                if bits[i * 2] {
-                    &one
-                } else {
-                    &one_neg
-                };
+            let s = if bits[i * 2] { &one } else { &one_neg };
 
             if bits[i * 2 + 1] {
                 a.add_assign(s);
@@ -344,9 +337,9 @@ impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
         Ok(a.mul(P::ENDO_SCALAR) + &b)
     }
 
-    /// Performs scalar multiplication of this element with mixed addition.
+    /// Endomorphism-based multiplication of a curve point
+    /// with a scalar in little-endian endomorphism representation.
     fn endo_mul(&self, bits: Vec<bool>) -> Result<Self::Projective, Error> {
-
         let self_neg = self.neg();
 
         let self_e = self.apply_endomorphism();
@@ -366,21 +359,19 @@ impl<P: EndoParameters> EndoMulCurve for GroupAffine<P> {
         }
 
         for i in (0..(bits.len() / 2)).rev() {
-
-            let s =
-                if bits[i * 2 + 1] {
-                    if bits[i * 2] {
-                        &self_e
-                    } else {
-                        &self_e_neg
-                    }
+            let s = if bits[i * 2 + 1] {
+                if bits[i * 2] {
+                    &self_e
                 } else {
-                    if bits[i * 2] {
-                        &self
-                    } else {
-                        &self_neg
-                    }
-                };
+                    &self_e_neg
+                }
+            } else {
+                if bits[i * 2] {
+                    &self
+                } else {
+                    &self_neg
+                }
+            };
 
             acc.double_in_place();
             acc.add_assign_mixed(s);
