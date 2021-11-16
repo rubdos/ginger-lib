@@ -102,3 +102,9 @@ name = "poseidon_mht"
 path = "benches/crypto_primitives/poseidon_mht.rs"
 harness = false
 required-features = ["merkle_tree", "mnt4_753", "mnt6_753"]
+
+[[bench]]
+name = "in_memory_smt_tweedle"
+path = "benches/crypto_primitives/smt.rs"
+harness = false
+required-features = ["merkle_tree", "tweedle"]

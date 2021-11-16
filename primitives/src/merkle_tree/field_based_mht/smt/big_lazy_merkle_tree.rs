@@ -1,3 +1,4 @@
+use algebra::serialize::*;
 use crate::{ActionLeaf, Error, crh::{FieldBasedHash, BatchFieldBasedHash, FieldBasedHashParameters}, merkle_tree::{
         MerkleTreeError,    
         field_based_mht::{
@@ -12,7 +13,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 /// An in-memory, sparse, Merkle Tree with lazy leaves evaluation;
 /// "lazy" means that leaves are inserted/removed in batch, and only
 /// the affected nodes in the tree are updated.
-#[derive(Debug)]
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LazyBigMerkleTree<T: BatchFieldBasedMerkleTreeParameters> {
     /// the height of this tree
     pub(crate) height: u8,

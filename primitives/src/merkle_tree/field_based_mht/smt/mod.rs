@@ -10,9 +10,9 @@ pub enum ActionLeaf {
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 // Action associated to the leaf
 pub struct OperationLeaf <F: algebra::Field>{
-    idx: u32,
-    action: ActionLeaf,
-    hash: Option<F>,
+    pub idx: u32,
+    pub action: ActionLeaf,
+    pub hash: Option<F>,
 }
 
 impl<F: algebra::Field> OperationLeaf<F> {
