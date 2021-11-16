@@ -3,31 +3,40 @@ use crate::{ActionLeaf, Error, crh::{FieldBasedHash, BatchFieldBasedHash, FieldB
         field_based_mht::{
             BatchFieldBasedMerkleTreeParameters, check_precomputed_parameters,
             FieldBasedMerkleTreePath, FieldBasedBinaryMHTPath,
-            smt::{
-                Coord, OperationLeaf,
-            },
+            smt::OperationLeaf,
         },
     }};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+/// An in-memory, sparse, Merkle Tree with lazy leaves evaluation;
+/// "lazy" means that leaves are inserted/removed in batch, and only
+/// the affected nodes in the tree are updated.
 #[derive(Debug)]
 pub struct LazyBigMerkleTree<T: BatchFieldBasedMerkleTreeParameters> {
-    // the height of this tree
-    pub(crate) height: usize,
-    // number of leaves
-    pub(crate) width: usize,
-    // stores the non-empty nodes of the tree
-    pub(crate) nodes: HashMap<Coord, T::Data>,
+    /// the height of this tree
+    pub(crate) height: u8,
+    /// number of leaves
+    pub(crate) width: u32,
+    /// stores the non-empty nodes of the tree.
+    /// We don't save the empty nodes, that's why we use a Map,
+    /// but the nodes are still identified uniquely by their
+    /// index (otherwise we would've need to store an additional
+    /// byte to specify its height.)
+    pub(crate) nodes: HashMap<u32, T::Data>,
 }
 
 impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
     /// Creates a new tree of specified `height`.
     pub fn new(
-        height: usize,
+        height: u8,
     ) -> Self 
     {
-        assert!(check_precomputed_parameters::<T>(height));
+        // Node indices are expressed with u32. A tree with height h has 2^(h+1) - 1 nodes.
+        // This means we cannot exceed h = 31 if we want to be able to index the nodes using
+        // a u32.
+        assert!(height <= 31);
+        assert!(check_precomputed_parameters::<T>(height as usize));
 
         let rate = <<T::H  as FieldBasedHash>::Parameters as FieldBasedHashParameters>::R;
 
@@ -37,7 +46,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
         assert_eq!(rate, T::MERKLE_ARITY);
 
         // If height is 0 it must not be possible to add any leaf, so we'll set width to 0. 
-        let width = if height != 0 { T::MERKLE_ARITY.pow(height as u32) } else { 0 };
+        let width: u32 = if height != 0 { T::MERKLE_ARITY.pow(height as u32) as u32 } else { 0 };
 
         Self {
             height,
@@ -47,39 +56,41 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
     }
 
     pub fn get_root(&self) -> T::Data {
+        let root_idx: u32 = (1 << (self.height + 1)) - 2;
         self.nodes
-            .get(&Coord { height: self.height, idx: 0 })
+            .get(&root_idx)
             .map_or_else(
-                || T::ZERO_NODE_CST.unwrap().nodes[self.height], // If not in nodes, then the root is empty
+                || T::ZERO_NODE_CST.unwrap().nodes[self.height as usize], // If not in nodes, then the root is empty
                 |&data| data
             )
     }
 
     /// Used for testing purposes: return (in order) the non empty leaves of the tree
-    pub(crate) fn get_non_empty_leaves(&self) -> BTreeMap<Coord, T::Data> {
+    #[allow(dead_code)]
+    pub(crate) fn get_non_empty_leaves(&self) -> BTreeMap<u32, T::Data> {
         let mut sorted_non_empty_leaves = BTreeMap::new();
-        self.nodes.iter().for_each(|(coord, data)| {
-            if coord.height == 0 {
-                sorted_non_empty_leaves.insert(*coord, *data);
+        self.nodes.iter().for_each(|(idx, data)| {
+            if idx < &self.width {
+                sorted_non_empty_leaves.insert(*idx, *data);
             }
         });
         sorted_non_empty_leaves
     }
 
-    pub fn height(&self) -> usize { self.height }
+    pub fn height(&self) -> u8 { self.height }
 
     fn batch_hash(input: &[T::Data]) -> Vec<T::Data> {
         <T::BH as BatchFieldBasedHash>::batch_evaluate(input)
             .expect("Should be able to compute batch hash")
     }
 
-    pub fn is_leaf_empty(&self, idx: usize) -> Result<bool, Error> 
+    pub fn is_leaf_empty(&self, idx: u32) -> Result<bool, Error> 
     {
         // check that the index of the leaf is less than the width of the Merkle tree
         if idx >= self.width {
-            return Err(MerkleTreeError::IncorrectLeafIndex(idx, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
+            return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
         }
-        Ok(!self.nodes.contains_key(&Coord { height: 0, idx }))
+        Ok(!self.nodes.contains_key(&idx))
     }
 
     pub fn is_tree_empty(&self) -> bool {
@@ -89,7 +100,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
     /// Check and return Error in case of:
     /// - Invalid leaf idx (leaf.coord.idx > self.width);
     /// - Removal of a non existing leaf
-    fn pre_check_leaves(&mut self, leaves_map: &mut HashMap<usize, (ActionLeaf, Option<T::Data>)>) -> Result<(), Error> {
+    fn pre_check_leaves(&mut self, leaves_map: &mut HashMap<u32, (ActionLeaf, Option<T::Data>)>) -> Result<(), Error> {
         // Collect leaves whose value is set to be empty node
         let mut leaves_to_remove = vec![];
 
@@ -100,14 +111,13 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
                 if self.height == 0 {
                     return Err(MerkleTreeError::MaximumLeavesReached(0))?
                 } else {
-                    return Err(MerkleTreeError::IncorrectLeafIndex(idx, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
+                    return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
                 }
             }
 
             // Forbid attempt to remove a non-existing leaf
-            let coord = Coord { height: 0, idx };
-            if matches!(action, ActionLeaf::Remove) && (self.is_tree_empty() || !self.nodes.contains_key(&coord)) {
-                return Err(MerkleTreeError::IncorrectLeafIndex(coord.idx, format!("Leaf with index {} doesn't exist", coord.idx)))?
+            if matches!(action, ActionLeaf::Remove) && (self.is_tree_empty() || !self.nodes.contains_key(&idx)) {
+                return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf with index {} doesn't exist", idx)))?
             }
 
             // Save into leaves_to_remove vec if empty node
@@ -138,7 +148,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
         self.process_unique_leaves(leaves_map)
     }
 
-    fn process_unique_leaves (&mut self, mut leaves_map: HashMap<usize, (ActionLeaf, Option<T::Data>)>) -> Result<T::Data, Error> {
+    fn process_unique_leaves (&mut self, mut leaves_map: HashMap<u32, (ActionLeaf, Option<T::Data>)>) -> Result<T::Data, Error> {
 
         assert_eq!(T::MERKLE_ARITY, 2, "Arity of the Merkle tree is not 2.");
 
@@ -146,64 +156,57 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
         self.pre_check_leaves(&mut leaves_map)?;
 
         // Collect nodes to (re)compute for each level of the tree
-        let mut nodes_to_process_in_parallel: Vec<HashSet<Coord>> = Vec::with_capacity(self.height);
+        let mut nodes_to_process_in_parallel: Vec<HashSet<u32>> = Vec::with_capacity(self.height as usize);
 
         // Collect leaves in the first level and contextually add/remove them to/from self.nodes
-        let mut leaves = HashSet::<Coord>::new();
+        let mut leaves = HashSet::<u32>::new();
         for (idx, (action, data)) in leaves_map.into_iter() {
 
             // Perform insertion/removal depending on action
-            let coord = Coord { height: 0, idx };
             if matches!(action, ActionLeaf::Remove) {
-                self.nodes.remove(&coord).unwrap();
+                self.nodes.remove(&idx).unwrap();
             } else {
-                self.nodes.insert(coord, data.unwrap());
+                self.nodes.insert(idx, data.unwrap());
             }
-            leaves.insert(coord);
+            leaves.insert(idx);
         }
         nodes_to_process_in_parallel.push(leaves);
 
-
         // Find all the nodes that must be recomputed following the
         // additional/removal of leaves
-        for height in 0..self.height {
+        for height in 0..self.height as usize {
             // Keeps track (uniquely) of the nodes to be processed at the level above
-            let mut visited_nodes: HashSet<Coord> = HashSet::new();
+            let mut visited_nodes: HashSet<u32> = HashSet::new();
 
             nodes_to_process_in_parallel[height]
                 .iter()
-                .for_each(|coord| {
+                .for_each(|&child_idx| {
 
-                    // Compute parent coord
-                    let height_parent = coord.height + 1;
-                    let idx_parent = coord.idx / T::MERKLE_ARITY;
-                    let parent_coord = Coord { height: height_parent, idx: idx_parent };
-                    visited_nodes.insert(parent_coord);
+                    // Compute parent idx
+                    let parent_idx = self.width + (child_idx/T::MERKLE_ARITY as u32);
+                    visited_nodes.insert(parent_idx);
                 });
 
             nodes_to_process_in_parallel.push(visited_nodes);
         }
 
         // Compute hashes of the affected nodes (ignoring leaf nodes)
-        for height in 1..=self.height {
+        for height in 1..=self.height as usize {
             let mut input_vec = Vec::new(); // Leaves to be hashed
             let mut empty_node = Vec::new(); // Keep track of which node is empty
     
             // Collect leaves to be hashed in parallel
             nodes_to_process_in_parallel[height]
                 .iter()
-                .for_each(|coord| {    
+                .for_each(|&parent_idx| {    
 
                     // Compute children coords and get corresponding values
-                    let idx = coord.idx;
-                    let left_child_idx = idx * T::MERKLE_ARITY;
+                    let left_child_idx = (parent_idx - self.width) * T::MERKLE_ARITY as u32;
                     let right_child_idx= left_child_idx + 1;
-                    let left_child_coord = Coord { height: coord.height - 1, idx: left_child_idx};
-                    let right_child_coord = Coord { height: coord.height - 1, idx: right_child_idx};
         
                     let mut is_node_empty = true;
                     let left_hash = self.nodes
-                        .get(&left_child_coord)
+                        .get(&left_child_idx)
                         .map_or_else(
                             || T::ZERO_NODE_CST.unwrap().nodes[height - 1],
                             |&data| {
@@ -213,7 +216,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
                         );
         
                     let right_hash = self.nodes
-                        .get(&right_child_coord)
+                        .get(&right_child_idx)
                         .map_or_else(
                             || T::ZERO_NODE_CST.unwrap().nodes[height - 1],
                             |&data| {
@@ -230,7 +233,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
                     } else {
                         // If the node was present in self.nodes we must remove it,
                         // as it has become empty due to some leaf removal operation
-                        self.nodes.remove(coord);
+                        self.nodes.remove(&parent_idx);
                     }
         
                     empty_node.push(is_node_empty);
@@ -244,9 +247,9 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
     
                 // Update the nodes map with the new values
                 let mut output_vec_index = 0;
-                for (coord, is_empty) in nodes_to_process_in_parallel[height].iter().zip(empty_node) {
+                for (&idx, is_empty) in nodes_to_process_in_parallel[height].iter().zip(empty_node) {
                     if !is_empty {
-                        self.nodes.insert(*coord, output_vec[output_vec_index]);
+                        self.nodes.insert(idx, output_vec[output_vec_index]);
                         output_vec_index += 1;
                     }
                 }
@@ -258,29 +261,28 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
     }
 
     // NB. Allows to get Merkle Path of empty leaves too
-    pub fn get_merkle_path(&mut self, idx: usize) -> Result<FieldBasedBinaryMHTPath<T>, Error>
+    pub fn get_merkle_path(&mut self, idx: u32) -> Result<FieldBasedBinaryMHTPath<T>, Error>
     {
         // check that the index of the leaf is less than the width of the Merkle tree
         if idx >= self.width {
-            return Err(MerkleTreeError::IncorrectLeafIndex(idx, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
+            return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
         }
 
-        let mut path = Vec::with_capacity(self.height);
+        let mut path = Vec::with_capacity(self.height as usize);
         let mut node_idx = idx;
-        let mut height = 0;
-        while height != self.height {
+        let mut height = 0usize;
+        while height != self.height as usize {
 
             // Estabilish if sibling is a left or right child
-            let (sibling_idx, direction) = if node_idx % T::MERKLE_ARITY == 0 {
+            let (sibling_idx, direction) = if node_idx % T::MERKLE_ARITY as u32 == 0 {
                 (node_idx + 1, false)
             } else {
                 (node_idx - 1, true)
             };
 
             // Get its hash
-            let sibling_coord = Coord { height, idx: sibling_idx };
             let sibling = self.nodes
-                .get(&sibling_coord)
+                .get(&sibling_idx)
                 .map_or_else(
                     || T::ZERO_NODE_CST.unwrap().nodes[height],
                     |&data| data
@@ -290,9 +292,9 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
             path.push((sibling, direction));
 
             height += 1; // go up one level
-            node_idx = node_idx / T::MERKLE_ARITY; // compute the index of the parent
+            node_idx = self.width + (node_idx / T::MERKLE_ARITY as u32); // compute the index of the parent
         }
-        assert_eq!(self.nodes.get(&Coord { height, idx: node_idx }).unwrap(), &self.get_root());
+        assert_eq!(self.nodes.get(&node_idx).unwrap(), &self.get_root());
 
         Ok(FieldBasedBinaryMHTPath::<T>::new(path))
     }
@@ -315,21 +317,21 @@ mod test {
 
     use rand::{Rng, RngCore, prelude::SliceRandom, thread_rng};
 
-    const TEST_HEIGHT: usize = 10;
+    const TEST_HEIGHT: u8 = 10;
     const NUM_SAMPLES: usize = 10;
 
     fn compute_append_only_tree_root<T: BatchFieldBasedMerkleTreeParameters>(
         smt: &LazyBigMerkleTree<T>,
     ) -> T::Data
     {
-        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height, smt.width);
+        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize);
         let mut last_idx = 0;
-        smt.get_non_empty_leaves().iter().for_each(|(coord, leaf)| {
-            for _ in last_idx..coord.idx {
+        smt.get_non_empty_leaves().iter().for_each(|(&idx, leaf)| {
+            for _ in last_idx..idx {
                 optimized.append(T::ZERO_NODE_CST.unwrap().nodes[0]).unwrap();
             }
             optimized.append(*leaf).unwrap();
-            last_idx = coord.idx + 1;
+            last_idx = idx + 1;
         });
         optimized.finalize().root().unwrap()
     }
@@ -338,7 +340,7 @@ mod test {
     /// of all leaves additions and all leaves removals. If 'adjacent_leaves' is enabled, the batches will be
     /// made up of leaves with subsequent indices
     fn test_batch_all_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
-        height: usize,
+        height: u8,
         rng: &mut R,
         adjacent_leaves: bool,
     ) 
@@ -357,7 +359,7 @@ mod test {
         }
 
         // Test insertions
-        let chunk_size = rng.gen_range(1, num_leaves + 1);
+        let chunk_size = rng.gen_range(1, num_leaves + 1) as usize;
         leaves
             .chunks(chunk_size)
             .for_each(|leaves| {
@@ -372,8 +374,7 @@ mod test {
             });
         
         // Nodes map must be full
-        assert_eq!(smt.nodes.len(), (num_leaves * 2) - 1);
-
+        assert_eq!(smt.nodes.len() as u32, (num_leaves * 2) - 1);
 
         // Test removals
         // Remove all leaves and update smt
@@ -395,7 +396,7 @@ mod test {
         });
 
         // In the end, we must have an empty root...
-        assert_eq!(smt.get_root(), T::ZERO_NODE_CST.unwrap().nodes[height], "Root after removal of all leaves must be equal to empty root");
+        assert_eq!(smt.get_root(), T::ZERO_NODE_CST.unwrap().nodes[height as usize], "Root after removal of all leaves must be equal to empty root");
 
         // ...and nodes map must be empty
         assert!(smt.nodes.is_empty());
@@ -404,7 +405,7 @@ mod test {
     /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
     /// of leaves additions and removals, in mixed order.
     fn test_batch_mixed_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
-        height: usize,
+        height: u8,
         rng: &mut R,
     ) 
     {
@@ -434,7 +435,7 @@ mod test {
         leaves.shuffle(rng);
 
         // Test
-        let chunk_size = rng.gen_range(1, num_leaves + 1);
+        let chunk_size = rng.gen_range(1, num_leaves + 1) as usize;
         leaves
             .chunks(chunk_size)
             .for_each(|leaves| {
@@ -444,11 +445,11 @@ mod test {
             });
         
         // Nodes map must be half full
-        assert_eq!(smt.nodes.len(), num_leaves);
+        assert_eq!(smt.nodes.len() as u32, num_leaves);
     }
 
     fn test_error_cases<T: BatchFieldBasedMerkleTreeParameters>(
-        height: usize,
+        height: u8,
     ) {
         // Initialize tree
         let mut smt = LazyBigMerkleTree::<T>::new(height);
@@ -470,14 +471,14 @@ mod test {
         dummy_leaf.idx -= 1;
         let smt_root = smt.process_leaves(&[dummy_leaf]).unwrap();
         assert_eq!(smt_root, compute_append_only_tree_root(&smt));
-        assert_eq!(smt.nodes.len(), height + 1);
+        assert_eq!(smt.nodes.len() as u8, height + 1);
 
         // Replace previously added leaf with a new value and check correct replacement
         dummy_leaf.hash = Some(T::Data::from(2u8));
         let new_smt_root = smt.process_leaves(&[dummy_leaf]).unwrap();
         assert_ne!(new_smt_root, smt_root);
         assert_eq!(new_smt_root, compute_append_only_tree_root(&smt));
-        assert_eq!(smt.nodes.len(), height + 1);
+        assert_eq!(smt.nodes.len() as u8, height + 1);
 
         // Remove non existing leaf with non full tree
         dummy_leaf.idx -= 1;
@@ -489,7 +490,7 @@ mod test {
         dummy_leaf.action = ActionLeaf::Remove;
 
         // Tree must be empty now
-        assert_eq!(smt.process_leaves(&[dummy_leaf]).unwrap(), T::ZERO_NODE_CST.unwrap().nodes[height]);
+        assert_eq!(smt.process_leaves(&[dummy_leaf]).unwrap(), T::ZERO_NODE_CST.unwrap().nodes[height as usize]);
         assert!(smt.nodes.is_empty());
 
         // Add multiple times the same leaf: only last value of the leaf shall be taken
@@ -499,9 +500,9 @@ mod test {
                 .collect::<Vec<_>>();
             
             let smt_root = smt.process_leaves(leaves.as_slice()).unwrap();
-            assert_eq!(smt.nodes.len(), height + 1);
+            assert_eq!(smt.nodes.len() as u8, height + 1);
 
-            let optimized_root = FieldBasedOptimizedMHT::<T>::init(smt.height, smt.width)
+            let optimized_root = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize)
                 .append(T::Data::from(NUM_SAMPLES as u8))
                 .unwrap()
                 .finalize()
@@ -515,14 +516,14 @@ mod test {
             let smt_root = smt.process_leaves(leaves.as_slice()).unwrap();
 
             // Tree must be empty now
-            assert_eq!(smt_root, T::ZERO_NODE_CST.unwrap().nodes[height]);
+            assert_eq!(smt_root, T::ZERO_NODE_CST.unwrap().nodes[height as usize]);
             assert!(smt.nodes.is_empty());
         }
 
         // Test that if some error occurs during the processing of a batch of leaves, the tree state will be untouched.
         {
             // Valid leaves to be added
-            let mut leaves = (0..=NUM_SAMPLES)
+            let mut leaves = (0..=NUM_SAMPLES as u32)
                 .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::Data::from(i as u8))))
                 .collect::<Vec<_>>();
 
@@ -532,18 +533,18 @@ mod test {
             assert!(smt.process_leaves(leaves.as_slice()).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
 
             // Tree must be empty as before
-            assert_eq!(smt.get_root(), T::ZERO_NODE_CST.unwrap().nodes[height]);
+            assert_eq!(smt.get_root(), T::ZERO_NODE_CST.unwrap().nodes[height as usize]);
             assert!(smt.nodes.is_empty());
         }
 
         // Finally, let's test that manually adding empty leaves results in a no-op
         {
-            let leaves = (0..=NUM_SAMPLES)
+            let leaves = (0..=NUM_SAMPLES as u32)
                 .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::ZERO_NODE_CST.unwrap().nodes[0])))
                 .collect::<Vec<_>>();
 
             // Tree must be empty as before
-            assert_eq!(smt.process_leaves(leaves.as_slice()).unwrap(), T::ZERO_NODE_CST.unwrap().nodes[height]);
+            assert_eq!(smt.process_leaves(leaves.as_slice()).unwrap(), T::ZERO_NODE_CST.unwrap().nodes[height as usize]);
             assert!(smt.nodes.is_empty());
         }
     }
@@ -556,13 +557,13 @@ mod test {
             // Generate empty tree and get the root
             let mut smt = LazyBigMerkleTree::<T>::new(TEST_HEIGHT);
             let root = smt.get_root();
-            assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT]);
+            assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT as usize]);
 
             // Generate tree with only 1 leaf and attempt to get the root
             assert!(smt.process_leaves(&[dummy_leaf]).is_ok());
             let new_root = smt.get_root();
             assert_ne!(new_root, root);
-            assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT]);
+            assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT as usize]);
         }
 
         // HEIGHT == 1
@@ -602,13 +603,13 @@ mod test {
     }
 
     fn test_merkle_path<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
-        height: usize,
+        height: u8,
         rng: &mut R,
     ) {
         let mut smt = LazyBigMerkleTree::<T>::new(height);
         let num_leaves = smt.width;
-        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height, num_leaves);
-        let mut leaves_for_lazy_smt = Vec::with_capacity(num_leaves);
+        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, num_leaves as usize);
+        let mut leaves_for_lazy_smt = Vec::with_capacity(num_leaves as usize);
 
         // Generate random leaves, half of which empty
         for i in 0..num_leaves/2 {
@@ -623,14 +624,14 @@ mod test {
         let optimized_root = optimized.root().unwrap();
         assert_eq!(root, optimized_root);
 
-        for (i, leaf) in optimized.get_leaves().iter().enumerate() {
+        for (&i, leaf) in smt.get_non_empty_leaves().iter() {
 
             // Create and verify a FieldBasedMHTPath
             let path = smt.get_merkle_path(i).unwrap();
-            assert!(path.verify(smt.height(), leaf, &root).unwrap());
+            assert!(path.verify(smt.height as usize, leaf, &root).unwrap());
 
             // Create and verify a path from FieldBasedOptimizedMHT
-            let optimized_path = optimized.get_merkle_path(i).unwrap();
+            let optimized_path = optimized.get_merkle_path(i as usize).unwrap();
             assert!(optimized_path.verify(optimized.height(), leaf, &optimized_root).unwrap());
 
             // Assert the two paths are equal
@@ -638,7 +639,7 @@ mod test {
             assert_eq!(optimized_path, path);
 
             // Check leaf index is the correct one
-            assert_eq!(i, path.leaf_index());
+            assert_eq!(i as usize, path.leaf_index());
 
             if i == 0 { assert!(path.is_leftmost()); } // leftmost check
             else if i == num_leaves - 1 { assert!(path.is_rightmost()) }  //rightmost check
