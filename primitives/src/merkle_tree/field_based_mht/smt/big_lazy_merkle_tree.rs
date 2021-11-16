@@ -302,66 +302,20 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
 mod test {
 
     use algebra::{
-        fields::{
-          mnt4753::Fr as MNT4753Fr, mnt6753::Fr as MNT6753Fr
-        },
-        biginteger::BigInteger768,
         Field, UniformRand,
-        ToBytes, to_bytes, FromBytes,
     };
 
-    use crate::{FieldBasedOptimizedMHT, crh::{
-            MNT4PoseidonHash, MNT6PoseidonHash,
-            MNT4BatchPoseidonHash, MNT6BatchPoseidonHash,
-        }, merkle_tree::field_based_mht::{
-            naive:: NaiveMerkleTree,
-            smt::{OperationLeaf, Coord, ActionLeaf, LazyBigMerkleTree},
-            parameters::{MNT4753_MHT_POSEIDON_PARAMETERS, MNT6753_MHT_POSEIDON_PARAMETERS},
+    use crate::{
+        merkle_tree::field_based_mht::{
+            smt::{OperationLeaf, ActionLeaf, LazyBigMerkleTree},
             FieldBasedMerkleTreeParameters, BatchFieldBasedMerkleTreeParameters,
             FieldBasedMerkleTreePath, FieldBasedMerkleTreePrecomputedZeroConstants,
-            FieldBasedBinaryMHTPath, FieldBasedMerkleTree,
+            FieldBasedBinaryMHTPath, FieldBasedMerkleTree, FieldBasedOptimizedMHT,
         }};
 
-    use std::{
-        str::FromStr, path::Path, time::Instant
-    };
+    use rand::{Rng, RngCore, prelude::SliceRandom, thread_rng};
 
-    use rand::{Rng, RngCore, SeedableRng, prelude::SliceRandom, thread_rng};
-    use rand_xorshift::XorShiftRng;
-
-    #[derive(Clone, Debug)]
-    struct MNT4753FieldBasedMerkleTreeParams;
-    impl FieldBasedMerkleTreeParameters for MNT4753FieldBasedMerkleTreeParams {
-        type Data = MNT4753Fr;
-        type H = MNT4PoseidonHash;
-        const MERKLE_ARITY: usize = 2;
-        const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedZeroConstants<'static, Self::H>> =
-            Some(MNT4753_MHT_POSEIDON_PARAMETERS);
-    }
-    impl BatchFieldBasedMerkleTreeParameters for MNT4753FieldBasedMerkleTreeParams {
-        type BH = MNT4BatchPoseidonHash;
-    }
-    type MNT4753FieldBasedMerkleTree = NaiveMerkleTree<MNT4753FieldBasedMerkleTreeParams>;
-    type MNT4PoseidonSMTLazy = LazyBigMerkleTree<MNT4753FieldBasedMerkleTreeParams>;
-    type MNT4MerklePath = FieldBasedBinaryMHTPath<MNT4753FieldBasedMerkleTreeParams>;
-
-    #[derive(Clone, Debug)]
-    struct MNT6753FieldBasedMerkleTreeParams;
-    impl FieldBasedMerkleTreeParameters for MNT6753FieldBasedMerkleTreeParams {
-        type Data = MNT6753Fr;
-        type H = MNT6PoseidonHash;
-        const MERKLE_ARITY: usize = 2;
-        const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedZeroConstants<'static, Self::H>> =
-            Some(MNT6753_MHT_POSEIDON_PARAMETERS);
-    }
-    impl BatchFieldBasedMerkleTreeParameters for MNT6753FieldBasedMerkleTreeParams {
-        type BH = MNT6BatchPoseidonHash;
-    }
-    type MNT6753FieldBasedMerkleTree = NaiveMerkleTree<MNT6753FieldBasedMerkleTreeParams>;
-    type MNT6PoseidonSMTLazy = LazyBigMerkleTree<MNT6753FieldBasedMerkleTreeParams>;
-    type MNT6MerklePath = FieldBasedBinaryMHTPath<MNT6753FieldBasedMerkleTreeParams>;
-
-    const TEST_HEIGHT_1: usize = 10;
+    const TEST_HEIGHT: usize = 10;
     const NUM_SAMPLES: usize = 10;
 
     fn compute_append_only_tree_root<T: BatchFieldBasedMerkleTreeParameters>(
@@ -383,7 +337,7 @@ mod test {
     /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
     /// of all leaves additions and all leaves removals. If 'adjacent_leaves' is enabled, the batches will be
     /// made up of leaves with subsequent indices
-    fn test_batch_all_additions_removals_test<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
+    fn test_batch_all_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
         height: usize,
         rng: &mut R,
         adjacent_leaves: bool,
@@ -429,9 +383,7 @@ mod test {
 
         leaves
             .chunks(chunk_size)
-            .enumerate()
-            .for_each(|(chunk_num, leaves_chunk)| {
-                println!("Chunk size: {}, Chunk num: {}", chunk_size, chunk_num);
+            .for_each(|leaves_chunk| {
                 // Remove leaves from smt and get root
                 let smt_root = smt.process_leaves(leaves_chunk).unwrap();
 
@@ -586,7 +538,7 @@ mod test {
 
         // Finally, let's test that manually adding empty leaves results in a no-op
         {
-            let mut leaves = (0..=NUM_SAMPLES)
+            let leaves = (0..=NUM_SAMPLES)
                 .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::ZERO_NODE_CST.unwrap().nodes[0])))
                 .collect::<Vec<_>>();
 
@@ -602,15 +554,15 @@ mod test {
         // HEIGHT > 1
         {
             // Generate empty tree and get the root
-            let mut smt = LazyBigMerkleTree::<T>::new(TEST_HEIGHT_1);
+            let mut smt = LazyBigMerkleTree::<T>::new(TEST_HEIGHT);
             let root = smt.get_root();
-            assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT_1]);
+            assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT]);
 
             // Generate tree with only 1 leaf and attempt to get the root
             assert!(smt.process_leaves(&[dummy_leaf]).is_ok());
             let new_root = smt.get_root();
             assert_ne!(new_root, root);
-            assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT_1]);
+            assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT]);
         }
 
         // HEIGHT == 1
@@ -641,7 +593,7 @@ mod test {
         {
             // Generate empty tree and get the root
             let mut smt = LazyBigMerkleTree::<T>::new(0);
-            let mut root = smt.get_root();
+            let root = smt.get_root();
             assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[0]);
 
             // Generate tree with only 1 leaf and assert error
@@ -649,210 +601,84 @@ mod test {
         }
     }
 
-    #[test]
-    fn process_leaves_mnt4() {
-        let rng = &mut thread_rng();
-        for _ in 0..NUM_SAMPLES {
-            //merkle_tree_root_batch_all_additions_removals_test::<MNT4753FieldBasedMerkleTreeParams, _>(TEST_HEIGHT_1, rng, false);
-            //merkle_tree_root_batch_all_additions_removals_test::<MNT4753FieldBasedMerkleTreeParams, _>(TEST_HEIGHT_1, rng, true);
-            //merkle_tree_root_batch_mixed_additions_removals_test::<MNT4753FieldBasedMerkleTreeParams, _>(TEST_HEIGHT_1, rng);
-        }
-        test_error_cases::<MNT4753FieldBasedMerkleTreeParams>(TEST_HEIGHT_1);
-        test_edge_cases::<MNT4753FieldBasedMerkleTreeParams>();
-        
-        /*let mut leaves_to_process: Vec<OperationLeaf<MNT4753Fr>> = Vec::new();
-
-        leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 0 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("1").unwrap()) });
-        leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 9 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("2").unwrap()) });
-        leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 16 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("3").unwrap()) });
-        leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 29 }, action: ActionLeaf::Insert, hash: Some(MNT4753Fr::from_str("3").unwrap()) });
-        leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 16 }, action: ActionLeaf::Remove, hash: Some(MNT4753Fr::from_str("3").unwrap()) });
-
-        let mut smt = MNT4PoseidonSMTLazy::new(
-            TEST_HEIGHT_1,
-        );
-        smt.process_leaves(leaves_to_process.as_slice());
-
-        //=============================================
-
-        let mut leaves = Vec::new();
-        leaves.push(MNT4753Fr::from_str("1").unwrap());
-        for _ in 1..9 {
-            let f = MNT4753Fr::zero();
-            leaves.push(f);
-        }
-        leaves.push(MNT4753Fr::from_str("2").unwrap());
-        for _ in 10..29 {
-            let f = MNT4753Fr::zero();
-            leaves.push(f);
-        }
-        leaves.push(MNT4753Fr::from_str("3").unwrap());
-        for _ in 30..31 {
-            let f = MNT4753Fr::zero();
-            leaves.push(f);
-        }
-        let mut tree = MNT4753FieldBasedMerkleTree::new(TEST_HEIGHT_1);
-        tree.append(&leaves).unwrap();
-
-        assert_eq!(tree.root(), smt.get_root(), "Roots are not equal");*/
-
-    }
-
-    // #[test]
-    // fn process_leaves_mnt6() {
-
-    //     let mut leaves_to_process: Vec<OperationLeaf<MNT6753Fr>> = Vec::new();
-
-    //     leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 0 }, action: ActionLeaf::Insert, hash: Some(MNT6753Fr::from_str("1").unwrap()) });
-    //     leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 9 }, action: ActionLeaf::Insert, hash: Some(MNT6753Fr::from_str("2").unwrap()) });
-    //     leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 16 }, action: ActionLeaf::Remove, hash: Some(MNT6753Fr::from_str("3").unwrap()) });
-    //     leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 29 }, action: ActionLeaf::Insert, hash: Some(MNT6753Fr::from_str("3").unwrap()) });
-    //     leaves_to_process.push(OperationLeaf { coord: Coord { height: 0, idx: 16 }, action: ActionLeaf::Remove, hash: Some(MNT6753Fr::from_str("3").unwrap()) });
-
-    //     let mut smt = MNT6PoseidonSMTLazy::new(
-    //         TEST_HEIGHT_1,
-    //     );
-    //     smt.process_leaves(leaves_to_process.as_slice());
-
-    //     //=============================================
-
-    //     let mut leaves = Vec::new();
-    //     leaves.push(MNT6753Fr::from_str("1").unwrap());
-    //     for _ in 1..9 {
-    //         let f = MNT6753Fr::zero();
-    //         leaves.push(f);
-    //     }
-    //     leaves.push(MNT6753Fr::from_str("2").unwrap());
-    //     for _ in 10..29 {
-    //         let f = MNT6753Fr::zero();
-    //         leaves.push(f);
-    //     }
-    //     leaves.push(MNT6753Fr::from_str("3").unwrap());
-    //     for _ in 30..31 {
-    //         let f = MNT6753Fr::zero();
-    //         leaves.push(f);
-    //     }
-    //     let mut tree = MNT6753FieldBasedMerkleTree::new(TEST_HEIGHT_1);
-    //     tree.append(&leaves).unwrap();
-
-    //     assert_eq!(tree.root(), smt.get_root(), "Roots are not equal");
-    // }
-
-    #[test]
-    fn merkle_tree_path_test_mnt4() {
-
-        let num_leaves = 1 << TEST_HEIGHT_1;
-        let mut leaves = Vec::with_capacity(num_leaves);
+    fn test_merkle_path<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
+        height: usize,
+        rng: &mut R,
+    ) {
+        let mut smt = LazyBigMerkleTree::<T>::new(height);
+        let num_leaves = smt.width;
+        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height, num_leaves);
         let mut leaves_for_lazy_smt = Vec::with_capacity(num_leaves);
-        let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
-
-        let mut smt = MNT4PoseidonSMTLazy::new(
-            TEST_HEIGHT_1,
-        );
 
         // Generate random leaves, half of which empty
         for i in 0..num_leaves/2 {
-            let leaf = MNT4753Fr::rand(&mut rng);
-            leaves.push(leaf);
+            let leaf = T::Data::rand(rng);
+            optimized.append(leaf).unwrap();
             leaves_for_lazy_smt.push(OperationLeaf { idx: i, action: ActionLeaf::Insert, hash: Some(leaf)});
         }
+        optimized.finalize_in_place();
 
-        for i in num_leaves/2..num_leaves {
-            let leaf = MNT4753Fr::zero();
-            leaves.push(leaf);
-            //leaves_for_lazy_smt.push(OperationLeaf { idx: i, action: ActionLeaf::Insert, hash: Some(leaf)});
-        }
-
-        // Compute the root of the tree, and do the same for a NaiveMHT, used here as reference
-        let mut naive_tree = MNT4753FieldBasedMerkleTree::new(TEST_HEIGHT_1);
-        naive_tree.append(&leaves).unwrap();
+        // Compute the root of the tree, and do the same for a FieldBasedOptimizedMHT, used here as reference
         let root = smt.process_leaves(leaves_for_lazy_smt.as_slice()).unwrap();
-        let naive_root = naive_tree.root();
-        assert_eq!(root, naive_root);
+        let optimized_root = optimized.root().unwrap();
+        assert_eq!(root, optimized_root);
 
-        for i in 0..num_leaves {
+        for (i, leaf) in optimized.get_leaves().iter().enumerate() {
 
             // Create and verify a FieldBasedMHTPath
             let path = smt.get_merkle_path(i).unwrap();
-            assert!(path.verify(smt.height(), &leaves[i], &root).unwrap());
+            assert!(path.verify(smt.height(), leaf, &root).unwrap());
 
-            // Create and verify a Naive path
-            let naive_path = naive_tree.generate_proof(i, &leaves[i]).unwrap();
-            assert!(naive_path.verify(naive_tree.height(), &leaves[i], &naive_root ).unwrap());
+            // Create and verify a path from FieldBasedOptimizedMHT
+            let optimized_path = optimized.get_merkle_path(i).unwrap();
+            assert!(optimized_path.verify(optimized.height(), leaf, &optimized_root).unwrap());
 
             // Assert the two paths are equal
-            assert_eq!(naive_path, path);
+            let optimized_path: FieldBasedBinaryMHTPath<T> = optimized_path.into();
+            assert_eq!(optimized_path, path);
 
             // Check leaf index is the correct one
             assert_eq!(i, path.leaf_index());
 
             if i == 0 { assert!(path.is_leftmost()); } // leftmost check
-            else if i == 2usize.pow(TEST_HEIGHT_1 as u32) - 1 { assert!(path.is_rightmost()) }  //rightmost check
+            else if i == num_leaves - 1 { assert!(path.is_rightmost()) }  //rightmost check
             else { assert!(!path.is_leftmost()); assert!(!path.is_rightmost()); } // other cases check
 
             // Serialization/deserialization test
-            let path_serialized = to_bytes!(path).unwrap();
-            let path_deserialized = MNT4MerklePath::read(path_serialized.as_slice()).unwrap();
-            assert_eq!(path, path_deserialized);
+            algebra::serialize::test_canonical_serialize_deserialize(true, &path);
         }
     }
 
-    // #[test]
-    // fn merkle_tree_path_test_mnt6() {
+    #[cfg(feature = "tweedle")]
+    #[test]
+    fn test_tweedle_fr() {
+        use algebra::fields::tweedle::Fr;
+        use crate::{
+            crh::{TweedleFrPoseidonHash, TweedleFrBatchPoseidonHash},
+            merkle_tree::TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS,
+        };
 
-    //     let num_leaves = 32;
-    //     let mut leaves = Vec::with_capacity(num_leaves);
-    //     let mut leaves_for_lazy_smt = Vec::with_capacity(num_leaves);
-    //     let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
+        #[derive(Clone, Debug)]
+        struct TweedleFrFieldBasedMerkleTreeParams;
+        impl FieldBasedMerkleTreeParameters for TweedleFrFieldBasedMerkleTreeParams {
+            type Data = Fr;
+            type H = TweedleFrPoseidonHash;
+            const MERKLE_ARITY: usize = 2;
+            const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedZeroConstants<'static, Self::H>> =
+                Some(TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS);
+        }
+        impl BatchFieldBasedMerkleTreeParameters for TweedleFrFieldBasedMerkleTreeParams {
+            type BH = TweedleFrBatchPoseidonHash;
+        }
 
-    //     let mut smt = MNT6PoseidonSMTLazy::new(
-    //         TEST_HEIGHT_1,
-    //     );
-
-    //     // Generate random leaves, half of which empty
-    //     for i in 0..num_leaves/2 {
-    //         let leaf = MNT6753Fr::rand(&mut rng);
-    //         leaves.push(leaf);
-    //         leaves_for_lazy_smt.push(OperationLeaf { coord: Coord { height: 0, idx: i }, action: ActionLeaf::Insert, hash: Some(leaf)});
-    //     }
-
-    //     for i in num_leaves/2..num_leaves {
-    //         let leaf = MNT6753Fr::zero();
-    //         leaves.push(leaf);
-    //         leaves_for_lazy_smt.push(OperationLeaf { coord: Coord { height: 0, idx: i }, action: ActionLeaf::Insert, hash: Some(leaf)});
-    //     }
-
-    //     // Compute the root of the tree, and do the same for a NaiveMHT, used here as reference
-    //     let mut naive_tree = MNT6753FieldBasedMerkleTree::new(TEST_HEIGHT_1);
-    //     naive_tree.append(&leaves).unwrap();
-    //     let root = smt.process_leaves(leaves_for_lazy_smt.as_slice());
-    //     let naive_root = naive_tree.root();
-    //     assert_eq!(root, naive_root);
-
-    //     for i in 0..num_leaves {
-
-    //         // Create and verify a FieldBasedMHTPath
-    //         let path = smt.get_merkle_path(Coord{height: 0, idx: i});
-    //         assert!(path.verify(smt.height(), &leaves[i], &root).unwrap());
-
-    //         // Create and verify a Naive path
-    //         let naive_path = naive_tree.generate_proof(i, &leaves[i]).unwrap();
-    //         assert!(naive_path.verify(naive_tree.height(), &leaves[i], &naive_root ).unwrap());
-
-    //         // Assert the two paths are equal
-    //         assert_eq!(naive_path, path);
-
-    //         // Check leaf index is the correct one
-    //         assert_eq!(i, path.leaf_index());
-
-    //         if i == 0 { assert!(path.is_leftmost()); } // leftmost check
-    //         else if i == 2usize.pow(TEST_HEIGHT_1 as u32) - 1 { assert!(path.is_rightmost()) }  //rightmost check
-    //         else { assert!(!path.is_leftmost()); assert!(!path.is_rightmost()); } // other cases check
-
-    //         // Serialization/deserialization test
-    //         let path_serialized = to_bytes!(path).unwrap();
-    //         let path_deserialized = MNT6MerklePath::read(path_serialized.as_slice()).unwrap();
-    //         assert_eq!(path, path_deserialized);
-    //     }
-    // }
+        let rng = &mut thread_rng();
+        for _ in 0..NUM_SAMPLES {
+            test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, true);
+            test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, false);
+            test_batch_mixed_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng);
+        }
+        test_merkle_path::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng);
+        test_error_cases::<TweedleFrFieldBasedMerkleTreeParams>(TEST_HEIGHT);
+        test_edge_cases::<TweedleFrFieldBasedMerkleTreeParams>();
+    }
 }
