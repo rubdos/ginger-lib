@@ -4,26 +4,30 @@ extern crate criterion;
 use std::collections::HashSet;
 
 use criterion::{BatchSize, BenchmarkId, Criterion};
-use algebra::{UniformRand, fields::tweedle::Fr};
-use primitives::{ActionLeaf, OperationLeaf, crh::{TweedleFrPoseidonHash, TweedleFrBatchPoseidonHash}, merkle_tree::{
-        TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS, FieldBasedMerkleTreeParameters, BatchFieldBasedMerkleTreeParameters,
-        FieldBasedMerkleTreePrecomputedZeroConstants, LazyBigMerkleTree
-    }};
+use algebra::{UniformRand, fields::tweedle::Fr as FieldElement};
+use primitives::{
+    crh::{TweedleFrPoseidonHash as FieldHash, TweedleFrBatchPoseidonHash as BatchFieldHash},
+    merkle_tree::{
+        TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS as MHT_POSEIDON_PARAMETERS, FieldBasedMerkleTreeParameters,
+        BatchFieldBasedMerkleTreeParameters, FieldBasedMerkleTreePrecomputedZeroConstants,
+        LazyBigMerkleTree, ActionLeaf, OperationLeaf,
+    }
+};
 use rand::{Rng, thread_rng};
 
 const BENCH_HEIGHT: u8 = 22;
 
 #[derive(Clone, Debug)]
-struct TweedleFrFieldBasedMerkleTreeParams;
-impl FieldBasedMerkleTreeParameters for TweedleFrFieldBasedMerkleTreeParams {
-    type Data = Fr;
-    type H = TweedleFrPoseidonHash;
+struct FieldBasedMerkleTreeParams;
+impl FieldBasedMerkleTreeParameters for FieldBasedMerkleTreeParams {
+    type Data = FieldElement;
+    type H = FieldHash;
     const MERKLE_ARITY: usize = 2;
     const ZERO_NODE_CST: Option<FieldBasedMerkleTreePrecomputedZeroConstants<'static, Self::H>> =
-        Some(TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS);
+        Some(MHT_POSEIDON_PARAMETERS);
 }
-impl BatchFieldBasedMerkleTreeParameters for TweedleFrFieldBasedMerkleTreeParams {
-    type BH = TweedleFrBatchPoseidonHash;
+impl BatchFieldBasedMerkleTreeParameters for FieldBasedMerkleTreeParams {
+    type BH = BatchFieldHash;
 }
 
 /// Add to the tree 'num_leaves_to_fill' random leaves in leftmost subsequent positions.
@@ -32,16 +36,16 @@ impl BatchFieldBasedMerkleTreeParameters for TweedleFrFieldBasedMerkleTreeParams
 /// If 'actually_remove_leaves' is set, the leaves are actually removed from the SMT
 /// and changed to insertion mode before returning.
 fn fill_tree_and_get_leaves_to_remove(
-    smt: &mut LazyBigMerkleTree<TweedleFrFieldBasedMerkleTreeParams>,
+    smt: &mut LazyBigMerkleTree<FieldBasedMerkleTreeParams>,
     num_leaves_to_fill: usize,
     num_leaves_to_remove: usize,
     actually_remove_leaves: bool,
-) -> Vec<OperationLeaf<Fr>> 
+) -> Vec<OperationLeaf<FieldElement>> 
 {
     // Generate leaves to be added
     let rng = &mut thread_rng();
     let leaves_to_add = (0..num_leaves_to_fill)
-        .map(|idx| OperationLeaf::new(idx as u32, ActionLeaf::Insert, Some(Fr::rand(rng))))
+        .map(|idx| OperationLeaf::new(idx as u32, ActionLeaf::Insert, Some(FieldElement::rand(rng))))
         .collect::<Vec<_>>();
     smt.process_leaves(leaves_to_add.as_slice()).unwrap();
 
@@ -55,9 +59,9 @@ fn fill_tree_and_get_leaves_to_remove(
     }
 
     // Convert HashSet into vec
-    let mut leaves_to_remove: Vec<OperationLeaf<Fr>> = leaves_to_remove
+    let mut leaves_to_remove: Vec<OperationLeaf<FieldElement>> = leaves_to_remove
         .into_iter()
-        .map(|idx| OperationLeaf::<Fr>::new(idx, ActionLeaf::Remove, None))
+        .map(|idx| OperationLeaf::<FieldElement>::new(idx, ActionLeaf::Remove, None))
         .collect();
 
     if actually_remove_leaves {
@@ -66,7 +70,7 @@ fn fill_tree_and_get_leaves_to_remove(
             .iter_mut()
             .for_each(|leaf|{
                 (*leaf).action = ActionLeaf::Insert;
-                (*leaf).hash = Some(Fr::rand(rng))
+                (*leaf).hash = Some(FieldElement::rand(rng))
             });
     }
 
@@ -90,7 +94,7 @@ fn bench_batch_addition_removal_smt(
             |b, _num_leaves| {
                 b.iter_batched(
                     || {
-                        let mut smt = LazyBigMerkleTree::<TweedleFrFieldBasedMerkleTreeParams>::new(BENCH_HEIGHT);
+                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::new(BENCH_HEIGHT);
                         let leaves_to_remove = fill_tree_and_get_leaves_to_remove(&mut smt, leaves_to_fill, num_leaves, actually_remove_leaves);
                         (smt, leaves_to_remove)
                     },
@@ -109,16 +113,16 @@ fn bench_batch_addition_removal_smt(
 /// in the tree.
 /// If 'subsequent' is set, the leaves will be generated with contiguous indices.
 fn fill_tree_and_add_new(
-    smt: &mut LazyBigMerkleTree<TweedleFrFieldBasedMerkleTreeParams>,
+    smt: &mut LazyBigMerkleTree<FieldBasedMerkleTreeParams>,
     mut num_leaves_to_fill: usize,
     num_leaves_to_add: usize,
     subsequent: bool,
-) -> Vec<OperationLeaf<Fr>> 
+) -> Vec<OperationLeaf<FieldElement>> 
 {
     // Generate leaves to be added
     let rng = &mut thread_rng();
     let leaves_to_add = (0..num_leaves_to_fill)
-        .map(|idx| OperationLeaf::new(idx as u32, ActionLeaf::Insert, Some(Fr::rand(rng))))
+        .map(|idx| OperationLeaf::new(idx as u32, ActionLeaf::Insert, Some(FieldElement::rand(rng))))
         .collect::<Vec<_>>();
     smt.process_leaves(leaves_to_add.as_slice()).unwrap();
 
@@ -139,9 +143,9 @@ fn fill_tree_and_add_new(
     }
 
     // Convert HashSet into vec
-    let mut leaves_to_add: Vec<OperationLeaf<Fr>> = leaves_to_add
+    let leaves_to_add: Vec<OperationLeaf<FieldElement>> = leaves_to_add
         .into_iter()
-        .map(|idx| OperationLeaf::<Fr>::new(idx, ActionLeaf::Insert, Some(Fr::rand(rng))))
+        .map(|idx| OperationLeaf::<FieldElement>::new(idx, ActionLeaf::Insert, Some(FieldElement::rand(rng))))
         .collect();
 
     leaves_to_add
@@ -165,7 +169,7 @@ fn bench_batch_addition(
             |b, _num_leaves| {
                 b.iter_batched(
                     || {
-                        let mut smt = LazyBigMerkleTree::<TweedleFrFieldBasedMerkleTreeParams>::new(BENCH_HEIGHT);
+                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::new(BENCH_HEIGHT);
                         let leaves_to_add = fill_tree_and_add_new(&mut smt, leaves_to_fill, num_leaves, subsequent);
                         (smt, leaves_to_add)
                     },
@@ -204,9 +208,9 @@ fn all_benches_batch_add_subsequent(c: &mut Criterion) {
 }
 
 criterion_group! {
-    name = in_memory_smt_tweedle_fr;
+    name = in_memory_smt_benches;
     config = Criterion::default().sample_size(10);
     targets = all_benches_batch_remove_then_add, all_benches_batch_remove, all_benches_batch_add, all_benches_batch_add_subsequent
 }
 
-criterion_main!(in_memory_smt_tweedle_fr);
+criterion_main!(in_memory_smt_benches);
