@@ -104,6 +104,10 @@ fn bench_batch_addition_removal_smt(
     }
 }
 
+/// Add to the tree 'num_leaves_to_fill' random leaves in leftmost subsequent positions.
+/// Then sample 'num_leaves_to_add' leaves and insert them after the ones already present
+/// in the tree.
+/// If 'subsequent' is set, the leaves will be generated with contiguous indices.
 fn fill_tree_and_add_new(
     smt: &mut LazyBigMerkleTree<TweedleFrFieldBasedMerkleTreeParams>,
     mut num_leaves_to_fill: usize,
@@ -122,11 +126,11 @@ fn fill_tree_and_add_new(
     let mut leaves_to_add = HashSet::<u32>::new();
     while leaves_to_add.len() != num_leaves_to_add {
         let idx = if !subsequent {
-            rng.gen_range(num_leaves_to_fill..1 << TEST_HEIGHT) as u32
+            rng.gen_range(num_leaves_to_fill..1 << BENCH_HEIGHT) as u32
         } else {
             let idx = num_leaves_to_fill;
             num_leaves_to_fill += 1;
-            idx
+            idx as u32
         };
 
         if !leaves_to_add.contains(&idx) {
