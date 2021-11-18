@@ -153,8 +153,8 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
             }
 
             if matches!(action, ActionLeaf::Insert) && (
-                (data.unwrap() == T::ZERO_NODE_CST.unwrap().nodes[0]) || // Try to insert a leaf with an empty value
-                (self.leaves.get(&idx).is_some() && self.leaves.get(&idx).unwrap().0 == data.unwrap()) // Try to replace a leaf with the same value it had before
+                (data.unwrap() == T::ZERO_NODE_CST.unwrap().nodes[0]) || // Attempt to insert a leaf with an empty value
+                (self.leaves.get(&idx).is_some() && self.leaves.get(&idx).unwrap().0 == data.unwrap()) // Attempt to replace a leaf with the same value it had before
             ) 
             {
                 leaves_to_remove.push(idx);
@@ -165,6 +165,26 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
         leaves_to_remove.into_iter().for_each(|leaf_idx| { leaves_map.remove(&leaf_idx).unwrap(); });
 
         Ok(())
+    }
+
+    /// Get the node at the corresponding height and idx, and return its value and 'true' if it exists;
+    /// otherwise return empty node and 'false'
+    fn get_node_at_height_and_idx(&self, height: usize, idx: u32) -> (T::Data, bool) {
+        if height == 0 {
+            self.leaves
+                .get(&idx)
+                .map_or_else(
+                    || (T::ZERO_NODE_CST.unwrap().nodes[height], false),
+                    |&(data, _)| (data, true)
+                )
+        } else {
+            self.nodes
+                .get(&idx)
+                .map_or_else(
+                    || (T::ZERO_NODE_CST.unwrap().nodes[height], false),
+                    |&data| (data, true)
+                )
+        }
     }
 
     /// Update the nodes and the root of the tree according to the changed leaves.
@@ -231,56 +251,14 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
                     let left_child_idx = (parent_idx - self.width) * T::MERKLE_ARITY as u32;
                     let right_child_idx= left_child_idx + 1;
         
-                    let mut is_node_empty = true;
-                    let left_hash = if height == 1 
-                    {
-                        self.leaves
-                            .get(&left_child_idx)
-                            .map_or_else(
-                                || T::ZERO_NODE_CST.unwrap().nodes[height - 1],
-                                |&(data, _)| {
-                                    is_node_empty = false;
-                                    data
-                                }
-                            )
-                        } else {
-                            self.nodes
-                            .get(&left_child_idx)
-                            .map_or_else(
-                                || T::ZERO_NODE_CST.unwrap().nodes[height - 1],
-                                |&data| {
-                                    is_node_empty = false;
-                                    data
-                                }
-                            )
-                    };
-        
-                    let right_hash = if height == 1 
-                    {
-                        self.leaves
-                            .get(&right_child_idx)
-                            .map_or_else(
-                                || T::ZERO_NODE_CST.unwrap().nodes[height - 1],
-                                |&(data, _)| {
-                                    is_node_empty = false;
-                                    data
-                                }
-                            )
-                        } else {
-                            self.nodes
-                            .get(&right_child_idx)
-                            .map_or_else(
-                                || T::ZERO_NODE_CST.unwrap().nodes[height - 1],
-                                |&data| {
-                                    is_node_empty = false;
-                                    data
-                                }
-                            )
-                    };
-        
+                    let (left_hash, is_left_full) = self.get_node_at_height_and_idx(height - 1, left_child_idx);
+                    let (right_hash, is_right_full) = self.get_node_at_height_and_idx(height - 1, right_child_idx);
+                    
+                    let is_node_full = is_left_full || is_right_full;
+
                     // Must compute hash iff node will be non-empty, otherwise
                     // we have already its value precomputed
-                    if !is_node_empty {
+                    if is_node_full {
                         input_vec.push(left_hash);
                         input_vec.push(right_hash);
                     } else {
@@ -289,7 +267,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
                         self.nodes.remove(&parent_idx);
                     }
         
-                    empty_node.push(is_node_empty);
+                    empty_node.push(!is_node_full);
                 });
     
             // Process the input_vec of the nodes that will be non-empty
@@ -338,7 +316,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
         // but let's interpret it as adding a single leaf in the last empty position.
         let last_pos = self.get_last_non_empty_position();
 
-        // If the tree is full we must return error
+        // If the last non empty position is the final one of the tree, we forbid "appending"
         if last_pos == self.width - 1 {
             Err(MerkleTreeError::TooManyLeaves(self.height as usize))?
         }
@@ -403,22 +381,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
             };
 
             // Get its hash
-            let sibling = if height == 0 
-            {
-                self.leaves
-                    .get(&sibling_idx)
-                    .map_or_else(
-                        || T::ZERO_NODE_CST.unwrap().nodes[height],
-                        |&(data, _)| data
-                    )
-                } else {
-                    self.nodes
-                    .get(&sibling_idx)
-                    .map_or_else(
-                        || T::ZERO_NODE_CST.unwrap().nodes[height],
-                        |&data| data
-                    )
-            };
+            let (sibling, _) = self.get_node_at_height_and_idx(height, sibling_idx);
 
             // Push info to path
             path.push((sibling, direction));
@@ -502,7 +465,7 @@ mod test {
         Field, UniformRand,
     };
 
-    use crate::{FieldBasedSparseMerkleTree, merkle_tree::field_based_mht::{
+    use crate::{FieldBasedSparseMerkleTree, NaiveMerkleTree, merkle_tree::field_based_mht::{
             smt::FieldBasedOptimizedSparseMHT,
             FieldBasedMerkleTreeParameters, BatchFieldBasedMerkleTreeParameters,
             FieldBasedMerkleTreePath, FieldBasedMerkleTreePrecomputedZeroConstants,
@@ -515,9 +478,7 @@ mod test {
     const TEST_HEIGHT: u8 = 10;
     const NUM_SAMPLES: usize = 10;
 
-    fn compute_append_only_tree_root<T: BatchFieldBasedMerkleTreeParameters>(
-        smt: &FieldBasedOptimizedSparseMHT<T>,
-    ) -> T::Data
+    fn compute_append_only_tree_root<T: BatchFieldBasedMerkleTreeParameters>(smt: &FieldBasedOptimizedSparseMHT<T>) -> T::Data
     {
         let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize).unwrap();
         let mut last_idx = 0;
@@ -531,13 +492,26 @@ mod test {
         optimized.finalize().unwrap().root().unwrap()
     }
 
+    fn compare_append_only_and_smt_roots<T: BatchFieldBasedMerkleTreeParameters>(smt: &mut FieldBasedOptimizedSparseMHT<T>) {
+        // Insert into optimized and get root
+        let optimized_root = compute_append_only_tree_root(smt);
+
+        // Roots must be equal
+        assert!(smt.root().is_none(), "Must be unable to get root if tree has not been finalized");
+        smt.finalize_in_place().unwrap();
+        assert_eq!(smt.root().unwrap(), optimized_root, "Roots are not equal");
+    }
+
     /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
-    /// of all leaves additions and all leaves removals. If 'adjacent_leaves' is enabled, the batches will be
-    /// made up of leaves with subsequent indices
+    /// of all leaves additions and all leaves removals.
+    /// If 'adjacent_leaves' is enabled, the batches will be made up of leaves with subsequent indices;
+    /// If 'finalize_in_the_end' is enabled, the "finalize_in_place()" function of FieldBasedOptimizedSparseMHT
+    /// will be called only after having appended/removed all the leaves
     fn test_batch_all_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
         height: u8,
         rng: &mut R,
         adjacent_leaves: bool,
+        finalize_in_the_end: bool,
     ) 
     {
         // Initialize trees
@@ -561,15 +535,11 @@ mod test {
                 // Insert all leaves into smt and get root
                 smt.insert_leaves(leaves.to_vec()).unwrap();
 
-                // Insert into optimized and get root
-                let optimized_root = compute_append_only_tree_root(&mut smt);
-
-                // Roots must be equal
-                assert!(smt.root().is_none(), "Must be unable to get root if tree has not been finalized");
-                smt.finalize_in_place().unwrap();
-                assert_eq!(smt.root().unwrap(), optimized_root, "Roots are not equal");
+                if !finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
             });
-        
+
+        if finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
+
         // Leaves and Nodes map must be full
         assert_eq!(smt.leaves.len() as u32, num_leaves);
         assert_eq!(smt.nodes.len() as u32, num_leaves - 1);
@@ -582,14 +552,10 @@ mod test {
                 // Remove leaves from smt and get root
                 smt.remove_leaves(leaves_chunk.iter().map(|(idx, _)| *idx).collect()).unwrap();
 
-                // "Remove" from optimized and get root
-                let optimized_root = compute_append_only_tree_root(&mut smt);
-
-                // Roots must be equal
-                assert!(smt.root().is_none(), "Must be unable to get root if tree has not been finalized");
-                smt.finalize_in_place().unwrap();
-                assert_eq!(smt.root().unwrap(), optimized_root, "Roots are not equal");
+                if !finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
         });
+
+        if finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
 
         // In the end, we must have an empty root...
         assert_eq!(smt.root().unwrap(), T::ZERO_NODE_CST.unwrap().nodes[height as usize], "Root after removal of all leaves must be equal to empty root");
@@ -604,9 +570,12 @@ mod test {
 
     /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
     /// of leaves additions and removals, in mixed order.
+    /// If 'finalize_in_the_end' is enabled, the "finalize_in_place()" function of FieldBasedOptimizedSparseMHT
+    /// will be called only after having appended/removed all the leaves
     fn test_batch_mixed_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
         height: u8,
         rng: &mut R,
+        finalize_in_the_end: bool,
     ) 
     {
         // Initialize trees: fill half of the SMT
@@ -640,14 +609,11 @@ mod test {
             .chunks(chunk_size)
             .for_each(|leaves| {
                 smt.update_leaves(leaves.to_vec()).unwrap();
-                let optimized_root = compute_append_only_tree_root(&mut smt);
-
-                // Get smt root
-                assert!(smt.root().is_none(), "Must be unable to get root if tree has not been finalized");
-                smt.finalize_in_place().unwrap();
-                assert_eq!(smt.root().unwrap(), optimized_root, "Roots are not equal");
+                if !finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
             });
-        
+
+        if finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
+
         // Nodes map must be half full
         assert_eq!(smt.leaves.len() as u32, num_leaves/2);
         assert_eq!(smt.nodes.len() as u32, num_leaves/2);
@@ -891,6 +857,86 @@ mod test {
         }
     }
 
+    // Tests below stress the functionality inherited from FieldBasedMerkleTree trait
+    fn merkle_tree_root_test<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
+        height: usize,
+        num_leaves: usize,
+        expected_root: T::Data,
+        mut rng: &mut R,
+    ) {
+        // Init in memory optimized tree
+        let mut tree = FieldBasedOptimizedMHT::<T>::init(height, num_leaves).unwrap();
+
+        // Init naive merkle tree used as comparison
+        let mut naive_mt = NaiveMerkleTree::<T>::new(height);
+
+        // Create leaves at random
+        let leaves = (0..num_leaves)
+            .map(|_| T::Data::rand(&mut rng))
+            .collect::<Vec<_>>();
+
+        // Append leaves to tree
+        leaves.iter().for_each(|leaf| {
+            tree.append(leaf.clone()).unwrap();
+        });
+
+        // Append leaves to naive_mt
+        naive_mt.append(leaves.as_slice()).unwrap();
+
+        // Exceeding maximum leaves will result in an error
+        assert!(tree.append(leaves[0].clone()).is_err());
+
+        // Finalize tree and get roots of both
+        tree.finalize_in_place().unwrap();
+
+        let optimized_root = tree.root().unwrap();
+        let naive_root = naive_mt.root().unwrap();
+        assert_eq!(naive_root, optimized_root);
+        assert_eq!(tree.root().unwrap(), expected_root,);
+    }
+
+    /// Tests that effectively all the nodes of the tree are zeroed after a reset
+    fn merkle_tree_reset_test<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
+        height: usize,
+        num_leaves: usize,
+        mut rng: &mut R,
+    ) {
+        // Init in memory optimized tree
+        let mut tree = FieldBasedOptimizedMHT::<T>::init(height, num_leaves).unwrap();
+
+        // Create leaves at random
+        let leaves = (0..num_leaves)
+            .map(|_| T::Data::rand(&mut rng))
+            .collect::<Vec<_>>();
+
+        // Add leaves to tree (don't fill the tree completely)
+        leaves[..num_leaves / 2].iter().for_each(|leaf| {
+            tree.append(leaf.clone()).unwrap();
+        });
+
+        // This is the root we should get after having reset the tree if all the nodes
+        // have been zeroed.
+        let expected_root = tree.finalize().unwrap().root().unwrap();
+
+        // Finish filling the tree
+        leaves[num_leaves / 2..].iter().for_each(|leaf| {
+            tree.append(leaf.clone()).unwrap();
+        });
+
+        // Reset the tree
+        tree.finalize_in_place().unwrap().reset();
+
+        // Add the same leaves as we did initially
+        leaves[..num_leaves / 2].iter().for_each(|leaf| {
+            tree.append(leaf.clone()).unwrap();
+        });
+
+        // Now, if all the nodes have been zeroed, than the assertion below will pass;
+        // otherwise, this means that nodes still retained their old values, so the
+        // computed root will be different.
+        assert_eq!(expected_root, tree.finalize().unwrap().root().unwrap());
+    }
+
     #[cfg(feature = "tweedle")]
     #[test]
     fn test_tweedle_fr() {
@@ -916,13 +962,43 @@ mod test {
         }
 
         let rng = &mut XorShiftRng::seed_from_u64(1234567890u64);
-        for _ in 0..NUM_SAMPLES {
-            test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, true);
-            test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, false);
-            test_batch_mixed_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng);
+
+        // FieldBasedSparseMerkleTree related tests
+        {
+            for _ in 0..NUM_SAMPLES {
+                test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, true, true);
+                test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, true, false);
+                test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, false, false);
+                test_batch_all_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, false, true);
+                test_batch_mixed_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, false);
+                test_batch_mixed_additions_removals::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng, true);
+            }
+            test_merkle_path::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng);
+            test_error_cases::<TweedleFrFieldBasedMerkleTreeParams>(TEST_HEIGHT);
+            test_edge_cases::<TweedleFrFieldBasedMerkleTreeParams>();
         }
-        test_merkle_path::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT, rng);
-        test_error_cases::<TweedleFrFieldBasedMerkleTreeParams>(TEST_HEIGHT);
-        test_edge_cases::<TweedleFrFieldBasedMerkleTreeParams>();
+
+        // FieldBasedMerkleTree related tests
+        {
+            use algebra::biginteger::BigInteger256;
+
+            let num_leaves = 1 << TEST_HEIGHT;
+            let expected_output = Fr::new(
+                BigInteger256([
+                    11933684180736631717,
+                    15667815332281652135,
+                    15034947218494079148,
+                    4006611621480566003
+                ])
+            );
+
+            merkle_tree_root_test::<TweedleFrFieldBasedMerkleTreeParams, _>(
+                TEST_HEIGHT as usize,
+                num_leaves,
+                expected_output,
+                rng,
+            );
+            merkle_tree_reset_test::<TweedleFrFieldBasedMerkleTreeParams, _>(TEST_HEIGHT as usize, num_leaves, rng);
+        }
     }
 }
