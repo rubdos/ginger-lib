@@ -731,7 +731,7 @@ mod test {
             assert!(smt.nodes.is_empty());
         }
 
-        // Finally, let's test that manually adding empty leaves results in a no-op
+        // Manually adding empty leaves results in a no-op
         {
             let leaves = (0..=NUM_SAMPLES as u32)
                 .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::ZERO_NODE_CST.unwrap().nodes[0])))
@@ -746,6 +746,25 @@ mod test {
             assert!(smt.is_tree_empty());
             assert!(smt.leaves.is_empty());
             assert!(smt.nodes.is_empty());
+        }
+
+        // Replace a leaf with the same value it had before results in a no-op
+        {
+            // Add some leaves
+            let leaves = (0..=NUM_SAMPLES as u32)
+                .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::Data::from(i as u8))))
+                .collect::<Vec<_>>();
+
+            smt.update_leaves(leaves.clone()).unwrap();
+            assert!(smt.pending_changes(), "Update with valid leaves should change the state");
+
+            smt.finalize_in_place().unwrap();
+            let root = smt.root().unwrap();
+
+            // Re-add the same leaves and check the state hasn't changed
+            smt.update_leaves(leaves).unwrap();
+            assert!(!smt.pending_changes(), "Update leaves with same values as before should leave the state unaffected");
+            assert_eq!(smt.root().unwrap(), root);
         }
     }
 
