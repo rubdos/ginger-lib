@@ -9,15 +9,16 @@ use crate::{ActionLeaf, Error, FieldBasedMerkleTree, FieldBasedSparseMerkleTree,
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-/// An in-memory, sparse, Merkle Tree with lazy leaves evaluation;
-/// "lazy" means that leaves are inserted/removed in batch, and only
-/// the affected nodes in the tree are updated.
+/// An in-memory, sparse, Merkle Tree with lazy leaves evaluation.
+/// "Lazy" means that leaves are inserted/removed in batch, and the nodes
+/// and root computation is triggered only by explicit calls to finalize()
+/// and finalize_in_place().
 #[derive(Derivative)]
 #[derivative(
     Clone(bound = ""),
     Debug(bound = ""),
 )]
-pub struct LazyBigMerkleTree<T: BatchFieldBasedMerkleTreeParameters> {
+pub struct FieldBasedOptimizedSparseMHT<T: BatchFieldBasedMerkleTreeParameters> {
     /// the height of this tree
     pub(crate) height: u8,
     /// number of leaves
@@ -44,7 +45,7 @@ pub struct LazyBigMerkleTree<T: BatchFieldBasedMerkleTreeParameters> {
 }
 
 
-impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
+impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
     /// Creates a new tree of specified `height`.
     pub fn init(
         height: u8,
@@ -323,7 +324,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> LazyBigMerkleTree<T> {
     }
 }
 
-impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for LazyBigMerkleTree<T> {
+impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBasedOptimizedSparseMHT<T> {
     type Position = u32;
     type Parameters = T;
     type MerklePath = FieldBasedBinaryMHTPath<T>;
@@ -435,7 +436,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for LazyBigMer
     }
 }
 
-impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMerkleTree for LazyBigMerkleTree<T> {
+impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMerkleTree for FieldBasedOptimizedSparseMHT<T> {
     fn insert_leaves(&mut self, leaves: Vec<(Self::Position, T::Data)>) -> Result<&mut Self, Error> {
         self.update_leaves(
             leaves
@@ -502,7 +503,7 @@ mod test {
     };
 
     use crate::{FieldBasedSparseMerkleTree, merkle_tree::field_based_mht::{
-            smt::LazyBigMerkleTree,
+            smt::FieldBasedOptimizedSparseMHT,
             FieldBasedMerkleTreeParameters, BatchFieldBasedMerkleTreeParameters,
             FieldBasedMerkleTreePath, FieldBasedMerkleTreePrecomputedZeroConstants,
             FieldBasedBinaryMHTPath, FieldBasedMerkleTree, FieldBasedOptimizedMHT,
@@ -515,7 +516,7 @@ mod test {
     const NUM_SAMPLES: usize = 10;
 
     fn compute_append_only_tree_root<T: BatchFieldBasedMerkleTreeParameters>(
-        smt: &LazyBigMerkleTree<T>,
+        smt: &FieldBasedOptimizedSparseMHT<T>,
     ) -> T::Data
     {
         let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize).unwrap();
@@ -540,7 +541,7 @@ mod test {
     ) 
     {
         // Initialize trees
-        let mut smt = LazyBigMerkleTree::<T>::init(height);
+        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
         let num_leaves = smt.width;
 
         // Initialize leaves
@@ -609,7 +610,7 @@ mod test {
     ) 
     {
         // Initialize trees: fill half of the SMT
-        let mut smt = LazyBigMerkleTree::<T>::init(height);
+        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
         let num_leaves = smt.width;
         let mut leaves = (0..num_leaves/2)
             .map(|idx| OperationLeaf::new(idx, ActionLeaf::Insert, Some(T::Data::rand(rng))))
@@ -656,7 +657,7 @@ mod test {
         height: u8,
     ) {
         // Initialize tree
-        let mut smt = LazyBigMerkleTree::<T>::init(height);
+        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
         
         let mut dummy_leaf = OperationLeaf::new(0, ActionLeaf::Remove, Some(T::Data::one()));
         
@@ -788,7 +789,7 @@ mod test {
         // HEIGHT > 1
         {
             // Generate empty tree and get the root
-            let mut smt = LazyBigMerkleTree::<T>::init(TEST_HEIGHT);
+            let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(TEST_HEIGHT);
             let root = smt.root().unwrap();
             assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT as usize]);
 
@@ -803,7 +804,7 @@ mod test {
         // HEIGHT == 1
         {
             // Generate empty tree and get the root
-            let mut smt = LazyBigMerkleTree::<T>::init(1);
+            let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(1);
             let mut root = smt.root().unwrap();
             assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[1]);
 
@@ -829,7 +830,7 @@ mod test {
         // HEIGHT == 0
         {
             // Generate empty tree and get the root
-            let mut smt = LazyBigMerkleTree::<T>::init(0);
+            let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(0);
             let root = smt.root().unwrap();
             assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[0]);
 
@@ -844,7 +845,7 @@ mod test {
     ) {
         use std::convert::TryInto;
 
-        let mut smt = LazyBigMerkleTree::<T>::init(height);
+        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
         let num_leaves = smt.width;
         let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, num_leaves as usize).unwrap();
         let mut leaves_for_lazy_smt = Vec::with_capacity(num_leaves as usize);

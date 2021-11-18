@@ -8,7 +8,7 @@ use algebra::{UniformRand, fields::tweedle::Fr as FieldElement};
 use primitives::{FieldBasedMerkleTree, FieldBasedSparseMerkleTree, crh::{TweedleFrPoseidonHash as FieldHash, TweedleFrBatchPoseidonHash as BatchFieldHash}, merkle_tree::{
         TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS as MHT_POSEIDON_PARAMETERS, FieldBasedMerkleTreeParameters,
         BatchFieldBasedMerkleTreeParameters, FieldBasedMerkleTreePrecomputedZeroConstants,
-        LazyBigMerkleTree, ActionLeaf, OperationLeaf,
+        FieldBasedOptimizedSparseMHT, ActionLeaf, OperationLeaf,
     }};
 use rand::{Rng, thread_rng};
 
@@ -33,7 +33,7 @@ impl BatchFieldBasedMerkleTreeParameters for FieldBasedMerkleTreeParams {
 /// If 'actually_remove_leaves' is set, the leaves are actually removed from the SMT
 /// and changed to insertion mode before returning.
 fn fill_tree_and_get_leaves_to_remove(
-    smt: &mut LazyBigMerkleTree<FieldBasedMerkleTreeParams>,
+    smt: &mut FieldBasedOptimizedSparseMHT<FieldBasedMerkleTreeParams>,
     num_leaves_to_fill: usize,
     num_leaves_to_remove: usize,
     actually_remove_leaves: bool,
@@ -93,7 +93,7 @@ fn bench_batch_addition_removal_smt(
             |b, _num_leaves| {
                 b.iter_batched(
                     || {
-                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::init(BENCH_HEIGHT);
+                        let mut smt = FieldBasedOptimizedSparseMHT::<FieldBasedMerkleTreeParams>::init(BENCH_HEIGHT);
                         let leaves_to_remove = fill_tree_and_get_leaves_to_remove(&mut smt, leaves_to_fill, num_leaves, actually_remove_leaves);
                         (smt, leaves_to_remove)
                     },
@@ -113,7 +113,7 @@ fn bench_batch_addition_removal_smt(
 /// in the tree.
 /// If 'subsequent' is set, the leaves will be generated with contiguous indices.
 fn fill_tree_and_add_new(
-    smt: &mut LazyBigMerkleTree<FieldBasedMerkleTreeParams>,
+    smt: &mut FieldBasedOptimizedSparseMHT<FieldBasedMerkleTreeParams>,
     mut num_leaves_to_fill: usize,
     num_leaves_to_add: usize,
     subsequent: bool,
@@ -170,7 +170,7 @@ fn bench_batch_addition(
             |b, _num_leaves| {
                 b.iter_batched(
                     || {
-                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::init(BENCH_HEIGHT);
+                        let mut smt = FieldBasedOptimizedSparseMHT::<FieldBasedMerkleTreeParams>::init(BENCH_HEIGHT);
                         let leaves_to_add = fill_tree_and_add_new(&mut smt, leaves_to_fill, num_leaves, subsequent);
                         (smt, leaves_to_add)
                     },

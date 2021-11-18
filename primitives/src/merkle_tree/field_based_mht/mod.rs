@@ -90,7 +90,7 @@ pub trait FieldBasedMerkleTree: Clone {
 
     /// Force the computation of the root whatever its internal state and return an updated copy
     /// of the Merkle Tree. It's more efficient than `finalize` because avoids a copy; however,
-    /// depending on the implemntation, once this function is called, it might not be possible
+    /// depending on the implementation, once this function is called, it might not be possible
     /// to further `update` the tree.
     fn finalize_in_place(&mut self) -> Result<&mut Self, Error>;
 
