@@ -5,14 +5,11 @@ use std::collections::HashSet;
 
 use criterion::{BatchSize, BenchmarkId, Criterion};
 use algebra::{UniformRand, fields::tweedle::Fr as FieldElement};
-use primitives::{
-    crh::{TweedleFrPoseidonHash as FieldHash, TweedleFrBatchPoseidonHash as BatchFieldHash},
-    merkle_tree::{
+use primitives::{FieldBasedMerkleTree, FieldBasedSparseMerkleTree, crh::{TweedleFrPoseidonHash as FieldHash, TweedleFrBatchPoseidonHash as BatchFieldHash}, merkle_tree::{
         TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS as MHT_POSEIDON_PARAMETERS, FieldBasedMerkleTreeParameters,
         BatchFieldBasedMerkleTreeParameters, FieldBasedMerkleTreePrecomputedZeroConstants,
         LazyBigMerkleTree, ActionLeaf, OperationLeaf,
-    }
-};
+    }};
 use rand::{Rng, thread_rng};
 
 const BENCH_HEIGHT: u8 = 22;
@@ -40,14 +37,15 @@ fn fill_tree_and_get_leaves_to_remove(
     num_leaves_to_fill: usize,
     num_leaves_to_remove: usize,
     actually_remove_leaves: bool,
-) -> Vec<OperationLeaf<FieldElement>> 
+) -> Vec<OperationLeaf<u32, FieldElement>> 
 {
     // Generate leaves to be added
     let rng = &mut thread_rng();
     let leaves_to_add = (0..num_leaves_to_fill)
         .map(|idx| OperationLeaf::new(idx as u32, ActionLeaf::Insert, Some(FieldElement::rand(rng))))
         .collect::<Vec<_>>();
-    smt.process_leaves(leaves_to_add.as_slice()).unwrap();
+    smt.update_leaves(leaves_to_add).unwrap();
+    smt.finalize_in_place().unwrap();
 
     // Collect leaves to remove randomly among the ones already present in the tree
     let mut leaves_to_remove = HashSet::<u32>::new();
@@ -59,13 +57,14 @@ fn fill_tree_and_get_leaves_to_remove(
     }
 
     // Convert HashSet into vec
-    let mut leaves_to_remove: Vec<OperationLeaf<FieldElement>> = leaves_to_remove
+    let mut leaves_to_remove: Vec<OperationLeaf<u32, FieldElement>> = leaves_to_remove
         .into_iter()
-        .map(|idx| OperationLeaf::<FieldElement>::new(idx, ActionLeaf::Remove, None))
+        .map(|idx| OperationLeaf::new(idx, ActionLeaf::Remove, None))
         .collect();
 
     if actually_remove_leaves {
-        smt.process_leaves(leaves_to_remove.as_slice()).unwrap();
+        smt.update_leaves(leaves_to_remove.clone()).unwrap();
+        smt.finalize_in_place().unwrap();
         leaves_to_remove
             .iter_mut()
             .for_each(|leaf|{
@@ -94,12 +93,13 @@ fn bench_batch_addition_removal_smt(
             |b, _num_leaves| {
                 b.iter_batched(
                     || {
-                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::new(BENCH_HEIGHT);
+                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::init(BENCH_HEIGHT);
                         let leaves_to_remove = fill_tree_and_get_leaves_to_remove(&mut smt, leaves_to_fill, num_leaves, actually_remove_leaves);
                         (smt, leaves_to_remove)
                     },
                     |(mut smt, leaves)| {
-                        smt.process_leaves(leaves.as_slice())
+                        smt.update_leaves(leaves).unwrap();
+                        smt.finalize_in_place().unwrap();
                     },
                     BatchSize::PerIteration,
                 );
@@ -117,14 +117,15 @@ fn fill_tree_and_add_new(
     mut num_leaves_to_fill: usize,
     num_leaves_to_add: usize,
     subsequent: bool,
-) -> Vec<OperationLeaf<FieldElement>> 
+) -> Vec<OperationLeaf<u32, FieldElement>> 
 {
     // Generate leaves to be added
     let rng = &mut thread_rng();
     let leaves_to_add = (0..num_leaves_to_fill)
         .map(|idx| OperationLeaf::new(idx as u32, ActionLeaf::Insert, Some(FieldElement::rand(rng))))
         .collect::<Vec<_>>();
-    smt.process_leaves(leaves_to_add.as_slice()).unwrap();
+    smt.update_leaves(leaves_to_add).unwrap();
+    smt.finalize_in_place().unwrap();
 
     // Collect leaves to add randomly
     let mut leaves_to_add = HashSet::<u32>::new();
@@ -143,9 +144,9 @@ fn fill_tree_and_add_new(
     }
 
     // Convert HashSet into vec
-    let leaves_to_add: Vec<OperationLeaf<FieldElement>> = leaves_to_add
+    let leaves_to_add: Vec<OperationLeaf<u32, FieldElement>> = leaves_to_add
         .into_iter()
-        .map(|idx| OperationLeaf::<FieldElement>::new(idx, ActionLeaf::Insert, Some(FieldElement::rand(rng))))
+        .map(|idx| OperationLeaf::new(idx, ActionLeaf::Insert, Some(FieldElement::rand(rng))))
         .collect();
 
     leaves_to_add
@@ -169,12 +170,13 @@ fn bench_batch_addition(
             |b, _num_leaves| {
                 b.iter_batched(
                     || {
-                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::new(BENCH_HEIGHT);
+                        let mut smt = LazyBigMerkleTree::<FieldBasedMerkleTreeParams>::init(BENCH_HEIGHT);
                         let leaves_to_add = fill_tree_and_add_new(&mut smt, leaves_to_fill, num_leaves, subsequent);
                         (smt, leaves_to_add)
                     },
                     |(mut smt, leaves)| {
-                        smt.process_leaves(leaves.as_slice())
+                        smt.update_leaves(leaves).unwrap();
+                        smt.finalize_in_place().unwrap();
                     },
                     BatchSize::PerIteration,
                 );

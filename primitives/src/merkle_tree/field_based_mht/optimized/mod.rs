@@ -44,6 +44,8 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedMHT<T> {
     /// `primitives/src/benches/poseidon_mht.rs` to properly tune the `processing_step`
     /// parameter according to your use case.
     pub fn init(height: usize, processing_step: usize) -> Result<Self, Error> {
+        assert!(1 << height <= u32::MAX); // If not we might overflow the u32
+
         if !check_precomputed_parameters::<T>(height) {
             Err(Box::new(MerkleTreeError::Other(
                 format!(
@@ -232,10 +234,17 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedMHT<T> {
 }
 
 impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBasedOptimizedMHT<T> {
+    type Position = u32;
     type Parameters = T;
     type MerklePath = FieldBasedMHTPath<T>;
 
     fn append(&mut self, leaf: T::Data) -> Result<&mut Self, Error> {
+
+        // Can't append in a finalized tree
+        if self.finalized {
+            Err(MerkleTreeError::Other("Unable to append leaves in a finalized tree".to_string()))?
+        }
+
         // We can't take more leaves
         if self.processed_pos[0] == self.final_pos[0] {
             Err(MerkleTreeError::TooManyLeaves(self.height))?
@@ -269,24 +278,31 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
 
     fn finalize(&self) -> Result<Self, Error> {
         let mut copy = (*self).clone();
-        copy.new_elem_pos[0] = copy.final_pos[0];
-        copy.compute_subtree()?;
-        copy.finalized = true;
-        if copy.array_nodes.len() == 0 {
-            Err(MerkleTreeError::Other("Merkle tree is empty".to_owned()))?
+
+        if !self.finalized {
+            copy.new_elem_pos[0] = copy.final_pos[0];
+            copy.compute_subtree()?;
+            copy.finalized = true;
+            if copy.array_nodes.len() == 0 {
+                Err(MerkleTreeError::Other("Merkle tree is empty".to_owned()))?
+            }
+            copy.root = *copy.array_nodes.last().unwrap();
         }
-        copy.root = *copy.array_nodes.last().unwrap();
+
         Ok(copy)
     }
 
+    /// Once called, it's not possible to further update the tree
     fn finalize_in_place(&mut self) -> Result<&mut Self, Error> {
-        self.new_elem_pos[0] = self.final_pos[0];
-        self.compute_subtree()?;
-        self.finalized = true;
-        if self.array_nodes.len() == 0 {
-            Err(MerkleTreeError::Other("Merkle tree is empty".to_owned()))?
+        if !self.finalized {
+            self.new_elem_pos[0] = self.final_pos[0];
+            self.compute_subtree()?;
+            self.finalized = true;
+            if self.array_nodes.len() == 0 {
+                Err(MerkleTreeError::Other("Merkle tree is empty".to_owned()))?
+            }
+            self.root = *self.array_nodes.last().unwrap();
         }
-        self.root = *self.array_nodes.last().unwrap();
         Ok(self)
     }
 
@@ -315,9 +331,9 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
         }
     }
 
-    fn get_merkle_path(&self, leaf_index: usize) -> Option<Self::MerklePath> {
+    fn get_merkle_path(&self, leaf_index: u32) -> Option<Self::MerklePath> {
         let num_leaves = T::MERKLE_ARITY.pow(self.height as u32);
-        if leaf_index >= num_leaves {
+        if leaf_index as usize >= num_leaves {
             eprintln!(
                 "Invalid leaf index {} for num leaves {}",
                 leaf_index, num_leaves
@@ -334,27 +350,27 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
                     let mut siblings = Vec::with_capacity(T::MERKLE_ARITY - 1);
 
                     // Based on the index of the node, we must compute the index of the left-most children
-                    let start_position = node_index - (node_index % T::MERKLE_ARITY);
+                    let start_position = node_index - (node_index % T::MERKLE_ARITY as u32);
 
                     // Then, the right most children index is simply given by adding the arity
-                    let end_position = start_position + T::MERKLE_ARITY;
+                    let end_position = start_position + T::MERKLE_ARITY as u32;
 
                     // We must save the siblings of the actual node
                     for i in start_position..end_position {
                         if i != node_index {
-                            siblings.push(self.array_nodes[i])
+                            siblings.push(self.array_nodes[i as usize])
                         }
                     }
 
                     // Remember to normalize the node_index with respect to the length of siblings
-                    merkle_path.push((siblings, node_index % T::MERKLE_ARITY));
+                    merkle_path.push((siblings, node_index as usize % T::MERKLE_ARITY));
 
                     // Get parent index for next iteration
-                    node_index = num_leaves + (node_index / T::MERKLE_ARITY);
+                    node_index = num_leaves as u32 + (node_index / T::MERKLE_ARITY as u32);
                 }
 
                 // Sanity check: the last node_index must be the one of the root
-                debug_assert_eq!(self.array_nodes[node_index], self.root);
+                debug_assert_eq!(self.array_nodes[node_index as usize], self.root);
                 Some(FieldBasedMHTPath::<T>::new(merkle_path))
             }
             false => None,
@@ -617,7 +633,7 @@ mod test {
 
         for i in 0..num_leaves {
             // Create and verify a FieldBasedMHTPath
-            let path = tree.get_merkle_path(i).unwrap();
+            let path = tree.get_merkle_path(i as u32).unwrap();
             assert!(path.is_valid());
             assert!(path.verify(tree.height(), &leaves[i], &root).unwrap());
 
@@ -680,7 +696,7 @@ mod test {
             tree.append(leaf).unwrap();
 
             let tree_copy = tree.finalize().unwrap();
-            let path = tree_copy.get_merkle_path(i).unwrap();
+            let path = tree_copy.get_merkle_path(i as u32).unwrap();
             assert!(path.are_right_leaves_empty());
         }
     }
