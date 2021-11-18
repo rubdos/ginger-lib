@@ -6,9 +6,8 @@ pub use flags::*;
 pub use std::io::{Read, Write};
 use std::{
     borrow::{Cow, ToOwned},
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
-    hash::Hash,
     rc::Rc,
     string::String,
     vec::Vec
