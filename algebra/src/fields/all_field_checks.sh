@@ -37,12 +37,6 @@ sage check_field_parameters.sage bls12_377/fr.rs #
 echo "############ Scalar field:"
 sage check_field_parameters.sage edwards_sw6/fr.rs #
 echo #
-echo "###############Checking edwards_sw6 field parameters:"
-echo "############ Base field:"
-sage check_field_parameters.sage sw6/fr.rs #
-echo "############ Scalar field:"
-sage check_field_parameters.sage edwards_sw6/fr.rs #
-echo #
 echo "###############Checking jubjub field parameters:"
 echo "############ Base field:"
 sage check_field_parameters.sage jubjub/fq.rs #
