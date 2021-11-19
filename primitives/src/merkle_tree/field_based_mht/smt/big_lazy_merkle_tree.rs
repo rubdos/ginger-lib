@@ -125,6 +125,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
     /// Emptiness of the tree is checked by checking no leaf is present.
     /// The tree doesn't need to be finalized before calling this function
     pub fn is_tree_empty(&self) -> bool {
+        debug_assert!(self.nodes.is_empty());
         self.leaves.is_empty() || self.leaves.iter().all(|(_, (data, _))| data == &T::ZERO_NODE_CST.unwrap().nodes[0])
     }
 
