@@ -234,7 +234,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedMHT<T> {
 }
 
 impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBasedOptimizedMHT<T> {
-    type Position = u32;
+    type Position = usize;
     type Parameters = T;
     type MerklePath = FieldBasedMHTPath<T>;
 
@@ -331,7 +331,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
         }
     }
 
-    fn get_merkle_path(&self, leaf_index: u32) -> Option<Self::MerklePath> {
+    fn get_merkle_path(&self, leaf_index: usize) -> Option<Self::MerklePath> {
         let num_leaves = T::MERKLE_ARITY.pow(self.height as u32);
         if leaf_index as usize >= num_leaves {
             eprintln!(
@@ -350,10 +350,10 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
                     let mut siblings = Vec::with_capacity(T::MERKLE_ARITY - 1);
 
                     // Based on the index of the node, we must compute the index of the left-most children
-                    let start_position = node_index - (node_index % T::MERKLE_ARITY as u32);
+                    let start_position = node_index - (node_index % T::MERKLE_ARITY);
 
                     // Then, the right most children index is simply given by adding the arity
-                    let end_position = start_position + T::MERKLE_ARITY as u32;
+                    let end_position = start_position + T::MERKLE_ARITY;
 
                     // We must save the siblings of the actual node
                     for i in start_position..end_position {
@@ -366,7 +366,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
                     merkle_path.push((siblings, node_index as usize % T::MERKLE_ARITY));
 
                     // Get parent index for next iteration
-                    node_index = num_leaves as u32 + (node_index / T::MERKLE_ARITY as u32);
+                    node_index = num_leaves + (node_index / T::MERKLE_ARITY);
                 }
 
                 // Sanity check: the last node_index must be the one of the root
@@ -633,7 +633,7 @@ mod test {
 
         for i in 0..num_leaves {
             // Create and verify a FieldBasedMHTPath
-            let path = tree.get_merkle_path(i as u32).unwrap();
+            let path = tree.get_merkle_path(i).unwrap();
             assert!(path.is_valid());
             assert!(path.verify(tree.height(), &leaves[i], &root).unwrap());
 
@@ -696,7 +696,7 @@ mod test {
             tree.append(leaf).unwrap();
 
             let tree_copy = tree.finalize().unwrap();
-            let path = tree_copy.get_merkle_path(i as u32).unwrap();
+            let path = tree_copy.get_merkle_path(i).unwrap();
             assert!(path.are_right_leaves_empty());
         }
     }

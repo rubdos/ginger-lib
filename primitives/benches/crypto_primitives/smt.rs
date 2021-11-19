@@ -49,6 +49,8 @@ fn fill_tree_and_get_leaves_to_remove(
 
     // Collect leaves to remove randomly among the ones already present in the tree
     let mut leaves_to_remove = HashSet::<u32>::new();
+
+    // Works iff num_leaves_to_remove << num_leaves_to_fill
     while leaves_to_remove.len() != num_leaves_to_remove {
         let idx = rng.gen_range(0..num_leaves_to_fill) as u32;
         if !leaves_to_remove.contains(&idx) {
@@ -129,6 +131,8 @@ fn fill_tree_and_add_new(
 
     // Collect leaves to add randomly
     let mut leaves_to_add = HashSet::<u32>::new();
+
+    // Works iff num_leaves_to_remove << num_leaves_to_fill
     while leaves_to_add.len() != num_leaves_to_add {
         let idx = if !subsequent {
             rng.gen_range(num_leaves_to_fill..1 << BENCH_HEIGHT) as u32
