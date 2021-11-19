@@ -65,13 +65,13 @@ macro_rules! nonnative_group_test_unsafe_add {
         );
     };
 }
-nonnative_group_test_unsafe_add!(
+/*nonnative_group_test_unsafe_add!(
     Bn382Frsecp256k1Fq,
     1,
     Secp256k1Parameters,
     BN382Fr,
     secp256k1Fq
-);
+);*/
 
 //TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
 #[cfg(feature = "density-optimized")]
