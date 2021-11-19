@@ -3,9 +3,9 @@ use crate::groups::{
     test::{group_test_with_incomplete_add, mul_bits_native_test},
 };
 use algebra::{
-    curves::{ed25519::Ed25519Parameters, secp256k1::Secp256k1Parameters},
+    curves::ed25519::Ed25519Parameters,
     fields::{
-        bn_382::Fr as BN382Fr, ed25519::fq::Fq as ed25519Fq, secp256k1::Fq as secp256k1Fq,
+        ed25519::fq::Fq as ed25519Fq,
         tweedle::Fr as TweedleFr,
     },
 };
