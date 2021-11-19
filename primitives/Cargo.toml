@@ -65,40 +65,46 @@ rand_xorshift = { version = "0.3.0" }
 name = "pedersen_crh"
 path = "benches/crypto_primitives/crh.rs"
 harness = false
-required-features = ["mnt4_753"]
+required-features = ["mnt4_753", "llvm_asm"]
 
 [[bench]]
 name = "pedersen_comm"
 path = "benches/crypto_primitives/comm.rs"
 harness = false
-required-features = ["commitment", "mnt4_753"]
+required-features = ["commitment", "mnt4_753", "llvm_asm"]
 
 [[bench]]
 name = "blake2s_prf"
 path = "benches/crypto_primitives/prf.rs"
 harness = false
-required-features = ["prf"]
+required-features = ["prf", "llvm_asm"]
 
 [[bench]]
 name = "schnorr_sig"
 path = "benches/crypto_primitives/signature.rs"
 harness = false
-required-features = ["signature", "mnt4_753", "mnt6_753"]
+required-features = ["signature", "mnt4_753", "mnt6_753", "llvm_asm"]
 
 [[bench]]
 name = "ecvrf"
 path = "benches/crypto_primitives/ecvrf.rs"
 harness = false
-required-features = ["vrf", "mnt4_753", "mnt6_753"]
+required-features = ["vrf", "mnt4_753", "mnt6_753", "llvm_asm"]
 
 [[bench]]
 name = "poseidon_crh"
 path = "benches/crypto_primitives/poseidon_crh.rs"
 harness = false
-required-features = ["bn_382", "mnt4_753", "mnt6_753", "tweedle"]
+required-features = ["bn_382", "mnt4_753", "mnt6_753", "tweedle", "llvm_asm"]
 
 [[bench]]
-name = "poseidon_mht"
+name = "in_memory_optimized_poseidon_mht_benches"
 path = "benches/crypto_primitives/poseidon_mht.rs"
 harness = false
-required-features = ["merkle_tree", "mnt4_753", "mnt6_753"]
+required-features = ["merkle_tree", "tweedle", "llvm_asm"]
+
+[[bench]]
+name = "in_memory_smt_benches"
+path = "benches/crypto_primitives/smt.rs"
+harness = false
+required-features = ["merkle_tree", "tweedle", "llvm_asm"]
