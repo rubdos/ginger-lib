@@ -639,78 +639,17 @@ impl Boolean {
         ConstraintF: Field,
         CS: ConstraintSystem<ConstraintF>,
     {
-        let mut bits_iter = bits.iter();
-
-        // b = char() - 1
+        // `bits` < F::characteristic() <==> `bits` <= F::characteristic() -1
         let mut b = F::characteristic().to_vec();
         assert_eq!(b[0] % 2, 1);
-        b[0] -= 1;
-
-        // Runs of ones in r
-        let mut last_run = Boolean::constant(true);
-        let mut current_run = vec![];
-
-        let mut found_one = false;
-        let mut run_i = 0;
-        let mut nand_i = 0;
-
-        let char_num_bits = <F as PrimeField>::Params::MODULUS_BITS as usize;
-        if bits.len() > char_num_bits {
-            let num_extra_bits = bits.len() - char_num_bits;
-            let mut or_result = Boolean::constant(false);
-            for (i, should_be_zero) in bits[0..num_extra_bits].iter().enumerate() {
-                or_result = Boolean::or(
-                    &mut cs.ns(|| format!("Check {}-th or", i)),
-                    &or_result,
-                    should_be_zero,
-                )?;
-                let _ = bits_iter.next().unwrap();
-            }
-            or_result.enforce_equal(
-                &mut cs.ns(|| "Check that or of extra bits is zero"),
-                &Boolean::constant(false),
-            )?;
-        }
-
-        for b in BitIterator::new(b) {
-            // Skip over unset bits at the beginning
-            found_one |= b;
-            if !found_one {
-                continue;
-            }
-
-            let a = bits_iter.next().unwrap();
-
-            if b {
-                // This is part of a run of ones.
-                current_run.push(*a);
-            } else {
-                if !current_run.is_empty() {
-                    // This is the start of a run of zeros, but we need
-                    // to k-ary AND against `last_run` first.
-
-                    current_run.push(last_run);
-                    last_run = Self::kary_and(cs.ns(|| format!("run {}", run_i)), &current_run)?;
-                    run_i += 1;
-                    current_run.truncate(0);
-                }
-
-                // If `last_run` is true, `a` must be false, or it would
-                // not be in the field.
-                //
-                // If `last_run` is false, `a` can be true or false.
-                //
-                // Ergo, at least one of `last_run` and `a` must be false.
-                Self::enforce_nand(cs.ns(|| format!("nand {}", nand_i)), &[last_run, *a])?;
-                nand_i += 1;
-            }
-        }
-        assert!(bits_iter.next().is_none());
+        b[0] -= 1; // This works, because the LSB is one, so there's no borrows.
+        let run = Self::enforce_smaller_or_equal_than_le(cs.ns(|| "enforce_smaller_or_equal_than_le"), 
+        bits.into_iter().rev().map(|&b| b).collect::<Vec<_>>().as_slice(), b)?;
 
         // We should always end in a "run" of zeros, because
         // the characteristic is an odd prime. So, this should
         // be empty.
-        assert!(current_run.is_empty());
+        assert!(run.is_empty());
 
         Ok(())
     }
