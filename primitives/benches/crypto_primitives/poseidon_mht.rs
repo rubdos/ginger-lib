@@ -6,7 +6,7 @@ use algebra::{UniformRand, fields::tweedle::Fr as FieldElement};
 use primitives::{FieldBasedMerkleTree, crh::{TweedleFrPoseidonHash as FieldHash, TweedleFrBatchPoseidonHash as BatchFieldHash}, merkle_tree::{
         TWEEDLE_DEE_MHT_POSEIDON_PARAMETERS as MHT_POSEIDON_PARAMETERS, FieldBasedMerkleTreeParameters,
         BatchFieldBasedMerkleTreeParameters, FieldBasedMerkleTreePrecomputedZeroConstants,
-        FieldBasedOptimizedMHT
+        FieldBasedAppendOnlyMHT
     }};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
@@ -53,7 +53,7 @@ fn _bench_in_memory_optimized_poseidon_mht(
                     };
                     
                     // Create tree
-                    let tree = FieldBasedOptimizedMHT::<FieldBasedMerkleTreeParams>::init(
+                    let tree = FieldBasedAppendOnlyMHT::<FieldBasedMerkleTreeParams>::init(
                         BENCH_HEIGHT,
                         num_leaves
                     ).unwrap();
@@ -97,7 +97,7 @@ fn batch_poseidon_mht_tune_processing_step(c: &mut Criterion) {
                         let leaves = (0..num_leaves).map(|_| FieldElement::rand(rng)).collect::<Vec<_>>();
                         
                         // Create tree
-                        let tree = FieldBasedOptimizedMHT::<FieldBasedMerkleTreeParams>::init(
+                        let tree = FieldBasedAppendOnlyMHT::<FieldBasedMerkleTreeParams>::init(
                             BENCH_HEIGHT,
                             *processing_step
                         ).unwrap();

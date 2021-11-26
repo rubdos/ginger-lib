@@ -260,7 +260,7 @@ mod test {
     }
 
     type MNT4753FieldBasedMerkleTree = NaiveMerkleTree<MNT4753FieldBasedMerkleTreeParams>;
-    type MNT4PoseidonMHT = FieldBasedOptimizedMHT<MNT4753FieldBasedMerkleTreeParams>;
+    type MNT4PoseidonMHT = FieldBasedAppendOnlyMHT<MNT4753FieldBasedMerkleTreeParams>;
 
     fn generate_merkle_tree<P: FieldBasedMerkleTreeParameters>(leaves: &[P::Data], height: usize) {
         let mut tree = NaiveMerkleTree::<P>::new(height);
