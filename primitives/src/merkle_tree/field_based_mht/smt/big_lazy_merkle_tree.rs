@@ -7,7 +7,7 @@ use crate::{ActionLeaf, Error, FieldBasedMerkleTree, FieldBasedSparseMerkleTree,
         },
     }};
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 /// An in-memory, sparse, Merkle Tree with lazy leaves evaluation.
 /// "Lazy" means that leaves are inserted/removed in batch, and the nodes
@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
     Clone(bound = ""),
     Debug(bound = ""),
 )]
-pub struct FieldBasedOptimizedSparseMHT<T: BatchFieldBasedMerkleTreeParameters> {
+pub struct FieldBasedSparseMHT<T: BatchFieldBasedMerkleTreeParameters> {
     /// the height of this tree
     pub(crate) height: u8,
     /// number of leaves
@@ -45,7 +45,7 @@ pub struct FieldBasedOptimizedSparseMHT<T: BatchFieldBasedMerkleTreeParameters> 
 }
 
 
-impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
+impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMHT<T> {
     /// Creates a new tree of specified `height`.
     pub fn init(
         height: u8,
@@ -94,26 +94,17 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
         )
     }
 
-    /// Return (in order) the non empty leaves of the tree.
-    /// The tree doesn't need to be finalized before calling this function.
-    /// Used mainly for testing purposes.
-    pub(crate) fn get_non_empty_leaves(&self) -> BTreeMap<u32, T::Data> {
-        let mut non_empty_leaves = BTreeMap::new();
-        self.leaves
-            .iter()
-            .filter(|(_, (data, _))| data != &T::ZERO_NODE_CST.unwrap().nodes[0])
-            .for_each(|(&idx, (data, _))| { non_empty_leaves.insert(idx, *data); });
-        non_empty_leaves
-    }
-
     /// Return the last non empty leaf position of the tree.
     /// The tree doesn't need to be finalized before calling this function.
     fn get_last_non_empty_position(&self) -> u32 {
-        if self.is_tree_empty() {
-            0
-        } else {
-            self.get_non_empty_leaves().into_iter().rev().next().unwrap().0
-        }
+        assert!(!self.is_tree_empty());
+        let mut last_idx = 0;
+        self.leaves
+            .iter()
+            .filter(|(_, (data, _))| data != &T::ZERO_NODE_CST.unwrap().nodes[0])
+            .for_each(|(idx ,(_, _))| { if idx > &last_idx { last_idx = *idx; }});
+        
+        last_idx
     }
 
     fn batch_hash(input: &[T::Data]) -> Vec<T::Data> {
@@ -127,48 +118,6 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
     pub fn is_tree_empty(&self) -> bool {
         debug_assert!(self.nodes.is_empty());
         self.leaves.is_empty() || self.leaves.iter().all(|(_, (data, _))| data == &T::ZERO_NODE_CST.unwrap().nodes[0])
-    }
-
-    /// Check and return Error in case of:
-    /// - Invalid leaf idx (leaf.coord.position > self.width);
-    /// - Removal of a non existing leaf
-    /// The tree doesn't need to be finalized before calling this function
-    fn pre_check_leaves(&self, leaves_map: &mut HashMap<u32, (ActionLeaf, Option<T::Data>)>) -> Result<(), Error> {
-        // Collect leaves whose value is set to be empty node
-        let mut leaves_to_remove = vec![];
-
-        for (&idx, (action, data)) in leaves_map.iter() {
-
-            // Can't insert leaves in a tree of height 0.
-            if self.height == 0 {
-                return Err(MerkleTreeError::TooManyLeaves(0))?
-            }
-            
-            // Check that the index of the leaf is less than the width of the Merkle tree
-            if idx >= self.width {
-                return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
-            }
-
-            let leaf = self.leaves.get(&idx);
-
-            // Forbid attempt to remove a non-existing leaf (or ones waiting for removal)
-            if matches!(action, ActionLeaf::Remove) && (leaf.is_none() || leaf.unwrap().0 == T::ZERO_NODE_CST.unwrap().nodes[0]) { 
-                return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf with index {} doesn't exist", idx)))?
-            } 
-
-            if matches!(action, ActionLeaf::Insert) && (
-                (data.unwrap() == T::ZERO_NODE_CST.unwrap().nodes[0]) || // Attempt to insert a leaf with an empty value
-                (leaf.is_some() && leaf.unwrap().0 == data.unwrap()) // Attempt to replace a leaf with the same value it had before
-            ) 
-            {
-                leaves_to_remove.push(idx);
-            }
-        }
-
-        // Remove from 'leaves_map' invalid values
-        leaves_to_remove.into_iter().for_each(|leaf_idx| { leaves_map.remove(&leaf_idx).unwrap(); });
-
-        Ok(())
     }
 
     /// Get the node at the corresponding height and idx, and return its value and 'true' if it exists;
@@ -201,10 +150,10 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
     fn process_leaves (&mut self) -> Result<T::Data, Error> {
 
         // Collect nodes to (re)compute for each level of the tree
-        let mut nodes_to_process_in_parallel: Vec<HashSet<u32>> = Vec::with_capacity(self.height as usize);
+        let mut nodes_to_recompute_by_level: Vec<HashSet<u32>> = Vec::with_capacity(self.height as usize);
 
         // Collect leaves in the first level
-        let mut leaves = HashSet::<u32>::new();
+        let mut modified_leaves_pos = HashSet::<u32>::new();
 
         // Collect leaves to be removed from leaves Map
         let mut leaves_to_be_removed = Vec::new();
@@ -216,7 +165,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
 
                 // Collect leaves whose value has changed since previous 'process_leaves' call, and set
                 // their state to unchanged.
-                leaves.insert(*idx);
+                modified_leaves_pos.insert(*idx);
                 *updated = false;
     
                 // We interpret removal as a leaf with updated state but value set to be empty node. For
@@ -226,7 +175,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
                 }
             });
 
-        nodes_to_process_in_parallel.push(leaves);
+        nodes_to_recompute_by_level.push(modified_leaves_pos);
 
         // Remove all leaves marked for removal
         leaves_to_be_removed.into_iter().for_each(|idx| { self.leaves.remove(&idx); });
@@ -241,7 +190,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
             // Keeps track (uniquely) of the nodes to be processed at the level above
             let mut visited_nodes: HashSet<u32> = HashSet::new();
 
-            nodes_to_process_in_parallel[height]
+            nodes_to_recompute_by_level[height]
                 .iter()
                 .for_each(|&child_idx| {
 
@@ -250,7 +199,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
                     visited_nodes.insert(parent_idx);
                 });
 
-            nodes_to_process_in_parallel.push(visited_nodes);
+            nodes_to_recompute_by_level.push(visited_nodes);
         }
 
         // Compute hashes of the affected nodes (ignoring leaf nodes)
@@ -259,7 +208,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
             let mut empty_node = Vec::new(); // Keep track of which node is empty
     
             // Collect leaves to be hashed in parallel
-            nodes_to_process_in_parallel[height]
+            nodes_to_recompute_by_level[height]
                 .iter()
                 .for_each(|&parent_idx| {    
 
@@ -294,7 +243,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
     
                 // Update the nodes map with the new values
                 let mut output_vec_index = 0;
-                for (&idx, is_empty) in nodes_to_process_in_parallel[height].iter().zip(empty_node) {
+                for (&idx, is_empty) in nodes_to_recompute_by_level[height].iter().zip(empty_node) {
                     if !is_empty {
                         self.nodes.insert(idx, output_vec[output_vec_index]);
                         output_vec_index += 1;
@@ -318,7 +267,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedOptimizedSparseMHT<T> {
     }
 }
 
-impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBasedOptimizedSparseMHT<T> {
+impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBasedSparseMHT<T> {
     type Position = u32;
     type Parameters = T;
     type MerklePath = FieldBasedBinaryMHTPath<T>;
@@ -328,16 +277,30 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
         leaf: T::Data,
     ) -> Result<&mut Self, Error>
     {
-        // It doesn't really make sense to define an append operation in a SparseMerkleTree,
-        // but let's interpret it as adding a single leaf in the last empty position.
-        let last_pos = self.get_last_non_empty_position();
-
-        // If the last non empty position is the final one of the tree, we forbid "appending"
-        if last_pos == self.width - 1 {
-            Err(MerkleTreeError::TooManyLeaves(self.height as usize))?
+        // Cannot append in a tree of height 0
+        if self.height == 0 {
+            Err(MerkleTreeError::TooManyLeaves(0))?
         }
 
-        self.insert_leaves(vec![(last_pos + 1, leaf)])
+        // It doesn't really make sense to define an append operation in a SparseMerkleTree,
+        // but let's interpret it as adding a single leaf in the last empty position.
+        let last_pos = if !self.is_tree_empty() {
+            let pos = self.get_last_non_empty_position();
+
+            // If the last non empty position is the final one of the tree, we forbid "appending"
+            if pos == self.width - 1 {
+                Err(MerkleTreeError::TooManyLeaves(self.height as usize))?
+            }
+
+            pos + 1
+        } else {
+            0
+        };
+
+        // Insert leaves inside tree
+        let mut leaves_to_insert = HashMap::new();
+        leaves_to_insert.insert(last_pos, leaf);
+        self.insert_leaves(leaves_to_insert)
     }
 
     fn finalize(&self) -> Result<Self, Error> {
@@ -415,56 +378,46 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedMerkleTree for FieldBased
     }
 }
 
-impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMerkleTree for FieldBasedOptimizedSparseMHT<T> {
-    fn insert_leaves(&mut self, leaves: Vec<(Self::Position, T::Data)>) -> Result<&mut Self, Error> {
-        self.update_leaves(
-            leaves
-                .into_iter()
-                .map(|(pos, leaf)| OperationLeaf::new(pos, ActionLeaf::Insert, Some(leaf)))
-                .collect()
-        )
-    }
+impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMerkleTree for FieldBasedSparseMHT<T> {
 
-    fn remove_leaves(&mut self, leaves: Vec<Self::Position>) -> Result<&mut Self, Error> {
-        self.update_leaves(
-            leaves
-                .into_iter()
-                .map(|pos| OperationLeaf::new(pos, ActionLeaf::Remove, None))
-                .collect()
-        )
-    }
-
-    /// Perform insertion/removals of the leaves as specified by 'vec_leaf_op'.
+    /// Perform insertion/removals of the leaves as specified by 'leaves_set'.
     /// This function will return Error in the following situations:
     /// - Invalid leaf idx (leaf.coord.position > self.width);
     /// - Remove a non existing leaf
-    /// Insertion of an already-existing leaf, instead, it's allowed and its value will be simply replaced (as long as it's different from before).
-    /// NOTE: Any duplicated leaf coord in 'vec_leaf_op' will be set to its last (ActionLeaf, T::Data) value.
-    fn update_leaves(&mut self, vec_leaf_op: Vec<OperationLeaf<Self::Position, T::Data>>) -> Result<&mut Self, Error> {
-        // Put leaves in a map to filter out duplicates
-        let mut leaves_map = HashMap::new();
-        vec_leaf_op
-            .into_iter()
-            .for_each(|leaf| { leaves_map.insert(leaf.position, (leaf.action, leaf.hash)); });
-        
-        // Pre-check leaves to be added
-        self.pre_check_leaves(&mut leaves_map)?;
+    fn update_leaves(&mut self, leaves_set: HashSet<OperationLeaf<Self::Position, T::Data>>) -> Result<&mut Self, Error> {
 
         // Update internal leaves
-        if !leaves_map.is_empty() {
-            leaves_map
-            .into_iter()
-            .for_each(|(idx, (action, data))| {
+        if !leaves_set.is_empty() {
+            
+            // Can't perform any leaf update operation in a tree of height 0.
+            if self.height == 0 {
+                return Err(MerkleTreeError::TooManyLeaves(0))?
+            }
+
+            for leaf in leaves_set.into_iter() {
+                let idx = leaf.position;
+                
+                // Check that the index of the leaf is less than the width of the Merkle tree
+                if idx >= self.width {
+                    return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf index out of range. Max: {}, got: {}", self.width - 1, idx)))?
+                }
+
+                // Forbid attempt to remove a non-existing leaf (or ones waiting for removal)
+                let leaf_to_remove = self.leaves.get(&idx);
+                if matches!(leaf.action, ActionLeaf::Remove) && (leaf_to_remove.is_none() || leaf_to_remove.unwrap().0 == T::ZERO_NODE_CST.unwrap().nodes[0]) { 
+                    return Err(MerkleTreeError::IncorrectLeafIndex(idx as usize, format!("Leaf with index {} doesn't exist", idx)))?
+                } 
+
                 // For convenience, removal is performed by replacing the leaf value with the empty one, otherwise set it to the proper insertion value
-                let val = if matches!(action, ActionLeaf::Remove) {
+                let val = if matches!(leaf.action, ActionLeaf::Remove) {
                     T::ZERO_NODE_CST.unwrap().nodes[0]
                 } else {
-                    data.unwrap()
+                    leaf.hash.unwrap()
                 };
 
                 // Update leaves Map accordingly
                 self.leaves.insert(idx, (val, true));
-        });
+            }
 
             // Set root to be recomputed
             self.root.1 = true;
@@ -477,15 +430,17 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMerkleTree for Fiel
 #[cfg(test)]
 mod test {
 
+    use std::collections::{BTreeMap, HashMap, HashSet};
+
     use algebra::{
         Field, UniformRand,
     };
 
     use crate::{FieldBasedSparseMerkleTree, NaiveMerkleTree, merkle_tree::field_based_mht::{
-            smt::FieldBasedOptimizedSparseMHT,
+            smt::FieldBasedSparseMHT,
             FieldBasedMerkleTreeParameters, BatchFieldBasedMerkleTreeParameters,
             FieldBasedMerkleTreePath, FieldBasedMerkleTreePrecomputedZeroConstants,
-            FieldBasedBinaryMHTPath, FieldBasedMerkleTree, FieldBasedOptimizedMHT,
+            FieldBasedBinaryMHTPath, FieldBasedMerkleTree, FieldBasedAppendOnlyMHT,
             OperationLeaf, ActionLeaf,
         }};
 
@@ -494,11 +449,23 @@ mod test {
     const TEST_HEIGHT: u8 = 10;
     const NUM_SAMPLES: usize = 10;
 
-    fn compute_append_only_tree_root<T: BatchFieldBasedMerkleTreeParameters>(smt: &FieldBasedOptimizedSparseMHT<T>) -> T::Data
+    /// Return (in order) the non empty leaves of the tree.
+    /// The tree doesn't need to be finalized before calling this function.
+    /// Used mainly for testing purposes.
+    fn get_non_empty_leaves<T: BatchFieldBasedMerkleTreeParameters>(smt: &FieldBasedSparseMHT<T>) -> BTreeMap<u32, T::Data> {
+        let mut non_empty_leaves = BTreeMap::new();
+        smt.leaves
+            .iter()
+            .filter(|(_, (data, _))| data != &T::ZERO_NODE_CST.unwrap().nodes[0])
+            .for_each(|(&idx, (data, _))| { non_empty_leaves.insert(idx, *data); });
+        non_empty_leaves
+    }
+
+    fn compute_append_only_tree_root<T: BatchFieldBasedMerkleTreeParameters>(smt: &FieldBasedSparseMHT<T>) -> T::Data
     {
-        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize).unwrap();
+        let mut optimized = FieldBasedAppendOnlyMHT::<T>::init(smt.height as usize, smt.width as usize).unwrap();
         let mut last_idx = 0;
-        smt.get_non_empty_leaves().iter().for_each(|(&idx, leaf)| {
+        get_non_empty_leaves(smt).iter().for_each(|(&idx, leaf)| {
             for _ in last_idx..idx {
                 optimized.append(T::ZERO_NODE_CST.unwrap().nodes[0]).unwrap();
             }
@@ -508,7 +475,7 @@ mod test {
         optimized.finalize().unwrap().root().unwrap()
     }
 
-    fn compare_append_only_and_smt_roots<T: BatchFieldBasedMerkleTreeParameters>(smt: &mut FieldBasedOptimizedSparseMHT<T>) {
+    fn compare_append_only_and_smt_roots<T: BatchFieldBasedMerkleTreeParameters>(smt: &mut FieldBasedSparseMHT<T>) {
         // Insert into optimized and get root
         let optimized_root = compute_append_only_tree_root(smt);
 
@@ -518,7 +485,7 @@ mod test {
         assert_eq!(smt.root().unwrap(), optimized_root, "Roots are not equal");
     }
 
-    fn assert_tree_empty<T: BatchFieldBasedMerkleTreeParameters>(smt: &FieldBasedOptimizedSparseMHT<T>) {
+    fn assert_tree_empty<T: BatchFieldBasedMerkleTreeParameters>(smt: &FieldBasedSparseMHT<T>) {
         // Tree must be finalized before calling this function
         assert!(!smt.pending_changes());
 
@@ -533,10 +500,10 @@ mod test {
         assert!(smt.nodes.is_empty());
     }
 
-    /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
+    /// Test correct behavior of the SMT (compared with respect to a FieldBasedAppendOnlyMHT) by processing batches
     /// of all leaves additions and all leaves removals.
     /// If 'adjacent_leaves' is enabled, the batches will be made up of leaves with subsequent indices;
-    /// If 'finalize_in_the_end' is enabled, the "finalize_in_place()" function of FieldBasedOptimizedSparseMHT
+    /// If 'finalize_in_the_end' is enabled, the "finalize_in_place()" function of FieldBasedSparseMHT
     /// will be called only after having appended/removed all the leaves
     fn test_batch_all_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
         height: u8,
@@ -546,7 +513,7 @@ mod test {
     ) 
     {
         // Initialize trees
-        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
+        let mut smt = FieldBasedSparseMHT::<T>::init(height);
         let num_leaves = smt.width;
 
         // Initialize leaves
@@ -564,7 +531,9 @@ mod test {
             .chunks(chunk_size)
             .for_each(|leaves| {
                 // Insert all leaves into smt and get root
-                smt.insert_leaves(leaves.to_vec()).unwrap();
+                let mut leaves_map = HashMap::new();
+                leaves.iter().for_each(|(idx, data)| { leaves_map.insert(*idx, *data); });
+                smt.insert_leaves(leaves_map).unwrap();
 
                 if !finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
             });
@@ -591,9 +560,9 @@ mod test {
         assert_tree_empty(&smt);
     }
 
-    /// Test correct behavior of the SMT (compared with respect to a FieldBasedOptimizedMHT) by processing batches
+    /// Test correct behavior of the SMT (compared with respect to a FieldBasedAppendOnlyMHT) by processing batches
     /// of leaves additions and removals, in mixed order.
-    /// If 'finalize_in_the_end' is enabled, the "finalize_in_place()" function of FieldBasedOptimizedSparseMHT
+    /// If 'finalize_in_the_end' is enabled, the "finalize_in_place()" function of FieldBasedSparseMHT
     /// will be called only after having appended/removed all the leaves
     fn test_batch_mixed_additions_removals<T: BatchFieldBasedMerkleTreeParameters, R: RngCore>(
         height: u8,
@@ -602,12 +571,12 @@ mod test {
     ) 
     {
         // Initialize trees: fill half of the SMT
-        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
+        let mut smt = FieldBasedSparseMHT::<T>::init(height);
         let num_leaves = smt.width;
         let mut leaves = (0..num_leaves/2)
             .map(|idx| OperationLeaf::new(idx, ActionLeaf::Insert, Some(T::Data::rand(rng))))
             .collect::<Vec<_>>();
-        smt.update_leaves(leaves.clone()).unwrap();
+        smt.update_leaves(leaves.iter().cloned().collect::<HashSet<_>>()).unwrap();
 
         // Test batches of mixed insertions/removals: fill the other half of the tree and remove the first half.
 
@@ -631,7 +600,7 @@ mod test {
         leaves
             .chunks(chunk_size)
             .for_each(|leaves| {
-                smt.update_leaves(leaves.to_vec()).unwrap();
+                smt.update_leaves(leaves.iter().cloned().collect::<HashSet<_>>()).unwrap();
                 if !finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
             });
 
@@ -642,31 +611,43 @@ mod test {
         assert_eq!(smt.nodes.len() as u32, num_leaves/2);
     }
 
+    macro_rules! set {
+        ( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
+            {
+                let mut temp_set = HashSet::new();  // Create a mutable HashSet
+                $(
+                    temp_set.insert($x); // Insert each item matched into the HashSet
+                )*
+                temp_set // Return the populated HashSet
+            }
+        };
+    }
+
     fn test_error_cases<T: BatchFieldBasedMerkleTreeParameters>(
         height: u8,
     ) {
         // Initialize tree
-        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
+        let mut smt = FieldBasedSparseMHT::<T>::init(height);
         
         let mut dummy_leaf = OperationLeaf::new(0, ActionLeaf::Remove, Some(T::Data::one()));
         
         // Remove leaf from an empty tree
-        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains("Leaf with index 0 doesn't exist"));
+        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains("Leaf with index 0 doesn't exist"));
         assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
 
         // Remove a leaf out of range
         dummy_leaf.position = smt.width;
-        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
+        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
         assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
 
         // Add a leaf out of range
         dummy_leaf.action = ActionLeaf::Insert;
-        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
+        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
         assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
 
         // Add a correct leaf
         dummy_leaf.position -= 1;
-        smt.update_leaves(vec![dummy_leaf]).unwrap();
+        smt.update_leaves(set![dummy_leaf]).unwrap();
         smt.finalize_in_place().unwrap();
         let smt_root = smt.root().unwrap();
         assert_eq!(smt_root, compute_append_only_tree_root(&smt));
@@ -675,7 +656,7 @@ mod test {
 
         // Replace previously added leaf with a new value and check correct replacement
         dummy_leaf.hash = Some(T::Data::from(2u8));
-        smt.update_leaves(vec![dummy_leaf]).unwrap();
+        smt.update_leaves(set![dummy_leaf]).unwrap();
         let new_smt_root = smt.finalize_in_place().unwrap().root().unwrap();
         assert_ne!(new_smt_root, smt_root);
         assert_eq!(new_smt_root, compute_append_only_tree_root(&smt));
@@ -685,102 +666,39 @@ mod test {
         // Remove non existing leaf with non empty tree
         dummy_leaf.position -= 1;
         dummy_leaf.action = ActionLeaf::Remove;
-        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 2).as_str()));
+        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 2).as_str()));
         assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
 
         // Remove leaf
         dummy_leaf.position += 1;
         dummy_leaf.action = ActionLeaf::Remove;
-        smt.update_leaves(vec![dummy_leaf]).unwrap();
+        smt.update_leaves(set![dummy_leaf]).unwrap();
 
         // Remove same leaf as before: should be the same as trying to remove a non existing leaf
-        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 1).as_str()));
+        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 1).as_str()));
 
         // Tree must be empty now
         smt.finalize_in_place().unwrap();
         assert_tree_empty(&smt);
 
-        // Add multiple times the same leaf: only last value of the leaf shall be taken
-        {
-            let mut leaves = (0..=NUM_SAMPLES)
-                .map(|i| OperationLeaf::new(0, ActionLeaf::Insert, Some(T::Data::from(i as u8))))
-                .collect::<Vec<_>>();
-            
-            smt.update_leaves(leaves.clone()).unwrap();
-            smt.finalize_in_place().unwrap();
-            assert_eq!(smt.leaves.len(), 1);
-            assert_eq!(smt.nodes.len() as u8, height);
+        // TODO: Do we really want to give up on this feature ?
+        // // Test that if some error occurs during the processing of a batch of leaves, the tree state will be untouched.
+        // {
+        //     // Valid leaves to be added
+        //     let mut leaves = (0..=NUM_SAMPLES as u32)
+        //         .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::Data::from(i as u8))))
+        //         .collect::<Vec<_>>();
 
-            let optimized_root = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, smt.width as usize)
-                .unwrap()
-                .append(T::Data::from(NUM_SAMPLES as u8))
-                .unwrap()
-                .finalize()
-                .unwrap()
-                .root()
-                .unwrap();
+        //     // Let's add an out-of-range leaf at the end to trigger an error
+        //     leaves.push(OperationLeaf::new(smt.width, ActionLeaf::Insert, Some(T::Data::from(NUM_SAMPLES as u8))));
 
-            assert_eq!(smt.root().unwrap(), optimized_root);
+        //     assert!(smt.update_leaves(leaves.iter().cloned().collect::<HashSet<_>>()).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
 
-            // If we append a leaf removal at the end, again, only this last removal will be taken into account
-            leaves.push(OperationLeaf::new(0, ActionLeaf::Remove, Some(T::Data::from((NUM_SAMPLES + 1) as u8))));
-            smt.update_leaves(leaves).unwrap();
-            smt.finalize_in_place().unwrap();
-
-            // Tree must be empty now
-            assert_tree_empty(&smt);
-        }
-
-        // Test that if some error occurs during the processing of a batch of leaves, the tree state will be untouched.
-        {
-            // Valid leaves to be added
-            let mut leaves = (0..=NUM_SAMPLES as u32)
-                .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::Data::from(i as u8))))
-                .collect::<Vec<_>>();
-
-            // Let's add an out-of-range leaf at the end to trigger an error
-            leaves.push(OperationLeaf::new(smt.width, ActionLeaf::Insert, Some(T::Data::from(NUM_SAMPLES as u8))));
-
-            assert!(smt.update_leaves(leaves).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
-
-            // Tree must be empty as before
-            assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
-            smt.finalize_in_place().unwrap();
-            assert_tree_empty(&smt);
-        }
-
-        // Manually adding empty leaves results in a no-op
-        {
-            let leaves = (0..=NUM_SAMPLES as u32)
-                .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::ZERO_NODE_CST.unwrap().nodes[0])))
-                .collect::<Vec<_>>();
-
-            smt.update_leaves(leaves).unwrap();
-            assert!(!smt.pending_changes(), "Update with empty leaves should leave the state unaffected");
-
-            smt.finalize_in_place().unwrap();
-            // Tree must be empty as before
-            assert_tree_empty(&smt);
-        }
-
-        // Replace a leaf with the same value it had before results in a no-op
-        {
-            // Add some leaves
-            let leaves = (0..=NUM_SAMPLES as u32)
-                .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::Data::from(i as u8))))
-                .collect::<Vec<_>>();
-
-            smt.update_leaves(leaves.clone()).unwrap();
-            assert!(smt.pending_changes(), "Update with valid leaves should change the state");
-
-            smt.finalize_in_place().unwrap();
-            let root = smt.root().unwrap();
-
-            // Re-add the same leaves and check the state hasn't changed
-            smt.update_leaves(leaves).unwrap();
-            assert!(!smt.pending_changes(), "Update leaves with same values as before should leave the state unaffected");
-            assert_eq!(smt.root().unwrap(), root);
-        }
+        //     // Tree must be empty as before
+        //     assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
+        //     smt.finalize_in_place().unwrap();
+        //     assert_tree_empty(&smt);
+        // }
     }
 
     fn test_edge_cases<T: BatchFieldBasedMerkleTreeParameters>() {
@@ -789,12 +707,12 @@ mod test {
         // HEIGHT > 1
         {
             // Generate empty tree and get the root
-            let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(TEST_HEIGHT);
+            let mut smt = FieldBasedSparseMHT::<T>::init(TEST_HEIGHT);
             let root = smt.root().unwrap();
             assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[TEST_HEIGHT as usize]);
 
             // Generate tree with only 1 leaf and attempt to get the root
-            assert!(smt.update_leaves(vec![dummy_leaf]).is_ok());
+            assert!(smt.update_leaves(set![dummy_leaf]).is_ok());
             smt.finalize_in_place().unwrap();
             let new_root = smt.root().unwrap();
             assert_ne!(new_root, root);
@@ -804,12 +722,12 @@ mod test {
         // HEIGHT == 1
         {
             // Generate empty tree and get the root
-            let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(1);
+            let mut smt = FieldBasedSparseMHT::<T>::init(1);
             let mut root = smt.root().unwrap();
             assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[1]);
 
             // Generate tree with only 1 leaf and attempt to get the root
-            assert!(smt.update_leaves(vec![dummy_leaf]).is_ok());
+            assert!(smt.update_leaves(set![dummy_leaf]).is_ok());
             smt.finalize_in_place().unwrap();
             let new_root = smt.root().unwrap();
             assert_ne!(new_root, root);
@@ -818,24 +736,24 @@ mod test {
 
             // Generate tree with exactly 2 leaves and attempt to get the root.
             // Assert error if trying to add another leaf
-            assert!(smt.update_leaves(vec![OperationLeaf::new(1, ActionLeaf::Insert, Some(T::Data::one()))]).is_ok());
+            assert!(smt.update_leaves(set![OperationLeaf::new(1, ActionLeaf::Insert, Some(T::Data::one()))]).is_ok());
             smt.finalize_in_place().unwrap();
             let new_root = smt.root().unwrap();
             assert_ne!(new_root, root);
             assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[1]);
 
-            assert!(smt.update_leaves(vec![OperationLeaf::new(2, ActionLeaf::Insert, Some(T::Data::one()))]).is_err());
+            assert!(smt.update_leaves(set![OperationLeaf::new(2, ActionLeaf::Insert, Some(T::Data::one()))]).is_err());
         }
 
         // HEIGHT == 0
         {
             // Generate empty tree and get the root
-            let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(0);
+            let mut smt = FieldBasedSparseMHT::<T>::init(0);
             let root = smt.root().unwrap();
             assert_eq!(root, T::ZERO_NODE_CST.unwrap().nodes[0]);
 
             // Generate tree with only 1 leaf and assert error
-            assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains("Reached maximum number of leaves for a tree of height 0"));
+            assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains("Reached maximum number of leaves for a tree of height 0"));
         }
     }
 
@@ -845,9 +763,9 @@ mod test {
     ) {
         use std::convert::TryInto;
 
-        let mut smt = FieldBasedOptimizedSparseMHT::<T>::init(height);
+        let mut smt = FieldBasedSparseMHT::<T>::init(height);
         let num_leaves = smt.width;
-        let mut optimized = FieldBasedOptimizedMHT::<T>::init(smt.height as usize, num_leaves as usize).unwrap();
+        let mut optimized = FieldBasedAppendOnlyMHT::<T>::init(smt.height as usize, num_leaves as usize).unwrap();
         let mut leaves_for_lazy_smt = Vec::with_capacity(num_leaves as usize);
 
         // Generate random leaves, half of which empty
@@ -858,20 +776,20 @@ mod test {
         }
         optimized.finalize_in_place().unwrap();
 
-        // Compute the root of the tree, and do the same for a FieldBasedOptimizedMHT, used here as reference
-        smt.update_leaves(leaves_for_lazy_smt).unwrap();
+        // Compute the root of the tree, and do the same for a FieldBasedAppendOnlyMHT, used here as reference
+        smt.update_leaves(leaves_for_lazy_smt.iter().cloned().collect::<HashSet<_>>()).unwrap();
         smt.finalize_in_place().unwrap();
         let optimized_root = optimized.root().unwrap();
         let root = smt.root().unwrap();
         assert_eq!(root, optimized_root);
 
-        for (&i, leaf) in smt.get_non_empty_leaves().iter() {
+        for (&i, leaf) in get_non_empty_leaves(&smt).iter() {
 
             // Create and verify a FieldBasedMHTPath
             let path = smt.get_merkle_path(i).unwrap();
             assert!(path.verify(smt.height as usize, leaf, &root).unwrap());
 
-            // Create and verify a path from FieldBasedOptimizedMHT
+            // Create and verify a path from FieldBasedAppendOnlyMHT
             let optimized_path = optimized.get_merkle_path(i as usize).unwrap();
             assert!(optimized_path.verify(optimized.height(), leaf, &optimized_root).unwrap());
 
@@ -898,8 +816,8 @@ mod test {
         expected_root: T::Data,
         mut rng: &mut R,
     ) {
-        // Init in memory optimized tree
-        let mut tree = FieldBasedOptimizedMHT::<T>::init(height, num_leaves).unwrap();
+        // Init smt
+        let mut tree = FieldBasedSparseMHT::<T>::init(height as u8);
 
         // Init naive merkle tree used as comparison
         let mut naive_mt = NaiveMerkleTree::<T>::new(height);
@@ -913,7 +831,7 @@ mod test {
         leaves.iter().for_each(|leaf| {
             tree.append(leaf.clone()).unwrap();
         });
-
+        
         // Append leaves to naive_mt
         naive_mt.append(leaves.as_slice()).unwrap();
 
@@ -936,7 +854,7 @@ mod test {
         mut rng: &mut R,
     ) {
         // Init in memory optimized tree
-        let mut tree = FieldBasedOptimizedMHT::<T>::init(height, num_leaves).unwrap();
+        let mut tree = FieldBasedSparseMHT::<T>::init(height as u8);
 
         // Create leaves at random
         let leaves = (0..num_leaves)
