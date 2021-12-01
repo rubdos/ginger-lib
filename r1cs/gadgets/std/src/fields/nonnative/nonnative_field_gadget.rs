@@ -1,4 +1,4 @@
-//! Definition of NonNativeFieldGadget and implementation of
+r1//! Definition of NonNativeFieldGadget and implementation of
 //!     - certain low-level arithmetic operations (without reduction),
 //!     - the FieldGadget trait,
 //! as well as the following auxiliary traits:
@@ -6,7 +6,7 @@
 //!     - CondSelectGadget, TwoBitLookup, ThreeBitCondNegLookupGadget,
 //!     - AllocGadget, ToConstraintFieldGadget, CloneGadget
 //! and the
-//!     - EqGadget, which heaviliy uses reduction of non-natives from reduce.rs
+//!     - EqGadget, which heaviliy uses reduction from reduce.rs
 use algebra::{BigInteger, FpParameters, PrimeField};
 
 use crate::fields::nonnative::NonNativeFieldParams;
@@ -38,7 +38,10 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
     /// is not necessarily below the non-native modulus).
     pub limbs: Vec<FpGadget<ConstraintF>>,
     /// Number of additions done over this gadget without transforming back to
-    /// normal form. Used by gadgets to decide when to reduce.
+    /// normal form.  Keeps track of a length bound for the non-native.
+    //   
+    // `len(x) <= len(p) + len(num_of_additions_over_normal_form + 1) + 1`
+    //
     pub num_of_additions_over_normal_form: ConstraintF,
     /// Whether the limb representation is the normal form, i.e. has the same
     /// number of bits as the non-native modulus (?)
@@ -587,14 +590,18 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ConstantGadget<Simulation
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
+    // To bits. 
+    // Security Note: In this current implementation yields the bits of 
+    // a representant mod p in *normal form*. This representant might
+    // is only assured to be of same length as `p`.
+    fn to_bits<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
-        // Reduce to the normal form
-        // Though, a malicious prover can make it slightly larger than p
+        // Reduce to the normal form, which has no excess in its limbs,
+        // but still might be larger than the modulus.
         let mut self_normal = self.clone();
         Reducer::<SimulationF, ConstraintF>::pre_eq_reduce(
             cs.ns(|| "pre eq reduce"),
@@ -623,7 +630,22 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
         Ok(bits)
     }
 
-    fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
+    // Enforces the bit representation of `&self` as output by `to_bits()` 
+    // to be strictly smaller than `p`.
+    
+    // TODO: this function is correct, but not complete. In some situations
+    // reducing to normal form and then demanding the latter to be less than p
+    // is not satisfiable. Instead, let us implement `to_bits_strict()` as
+    // follows:
+    //      1. alloc a non-native, using a slice of Booleans which 
+    //        satisfies the `enforce_in_field()`.
+    //      2. pad the slice of limbs of the non-native to the same length
+    //        as the limb slice of  `&self`.
+    //      3. use `group_and_check_equality()` of the two limb slices, choosing 
+    //             - `bits_per_limb` as from `&self` 
+    //             - `surfeit` as the `num_additions_over_normal_form` in `&self`,
+    //             - `shift_per_limb` as `bits_per_limb`.
+    fn to_bits_strict<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -1019,7 +1041,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         Ok(should_enforce_equal)
     }
 
-    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
+    // Enforces two non-native gadgets, not necessarily in normal form, to be equal mod the 
+    // non-native modulus `p`. This done by enforcing the integer identity
+    //  `delta = self - other = k*p`.
+    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -1075,6 +1100,12 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
             ))
         })?;
 
+        // Enforce the limbs of `k_gadget` to be of the right size w.r.t.
+        //  `delta = k*p`.
+        // By keeping track of the number of additions over normal form, we know that 
+        //   `len(delta) <= len(p) + len(1 + delta.num_additions_over_normal_form) + 1 `, 
+        // and hence 
+        //   `len(k) <= len(1 + delta.num_additions_over_normal_form) + 1`.
         let surfeit = overhead!(delta.num_of_additions_over_normal_form + ConstraintF::one()) + 1;
         Reducer::<SimulationF, ConstraintF>::limb_to_bits(
             cs.ns(|| "k limb to bits"),
@@ -1089,7 +1120,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
             kp_gadget_limbs.push(mul);
         }
 
-        // Enforce delta = kp
+        // Enforce delta = kp as big integers
         Reducer::<SimulationF, ConstraintF>::group_and_check_equality(
             cs.ns(|| "group and check equality"),
             surfeit,

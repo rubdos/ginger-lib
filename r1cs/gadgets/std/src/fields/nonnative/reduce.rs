@@ -181,11 +181,33 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         Self::reduce(cs, elem)
     }
 
-    /// Group and check equality, the low-level function for equality checks?
-    pub fn group_and_check_equality<CS: ConstraintSystemAbstract<ConstraintF>>(
+    /// The low-level function for the equality check of two non-natives 
+    /// ``
+    ///     left = Sum_{i=0..} left[i]*A^i, 
+    ///     right= Sum_{i=0..} right[i]*A^i
+    /// `` 
+    /// as big integers, given as equally long slices of limbs 
+    /// ``
+    ///     [left[0],left[1],...], 
+    ///     [right[0],right[1],...],
+    /// `` 
+    /// where each limb being length bounded by `bits_per_limb + surfeit`.
+    /// Takes 
+    ///      `(S-1) * (1 + bits_per_limb + surfeit) + 2`
+    /// constraints, where 
+    //  ``
+    //      S = Floor[
+    //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
+    //      ] + 1.
+    // ``
+    pub fn group_and_check_equality<CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
+        // The additional number of bits beyond `bits_per_limb`
         surfeit: usize,
+        // The number of bits  
         bits_per_limb: usize,
+        // defines arity of the limb representation, i.e. `A= 2^{shift_per_limb}`.
+        // Security note: must be >= 2.
         shift_per_limb: usize,
         left: &[FpGadget<ConstraintF>],
         right: &[FpGadget<ConstraintF>],
@@ -193,15 +215,58 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "hardcode zero"))?;
 
         let mut limb_pairs = Vec::<(FpGadget<ConstraintF>, FpGadget<ConstraintF>)>::new();
+        // We group the limbs so that we can handle their sum
+        // ``
+        //      group_total = limb[0]*1 + limb[1]*A + ... + limb[S-1]*A^{S-1},
+        // ``
+        // within a single constraint field element, where `A = 2^shift_per_limb`.
+        // Assuming `A >= 2`, we have 
+        // `` 
+        //   len(limb[0]*1 + limb[1]*A) <= bits_per_limb + surfeit + len(A) + 1,
+        //   len(limb[0]*1 + limb[1]*A + limb[2]*A^2) <= bits_per_limb + surfeit + 2 * len(A) + 1,
+        //   ...
+        //   len(limb[0]*1 + limb[1]*A + ... + limb[S-1]*A^{S-1}) <=
+        //                       <= bits_per_limb + surfeit + (S-1) * len(A) + 1
+        // ``
+        // and hence 
+        // ``
+        //   len(group_total) <= bits_per_group 
+        //              = bits_per_limb + surfeit + (S-1) * len(A) + 1.  
+        // ``
+        // To assure that the following operations on the totals do not exceed the capacity, 
+        // it is sufficient to demand 
+        // ``
+        //  bits_per_group + 1 <= ConstraintF::CAPACITY,
+        // ``
+        // as described in the comments below. This yields 
+        // ``
+        //      bits_per_limb + surfeit + (S-1) * shift_per_limb + 2 <= ConstraintF::CAPACITY,
+        // ``
+        // and thus
+        // ``
+        //      S - 1 = Floor[
+        //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
+        //      ].
+        // ``
+    
+        // TODO: The following formula computes 
+        //      S = Ceil[
+        //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
+        //      ] 
+        //        =  (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit) + shift_per_limb - 1) 
+        //           / shift_per_limb,
+        // which differs sometimes from `Floor[] + 1`. 
         let num_limb_in_a_group = (ConstraintF::size_in_bits()
             - 1
             - surfeit
-            - 1
-            - 1
+            - 1 
+            - 1 
             - 1
             - (bits_per_limb - shift_per_limb))
             / shift_per_limb;
 
+        // Compute the powers of the arity for a group of limbs, i.e.
+        // `shift_array = [1, A, A^2, ..., A^(num_limbs_per_group-1)}]`.
         let shift_array = {
             let mut array = Vec::new();
             let mut cur = ConstraintF::one().into_repr();
@@ -213,8 +278,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             array
         };
 
+        // zip the limbs of `left` and `right` and reverse to little endian order.
         for (left_limb, right_limb) in left.iter().zip(right.iter()).rev() {
-            // note: the `rev` operation is here, so that the first limb (and the first groupped limb) will be the least significant limb.
             limb_pairs.push((left_limb.clone(), right_limb.clone()));
         }
 
@@ -225,6 +290,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             let mut left_total_limb = zero.clone();
             let mut right_total_limb = zero.clone();
 
+            // For each group `[limb[0],...limb[S-1]]`, where `S = num_limbs_per_group`, 
+            // we compute 
+            // `group_total = limb[0]*1 + limb[1]*A + ... limb[S-1]*A^{S-1}`.
+            // This is done for both left and right operands.
             for (j, ((left_limb, right_limb), shift)) in limb_pairs_in_a_group
                 .iter()
                 .zip(shift_array.iter())
@@ -252,14 +321,65 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             ));
         }
 
-        // This part we mostly use the techniques in bellman-bignat
-        // The following code is adapted from https://github.com/alex-ozdemir/bellman-bignat/blob/master/src/mp/bignat.rs#L567
+        // The following code is ported from [[Bellman]].
+        // The equality of two `A`-ary representations `[L[0],L[1],..]` and `[R[0],R[1],..]` with 
+        // oversized limbs is proven by enforcing their *shifted* differences 
+        //      `[L[0] + (- R[0] + shift_constant) , 
+        //          L[1] + (- R[1] + shift_constant), 
+        //              ..]`, 
+        // to represent 
+        //      `Sum_{i>=0} shift_constant * A^i`.
+        // The constant `shift_constant = 2^{bits_per_group }` is to circumvent underflows, 
+        // yet still not producing overflows. With this choice  
+        //      `- R[i] + shift_constant` 
+        // is from the range `[0, 2^{bits_per_group} ]`, the sum `L[i] + shift_constant - R[i]` 
+        // is from the range `[0, 2^{bits_per_group + 1} )` hence has at most `bits_per_group` many
+        // bits. (The latter follows from the observation, that `shift_constant - R[i]` is equal to 
+        // to the edge case `2^{bits_per_group}` if and only if `R[i] = 0`.)
+        // Since the length of the carries are throughout `<= bits_per_limb + surfeit`, see below, the 
+        // `L[i] + carry[i-1]` is still at most `bits_per_group` long, and hence the overall sum 
+        // ``
+        //      L[i] + carry[i-1] + (shift_constant - R[i]) 
+        // `` 
+        // is of length `<= bits_per_group + 1`.   
+        //
+        // [Bellman]: https://github.com/alex-ozdemir/bellman-bignat/blob/master/src/mp/bignat.rs#L567
         let mut carry_in = zero;
         let mut carry_in_value = ConstraintF::zero();
         let mut accumulated_extra = BigUint::zero();
+        // The group totals have arity `A^S = 2^{S*shift_per_limb}`.
         for (group_id, (left_total_limb, right_total_limb, num_limb_in_this_group)) in
             groupped_limb_pairs.iter().enumerate()
         {
+            // Carry and remainder are subject to the following constraints: 
+            // The quotient-remainder constraint
+            //   shift_constant + carry_in + group_total_left - group_total_right 
+            //          == carry * A^S + 0 + (shift_constant % A^S),
+            // and the length restrictions for the carry
+            //        len(carry) <= bits_per_limb + surfeit.        
+            // These length bound assures that no modular reduction takes place on both 
+            // sides of the quotient-remainder constraint.
+
+            // NOTE: the carries are length bounded by `bits_per_limb + surfeit`, assuming 
+            // `shift_per_limb>=2`. This can be seen as follows.
+            //      carry[0] = 0,
+            // and hence the first carry satisfies
+            //      len(carry[1]) = bits_per_group - shift_per_limb * S 
+            //           =  bits_per_limb + surfeit + 1 - shift_per_limb
+            //           <= bits_per_limb + surfeit.
+            // All further carries satisfy
+            //      len(carry[i]) = bits_per_group + 1 - shift_per_limb * S 
+            //          =  bits_per_limb + surfeit + 2 - shift_per_limb
+            //          <=  bits_per_limb + surfeit,
+            // under the assumption that `shift_per_limb>= 2`.
+            
+            // TODO: set an assert for `shift_per_limb>=2`
+
+            // Computing the shift constant `pad_limb_repr`:
+            // ``
+            //   shift_constant = 2^{bits_per_group + 1} 
+            //      = 2^{bits_per_limb + surfeit + (S-1) * shift_per_limb + 2 }. 
+            // ``
             let mut pad_limb_repr: <ConstraintF as PrimeField>::BigInt =
                 ConstraintF::one().into_repr();
 
@@ -283,22 +403,25 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
 
             carry_value = ConstraintF::from_repr(carry_repr);
 
+            // The length restriction of the carry is proven below.
             let carry = FpGadget::<ConstraintF>::alloc(
                 cs.ns(|| format!("alloc carry {}", group_id)),
                 || Ok(carry_value),
             )?;
 
+            // We add the shift_constant to the accumulator
             accumulated_extra += limbs_to_bigint(bits_per_limb, &[pad_limb]);
 
+            // accumulated_extra = A^S * new_accumulated_extra + remainder, 
+            // with remainder < A^S, or equivalently
             let (new_accumulated_extra, remainder) = accumulated_extra.div_rem(
                 &BigUint::from(2u64).pow((shift_per_limb * num_limb_in_this_group) as u32),
             );
             let remainder_limb = bigint_to_constraint_field::<ConstraintF>(&remainder);
 
-            // Now check
+            // Now we enforce the quotient remainder constraint.
             //      left_total_limb + pad_limb + carry_in - right_total_limb
-            //   =  carry shift by (shift_per_limb * num_limb_in_this_group) + remainder
-
+            //   ==  carry * A^S + remainder
             let eqn_left = left_total_limb
                 .add_constant(
                     cs.ns(|| format!("left_total_limb + pad_limb {}", group_id)),
@@ -338,6 +461,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             carry_in_value = carry_value;
 
             if group_id == groupped_limb_pairs.len() - 1 {
+                // The highest significant group is treated differently:
+                // the carry must be equal the accumulated shifts.
                 let accumulated_extra_g = FpGadget::<ConstraintF>::from_value(
                     cs.ns(|| format!("hardcode accumulated_extra {}", group_id)),
                     &bigint_to_constraint_field(&accumulated_extra),
@@ -347,6 +472,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
                     &accumulated_extra_g,
                 )?;
             } else {
+                // The length restriction for the carry
+                // Costs `surfeit + bits_per_limb` many constraints.
                 Reducer::<SimulationF, ConstraintF>::limb_to_bits(
                     cs.ns(|| format!("carry_to_bits_{}", group_id)),
                     &carry,
