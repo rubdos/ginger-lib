@@ -109,7 +109,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     // TODO: let us modify it to `pre_add_reduce()` which takes two non-natives and checks
     // if it needs ot reduce one of the two operands (or both) similar to `pre_eq_reduce()`. 
     // Likewise, implement a `pre_sub_reduce()`.
-    pub fn post_add_reduce<CS: ConstraintSystem<ConstraintF>>(
+    pub fn post_add_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
@@ -146,7 +146,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// Reduction used before multiplication to assure that the limbs of the product of the
     /// the two non-natives `elem` and `elem_other` are length bounded by CAPACITY - 1. 
     /// Optionally reduces one or both of the operands to normal form.
-    pub fn pre_mul_reduce<CS: ConstraintSystem<ConstraintF>>(
+    pub fn pre_mul_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
@@ -220,7 +220,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// Reduction to the normal form
     // TODO: the name is misleading, as normal form does not help in 
     // any equality check. Let us rename it.
-    pub fn pre_eq_reduce<CS: ConstraintSystem<ConstraintF>>(
+    pub fn pre_eq_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
@@ -251,7 +251,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
     //      ] + 1.
     // ``
-    pub fn group_and_check_equality<CS: ConstraintSystem<ConstraintF>>(
+    pub fn group_and_check_equality<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         // The additional number of bits beyond `bits_per_limb`
         surfeit: usize,

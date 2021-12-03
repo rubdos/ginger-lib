@@ -82,7 +82,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
     /// Constraints for reducing the result of a multiplication to a non-native field gadget
     /// in normal form.
-    pub fn reduce<CS: ConstraintSystem<ConstraintF>>(
+    pub fn reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {

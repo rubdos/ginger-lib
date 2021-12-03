@@ -1,4 +1,4 @@
-r1//! Definition of NonNativeFieldGadget and implementation of
+//! Definition of NonNativeFieldGadget and implementation of
 //!     - certain low-level arithmetic operations (without reduction),
 //!     - the FieldGadget trait,
 //! as well as the following auxiliary traits:
@@ -97,7 +97,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// Subtract a nonnative field element `other` from `self` modulo `p`. Outputs 
     /// non-normal form.
     // NOTE: Costs no constraints and only slightly increases the additions over normal form.
-    pub fn sub_without_reduce<CS: ConstraintSystem<ConstraintF>>(
+    pub fn sub_without_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -580,7 +580,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
     /// Addition of non-natives, outputs non-normal form.
     // TODO: after modifying `post_add_reduce()` to `pre_add_reduce()`, apply it before
     // the limb-wise addition.
-    fn add<CS: ConstraintSystem<ConstraintF>>(
+    fn add<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -617,7 +617,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
 
     /// Substraction of non-natives, outputs non-normal form.
     // TODO: not needed if `sub_without_reduce()``is renamed in `sub()`.
-    fn sub<CS: ConstraintSystem<ConstraintF>>(
+    fn sub<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -638,7 +638,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
     }
 
     /// Multiplication of two non-natives, outputs normal form.
-    fn mul<CS: ConstraintSystem<ConstraintF>>(
+    fn mul<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -755,7 +755,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
     // Security Note: In this current implementation yields the bits of 
     // a representant mod p in *normal form*. This representant might
     // is only assured to be of same length as `p`.
-    fn to_bits<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -806,7 +806,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
     //             - `bits_per_limb` as from `&self` 
     //             - `surfeit` as the `num_additions_over_normal_form` in `&self`,
     //             - `shift_per_limb` as `bits_per_limb`.
-    fn to_bits_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -1073,7 +1073,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
 {
     /// Allocates a non-native field element and enforces normal form, which consumes at most `bits_per_limb` many bits per limb, and
     /// and altogether at most (non-native) modulus many bits.
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -1205,7 +1205,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
     // Enforces two non-native gadgets, not necessarily in normal form, to be equal mod the 
     // non-native modulus `p`. This done by enforcing the integer identity
     //  `delta = self - other = k*p`.
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
