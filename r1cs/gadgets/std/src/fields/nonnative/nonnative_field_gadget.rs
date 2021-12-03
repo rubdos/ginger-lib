@@ -2,7 +2,7 @@ r1//! Definition of NonNativeFieldGadget and implementation of
 //!     - certain low-level arithmetic operations (without reduction),
 //!     - the FieldGadget trait,
 //! as well as the following auxiliary traits:
-//!     - ToBitsGadget, ConstantGadget, ToBitsGadget, ToBytesGadget,
+//!     - ToBitsGadget, FromBitsGadget, ConstantGadget, ToBytesGadget,
 //!     - CondSelectGadget, TwoBitLookup, ThreeBitCondNegLookupGadget,
 //!     - AllocGadget, ToConstraintFieldGadget, CloneGadget
 //! and the
@@ -35,16 +35,17 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
     /// Recall that in the course of arithmetic operations bits the bit length of
     /// a limb exceeds `NonNativeFieldParams::bits_per_limb`. Reduction transforms
     /// back to normal form, which again has at most `bits_per_limb` many bits (but
-    /// is not necessarily below the non-native modulus).
+    /// is not necessarily the mod p remainder).
     pub limbs: Vec<FpGadget<ConstraintF>>,
     /// Number of additions done over this gadget without transforming back to
-    /// normal form.  Keeps track of a length bound for the non-native.
-    //   
-    // `len(x) <= len(p) + len(num_of_additions_over_normal_form + 1) + 1`
-    //
+    /// normal form.  Keeps track of a limb bound
+    ///  ``
+    ///    limb[i] <= (num_of_additions_over_normal_form + 1) * 2^bits_per_limb`,
+    /// `` 
+    /// for all limbs except the most significant, and similar for the latter.
     pub num_of_additions_over_normal_form: ConstraintF,
     /// Whether the limb representation is the normal form, i.e. has the same
-    /// number of bits as the non-native modulus (?)
+    /// number of bits as the non-native modulus.
     pub is_in_the_normal_form: bool,
     #[doc(hidden)]
     pub simulation_phantom: PhantomData<SimulationF>,
@@ -56,7 +57,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 {
     /// Obtain the non-native value from a vector of not necessarily normalized
     /// limb elements.
-    // TODO: Can we use the functions limbs_to_bigint and bigint_to_constraint_field ? Logic seems duplicated
+    // TODO: Can we use the functions limbs_to_bigint and bigint_to_constraint_field? 
+    // Logic seems duplicated
     pub fn limbs_to_value(limbs: Vec<ConstraintF>) -> SimulationF {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -92,28 +94,91 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         result
     }
 
-    /// Subtract a nonnative field element, without the final reduction step
-    pub fn sub_without_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    /// Subtract a nonnative field element `other` from `self` modulo `p`. Outputs 
+    /// non-normal form.
+    // NOTE: Costs no constraints and only slightly increases the additions over normal form.
+    pub fn sub_without_reduce<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
+
+        // To prove that a limb representation [D[0],D[1],...] corresponds to the difference of 
+        // the two non-natives
+        // 
+        //   Sum_{i=0..} L[i] * A^i - Sum_{i=0..} R[i] * A^i, 
+        //
+        // with `A = 2^bits_per_limb`, we apply shift_constants `[shift_constant[0], shift_constant[1],..]`
+        // to avoid underflows in the limb-wise differences, making the `shift_constant[i] - R[i]` 
+        // positive in an almost length-preserving manner. To correct the change in value modulo p, 
+        // we add to 
+        // ``
+        //      shift = Sum_{i=0..} shift_constant[i] * A^i
+        // ``
+        // the difference
+        // ``
+        //      delta = Sum_{i=0..} delta[i] * A^i,
+        // ``
+        // to the next multiple of p, i.e. `delta = - shift mod p`. Overall we enforce
+        // ``
+        //   (L[i] + delta[i]) + (shift_constant[i] - R[i])  == D[i].
+        // ``
+        // In order that this sum does not exceed the CAPACITY, 
+        // ``
+        //  D[i] < (num_add(L) + 2) * 2^bits_per_limb + 
+        //              2^{len(num_add(R) + 1) + 1} * 2^{bits_per_limb} 
+        //                   <= 2^CAPACITY,
+        // ``
+        // we need to ensure that 
+        // ``
+        //      bits_per_limb + len[ 
+        //           (num_add(L) + 2) + 2 * 2^{len(num_add(R) + 1)}) 
+        //                         ] <= CAPACITY.
+        // ``
+
+        // NOTE: by a different choice of the shift_constant (not as a power of two, see the 
+        // comment below) we can obtain an optimized condition
+        // ``
+        //      bits_per_limb + len(num_add(L) + num_add(R) + 3) <= CAPACITY.
+        // ``
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         // Step 1: reduce the `other` if needed
+
+        // TODO: The following checks if the limbs of `other` does not exceed the CAPACITY
+        // bound. However, if they do, `reduce()` does not work properly. 
+        // This is a security issue. We need to check the above condition involving both
+        // `num_add(L)` and `num_add(R)`, and reduce one or both of them.
         let mut surfeit =
             overhead!(other.num_of_additions_over_normal_form + ConstraintF::one()) + 1;
         let mut other = other.clone();
         if (surfeit + params.bits_per_limb > ConstraintF::size_in_bits() - 1)
             || (surfeit
                 + (SimulationF::size_in_bits() - params.bits_per_limb * (params.num_limbs - 1))
-                > ConstraintF::size_in_bits() - 1)
+                > ConstraintF::size_in_bits() - 1) // the second condition is redundant. If the first holds, then the second holds too.
         {
             Reducer::reduce(cs.ns(|| "reduce other"), &mut other)?;
             surfeit = overhead!(other.num_of_additions_over_normal_form + ConstraintF::one()) + 1;
         }
 
-        // Step 2: construct the padding
+        // For all limbs except the most significant, we choose 
+        // ``
+        //   shift_constant = 2^{surfeit(R) + bits_per_limb} 
+        // ``
+        // For the most significant bit it is sufficient to choose
+        // ``
+        //   shift_constant = 2^{surfeit(R) + (SimulationF::size_in_bits() % bits_per_limb)} 
+        // ``
+        
+        // NOTE: the afore mentioned optimized shift_constant would be 
+        // ``
+        //      shift_constant[i] = (num_add(R) + 1) * 2^{bits_per_limb} - 1
+        // ``
+        // for all limbs except the most significant, and similarly for the most significant.
+        // With this choice 
+        // ``
+        //      0 <= shift_constant[i] - R[i] < (num_add(R) + 1) * 2^{bits_per_limb}. 
+        // ``
         let mut pad_non_top_limb_repr: <ConstraintF as PrimeField>::BigInt =
             ConstraintF::one().into_repr();
         let mut pad_top_limb_repr: <ConstraintF as PrimeField>::BigInt = pad_non_top_limb_repr;
@@ -128,17 +193,24 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         );
         let pad_top_limb = ConstraintF::from_repr(pad_top_limb_repr);
 
+        // The shift_constants, for most significant limb down to the least significant limb.
+        // Overall this is the limb representation of
+        // ``
+        //      shift = Sum_{i=0..} shift_constant[i] * A^i
+        // `` 
         let mut pad_limbs = Vec::new();
         pad_limbs.push(pad_top_limb);
         for _ in 0..self.limbs.len() - 1 {
             pad_limbs.push(pad_non_top_limb);
         }
 
-        // Step 3: prepare to pad the padding to k * p for some k
+        // `` 
+        // pad_to_kp_gap = delta = - shift mod p 
+        // ``
         let pad_to_kp_gap = Self::limbs_to_value(pad_limbs).neg();
         let pad_to_kp_limbs = Self::get_limbs_representations(&pad_to_kp_gap)?;
 
-        // Step 4: the result is self + pad + pad_to_kp - other
+        // Set D[i] = self[i] + pad[i] + pad_to_kp[i] - other[i] for all i.
         let mut limbs = Vec::new();
         for (i, ((this_limb, other_limb), pad_to_kp_limb)) in self
             .limbs
@@ -147,6 +219,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             .zip(pad_to_kp_limbs.iter())
             .enumerate()
         {
+            // TODO: this piece of code can be optimized by integrating pad_limbs in the iterator,
+            // and use it in the add_constant.
             if i != 0 {
                 let new_limb = this_limb
                     .add_constant(
@@ -182,6 +256,22 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             }
         }
 
+        // From the above comment, 
+        // ``
+        //   D[i] < [(num_add(L) + 2) + 2^{len(num_add(R) + 1) + 1} ] * 2^{bits_per_limb} 
+        // ``
+        // Therefore we set 
+        // ``
+        //      num_add(D)  = num_add(L) +  2 * 2^{len(num_add(R) + 1)} + 1.
+        // ``
+        // NOTE: By the above mentioned optimized choice of the shift constant,
+        // we can achieve
+        // ``
+        //      num_add(D)  = num_add(L) +  num_add(R) + 2.
+        // ``
+
+        // TODO: The following undersizes `2^{len(num_add(R) + 1)` by `num_add(R) + 1`,
+        // and missing the additional one. Let us correct it.
         let result = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
             num_of_additions_over_normal_form: self.num_of_additions_over_normal_form
@@ -194,7 +284,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         Ok(result)
     }
 
-    /// Convert a `SimulationF` element into limbs (not constraints)
+    /// Convert a `SimulationF` element into limbs having normal form.
     /// This is an internal function that would be reused by a number of other functions
     pub fn get_limbs_representations(
         elem: &SimulationF,
@@ -233,7 +323,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         Self::get_limbs_representations_from_big_integer_with_params(params, elem)
     }
 
-    /// for advanced use, multiply and output the intermediate representations (without reduction)
+    /// For advanced use, multiply and output the intermediate representations (without reduction)
     /// This intermediate representations can be added with each other, and they can later be
     /// reduced back to the `NonNativeFieldGadget`.
     pub fn mul_without_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -253,7 +343,19 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         )?;
 
         let mut prod_limbs = Vec::new();
+        
+        // TODO: As we drop support for Groth, let us purge the non-"density-optimized" variant.
+
         if cfg!(feature = "density-optimized") {
+            // The naive gathering of the limb representation for the product:
+            // ``
+            //      prod_limb[k] = Sum_{i+j=k} L[i] * R[j]. 
+            // ``
+            // Consumes `num_limbs^2` constraints, and `2 * num_limbs^2` 
+            // non-zero entries in each of the R1CS matrices (considering the sums 
+            // finalized in a new variable).
+            
+            // TODO: Let us investigate if Karatsuba helps here. 
             let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "zero"))?;
 
             for _ in 0..2 * params.num_limbs - 1 {
@@ -275,13 +377,29 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 }
             }
         } else {
+            // This is the constraint optimization from [[Kosba et al]]:
+            // One simply enforces the constraints
+            // ``
+            //  (Sum_{i=0..m-1} L[i] * c^i) * (Sum_{i=0..m-1} R[i] * c^i) 
+            //      == (Sum_{k=0..2(m-1)} prod_limb[i] * c^i)
+            // ``  
+            // for `2*m-1` different c's.   
+            // Consumes `2*m-1` constraints and at most `(2m - 1)^2` non-zero entries 
+            // in each of the R1CS matrices.
+            //
+            // [Kosba et al]: (https://ieeexplore.ieee.org/document/8418647),
+
+            // Set the vector of product limbs.
             for z_index in 0..2 * params.num_limbs - 1 {
+                // Allocate `prod_limb[z_index] = Sum_{i+j=z_index} L[i]*R[j]`
                 prod_limbs.push(FpGadget::<ConstraintF>::alloc(
                     cs.ns(|| format!("limb product {}", z_index)),
                     || {
                         let mut z_i = ConstraintF::zero();
                         for i in 0..=min(params.num_limbs - 1, z_index) {
                             let j = z_index - i;
+                            // TODO: the if condition is always met. 
+                            // Let us remove it.
                             if j < params.num_limbs {
                                 z_i += &self_reduced.limbs[i]
                                     .get_value()
@@ -295,10 +413,16 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             }
 
             for c in 0..(2 * params.num_limbs - 1) {
+                // TODO: we can define polynomials and use polynomial evaluation here.
+                // Let us investigate if approximate FFT domains do help overall.
+                
+                // computing all powers of c. 
                 let c_pows: Vec<_> = (0..(2 * params.num_limbs - 1))
                     .map(|i| ConstraintF::from((c + 1) as u128).pow(&vec![i as u64]))
                     .collect();
 
+                // Building the linear combination 
+                // `LC_c(L) = Sum_{i=0..m-1} L[i] * X^i`  for `X = c`.
                 let mut x = FpGadget::<ConstraintF>::zero(cs.ns(|| format!("alloc x {}", c)))?;
                 for (i, (var, c_pow)) in self_reduced.limbs.iter().zip(c_pows.iter()).enumerate() {
                     let mul_result = var.mul_by_constant(
@@ -308,6 +432,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                     x.add_in_place(cs.ns(|| format!("x + mul result {},{}", c, i)), &mul_result)?;
                 }
 
+                // Building the linear combination 
+                // `LC_c(R) = Sum_{i=0..m-1} R[i] * X^i`  for `X = c`.
                 let mut y = FpGadget::<ConstraintF>::zero(cs.ns(|| format!("alloc y {}", c)))?;
                 for (i, (var, c_pow)) in other_reduced.limbs.iter().zip(c_pows.iter()).enumerate() {
                     let mul_result = var.mul_by_constant(
@@ -317,6 +443,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                     y.add_in_place(cs.ns(|| format!("y + mul result {},{}", c, i)), &mul_result)?;
                 }
 
+                // Building the linear combination 
+                // `LC_c(prod) = Sum_{i=0..2(m-1)-1} prod_limb[i] * X^i`  for `X = c`.
                 let mut z = FpGadget::<ConstraintF>::zero(cs.ns(|| format!("alloc z {}", c)))?;
                 for (i, (var, c_pow)) in prod_limbs.iter().zip(c_pows.iter()).enumerate() {
                     let mul_result = var.mul_by_constant(
@@ -326,10 +454,28 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                     z.add_in_place(cs.ns(|| format!("z + mul result {},{}", c, i)), &mul_result)?;
                 }
 
+                // enforcing `LC_c(L) * LC_c(R) = LC_c(prod)`
                 x.mul_equals(cs.ns(|| format!("x * y = z {}", c)), &y, &z)?;
             }
         }
 
+        // By the length bound `bits_per_limb +  1 + log(num_add + 1) `, each limb-wise product
+        // is bounded by
+        // ``
+        //      0 <= L[i]*R[i]  < (num_add(L) + 1) * (num_add(R) + 1) * 2^bits_per_limb, 
+        // ``
+        // and hence 
+        // ``
+        //     0 <= prod_limb[i] < num_limbs * (num_add(L) + 1) * (num_add(R) + 1) * 2^bits_per_limb.
+        // ``
+        // Hence we set 
+        // ``
+        //      num_add(product) =  num_limbs * (num_add(L) + 1) * (num_add(R) + 1) - 1 
+        // ``
+
+        // TODO: correct `prod_of_num_additions` according to the above formula.
+        // Even better, let us rename `prod_of_num_additions` to `addtions_over_normal_form`
+        // or similar.
         Ok(NonNativeFieldMulResultGadget {
             limbs: prod_limbs,
             prod_of_num_of_additions: (self_reduced.num_of_additions_over_normal_form
@@ -387,6 +533,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     }
 }
 
+
+/*
+*    Implementation of `FieldGadget` 
+*/
+
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
@@ -426,8 +577,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         unimplemented!();
     }
 
-    /// Addition of non-natives without reduction
-    fn add<CS: ConstraintSystemAbstract<ConstraintF>>(
+    /// Addition of non-natives, outputs non-normal form.
+    // TODO: after modifying `post_add_reduce()` to `pre_add_reduce()`, apply it before
+    // the limb-wise addition.
+    fn add<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -440,7 +593,12 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
 
         let mut res = Self {
             limbs,
-            // the excess of the sum of two non-natives is the sum of their excesses, plus one.
+            // Since 
+            // ``
+            //    T[i] = L[i] + R[i] < (num_add(L) + 1) * 2^bits_per_limb
+            //                  + (num_add(R) + 1) * 2^bits_per_limb
+            // ``
+            // we set `num_add(T) = num_add(L) + num_add(R) + 1`.
             num_of_additions_over_normal_form: self
                 .num_of_additions_over_normal_form
                 .add(&other.num_of_additions_over_normal_form)
@@ -457,8 +615,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         Ok(res)
     }
 
-    /// Substraction of non-natives without reduction
-    fn sub<CS: ConstraintSystemAbstract<ConstraintF>>(
+    /// Substraction of non-natives, outputs non-normal form.
+    // TODO: not needed if `sub_without_reduce()``is renamed in `sub()`.
+    fn sub<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -478,12 +637,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         Self::zero(cs.ns(|| "hardcode zero"))?.sub(cs.ns(|| "0 - self"), self)
     }
 
-    fn mul<CS: ConstraintSystemAbstract<ConstraintF>>(
+    /// Multiplication of two non-natives, outputs normal form.
+    fn mul<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
         let res = self.mul_without_reduce(cs.ns(|| "mul"), &other)?;
+        // reduction of the product to normal form
         let res_reduced = res.reduce(cs.ns(|| "reduce result"))?;
         Ok(res_reduced)
     }
@@ -912,8 +1073,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
 {
     /// Allocates a non-native field element and enforces normal form, which consumes at most `bits_per_limb` many bits per limb, and
     /// and altogether at most (non-native) modulus many bits.
-    // TODO:  Check why `num_of_additions_over_normal_form` is set to `1` and `is_over_normal_form` is set `false`.
-    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
         mut cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -956,6 +1116,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
             SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb,
         )?;
 
+        // TODO: the allocated non-native is in normal form, hence set `is_in_the_normal_form = true`       
         Ok(Self {
             limbs,
             num_of_additions_over_normal_form,

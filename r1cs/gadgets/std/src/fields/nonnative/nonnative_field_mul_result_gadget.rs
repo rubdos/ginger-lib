@@ -19,9 +19,13 @@ use std::{marker::PhantomData, vec::Vec};
 #[derive(Debug)]
 #[must_use]
 pub struct NonNativeFieldMulResultGadget<SimulationF: PrimeField, ConstraintF: PrimeField> {
-    /// Limbs of the intermediate representations
+    /// Limbs of the intermediate representations, starting with the most significant limb.
     pub limbs: Vec<FpGadget<ConstraintF>>,
-    /// The cumulative num of additions
+    /// Used to determine the strict limb bound 
+    /// ``
+    ///     limbs[i] < (prod_of_num_additions + 1) * 2^{2*bits_per_limb},
+    /// ``
+    /// for all limbs except the first one, and similarly for the most significant limb.
     pub prod_of_num_of_additions: ConstraintF,
     #[doc(hidden)]
     pub simulation_phantom: PhantomData<SimulationF>,
@@ -76,11 +80,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         Ok(res)
     }
 
-    /// Constraints for reducing the result of a multiplication mod p, to get an original representation.
-    pub fn reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    /// Constraints for reducing the result of a multiplication to a non-native field gadget
+    /// in normal form.
+    pub fn reduce<CS: ConstraintSystem<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {
+        // This is just paraphrasing the reduction of non-natives. We enforce the large integer 
+        // equality
+        // ``
+        //    Sum_{i=0..} limb[i] * A^i = k * p + r
+        // ``
+        // by means of `group_and_check_equality()`. The left hand side is length bounded by
+        //    < 2^{2*len(p) + surfeit + 1
+        // with surfeit = len(num_adds + 1)
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         // Step 1: get p
@@ -105,6 +118,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         };
 
         // Step 2: compute surfeit
+        // TODO: There is one + 1 too much.
+        // NOTE: surfeit should always be defined as overhead!(num_adds + 1).
         let surfeit = overhead!(self.prod_of_num_of_additions + ConstraintF::one()) + 1 + 1;
 
         // Step 3: allocate k
@@ -119,6 +134,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             let value_bigint = limbs_to_bigint(params.bits_per_limb, &limbs_values);
             let mut k_cur = value_bigint / p_bigint; // drops the remainder
 
+            // The total length of k
             let total_len = SimulationF::size_in_bits() + surfeit;
 
             for i in 0..total_len {
@@ -131,6 +147,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             res
         };
 
+        // TODO: let us use from_bits() for non-natives.
         let k_limbs = {
             let zero = FpGadget::zero(cs.ns(|| "hardcode zero for k_limbs"))?;
             let mut limbs = Vec::new();
@@ -172,11 +189,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             simulation_phantom: PhantomData,
         };
 
+        // alloc r in normal form.
         let r_gadget =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc r"), || {
                 self.value()
             })?;
 
+        // TODO: params is already fetched above. Remove this line.
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         // Step 1: reduce `self` and `other` if necessary
@@ -186,7 +205,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         for _ in 0..2 * params.num_limbs - 1 {
             prod_limbs.push(zero.clone());
         }
-
+        // TODO: let us use the Kosba method to enforce the limbs of the product k*p
         for i in 0..params.num_limbs {
             for j in 0..params.num_limbs {
                 let mul_result = p_gadget.limbs[i].mul(
