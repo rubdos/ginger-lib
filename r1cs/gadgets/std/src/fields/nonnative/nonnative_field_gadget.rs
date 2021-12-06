@@ -1264,9 +1264,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         // Enforce the limbs of `k_gadget` to be of the right size w.r.t.
         //  `delta = k*p`.
         // By keeping track of the number of additions over normal form, we know that 
-        //   `len(delta) <= len(p) + len(1 + delta.num_additions_over_normal_form) + 1 `, 
+        //   `len(delta) <= len(p) + len(1 + delta.num_additions_over_normal_form)`, 
         // and hence 
-        //   `len(k) <= len(1 + delta.num_additions_over_normal_form) + 1`.
+        //   `len(k) <= len(1 + delta.num_additions_over_normal_form)`.
+        
+        // TODO: remove the `+1` in the declaration of `surfeit`
         let surfeit = overhead!(delta.num_of_additions_over_normal_form + ConstraintF::one()) + 1;
         Reducer::<SimulationF, ConstraintF>::limb_to_bits(
             cs.ns(|| "k limb to bits"),

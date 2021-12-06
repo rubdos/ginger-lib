@@ -92,7 +92,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         //    Sum_{i=0..} limb[i] * A^i = k * p + r
         // ``
         // by means of `group_and_check_equality()`. The left hand side is length bounded by
-        //    < 2^{2*len(p) + surfeit + 1
+        //    < 2^{2*len(p) + surfeit + 1}
         // with surfeit = len(num_adds + 1)
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -118,7 +118,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         };
 
         // Step 2: compute surfeit
-        // TODO: There is one + 1 too much.
+        // TODO: There is + 2 too much.
         // NOTE: surfeit should always be defined as overhead!(num_adds + 1).
         let surfeit = overhead!(self.prod_of_num_of_additions + ConstraintF::one()) + 1 + 1;
 
