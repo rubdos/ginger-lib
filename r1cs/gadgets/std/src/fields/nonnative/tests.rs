@@ -137,6 +137,10 @@ fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(r
         })
         .unwrap();
 
+    assert!(
+        a_times_b.get_value().unwrap() == a_times_b_expected
+    );
+
     a_times_b
         .enforce_equal(cs.ns(|| "expected == actual"), &a_times_b_expected_gadget)
         .unwrap();
@@ -343,15 +347,21 @@ fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
                 num.add_in_place(cs.ns(|| format!("num += next {}", i)), &next)
                     .unwrap();
             }
-            1 => {
-                num_native *= &next_native;
-                num.mul_in_place(cs.ns(|| format!("num *= next {}", i)), &next)
-                    .unwrap();
-            }
+            // 1 => {
+            //     num_native *= &next_native;
+            //     num.mul_in_place(cs.ns(|| format!("num *= next {}", i)), &next)
+            //         .unwrap();
+            //     assert!(num.get_value().unwrap().eq(&num_native));
+            //     println!("i: {}", i);
+            //     println!("mul:{}", num.get_value().unwrap().eq(&num_native));
+            // }
             2 => {
                 num_native -= &next_native;
                 num.sub_in_place(cs.ns(|| format!("num -= next {}", i)), &next)
                     .unwrap();
+                assert!(num.get_value().unwrap().eq(&num_native));
+                println!("i: {}", i);
+                println!("sub:{}", num.get_value().unwrap().eq(&num_native));
             }
             _ => (),
         };
@@ -368,13 +378,13 @@ fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT` many `add_in_place` on a random instance.
+/// Tests correctness of `TEST_COUNT +  2*ConstraintF::size_in_bits()` many `add_in_place` on a random instance.
 fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num = NonNativeFieldGadget::alloc(cs.ns(|| "initial num"), || Ok(num_native)).unwrap();
-    for i in 0..TEST_COUNT {
+    for i in 0..TEST_COUNT + 2 * ConstraintF::size_in_bits() {
         let next_native = SimulationF::rand(rng);
         let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("next num for repetition {}", i)),
@@ -383,6 +393,32 @@ fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
         .unwrap();
         num_native += &next_native;
         num.add_in_place(cs.ns(|| format!("num += next {}", i)), &next)
+            .unwrap();
+
+        assert!(num.get_value().unwrap().eq(&num_native));
+    }
+
+    if !cs.is_satisfied() {
+        println!("{:?}", cs.which_is_unsatisfied());
+    }
+    assert!(cs.is_satisfied());
+}
+
+/// Tests correctness of `TEST_COUNT +  2*ConstraintF::size_in_bits()` many `sub_in_place` on a random instance.
+fn substraction_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+
+    let mut num_native = SimulationF::rand(rng);
+    let mut num = NonNativeFieldGadget::alloc(cs.ns(|| "initial num"), || Ok(num_native)).unwrap();
+    for i in 0..TEST_COUNT + 2 * ConstraintF::size_in_bits() {
+        let next_native = SimulationF::rand(rng);
+        let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
+            cs.ns(|| format!("next num for repetition {}", i)),
+            || Ok(next_native),
+        )
+        .unwrap();
+        num_native -= &next_native;
+        num.sub_in_place(cs.ns(|| format!("num += next {}", i)), &next)
             .unwrap();
 
         assert!(num.get_value().unwrap().eq(&num_native));
@@ -521,7 +557,7 @@ fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
 }
 
 /// Tests correctness of `TEST_COUNT + ConstraintF::size_in_bits()` many steps of the recursion
-/// `x <- (x+x)*(x+x)`, starting with a random non-native `x`.
+/// `x <- x+x`, starting with a random non-native `x`.
 fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
@@ -547,7 +583,7 @@ fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
 }
 
 /// Tests correctness of `TEST_COUNT` many steps of the recursion
-/// `x <- (x+x)*(x+x)`, starting with a random non-native `x`.
+/// `x <- x+x`, starting with a random non-native `x`, 
 fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
@@ -587,7 +623,7 @@ fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
             Ok(num_native)
         })
         .unwrap();
-    for i in 0..TEST_COUNT {
+    for i in 0..1{
         // double
         num_native = num_native + &num_native;
         num = num.add(cs.ns(|| format!("num + num {}", i)), &num).unwrap();
@@ -597,6 +633,8 @@ fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
         // square
         let num_square_native = num_native * &num_native;
         let num_square = num.mul(cs.ns(|| format!("num * num {}", i)), &num).unwrap();
+        assert!(num_square.get_value().unwrap().eq(&num_square_native));
+
         let num_square_native_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("repetition: alloc_native num {}", i)),
             || Ok(num_square_native),
@@ -927,7 +965,19 @@ macro_rules! nonnative_test {
             $test_constraint_field
         );
         nonnative_test_individual!(
+            randomized_arithmetic_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
             addition_stress_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            substraction_stress_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
@@ -946,12 +996,6 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             double_stress_test_3,
-            $test_name,
-            $test_simulation_field,
-            $test_constraint_field
-        );
-        nonnative_test_individual!(
-            randomized_arithmetic_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
