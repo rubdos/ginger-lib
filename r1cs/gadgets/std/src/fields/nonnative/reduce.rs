@@ -103,15 +103,35 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         Ok(())
     }
 
+    fn reduce_until_cond_is_satisfied<F, CS: ConstraintSystemAbstract<ConstraintF>>(
+        mut cs: CS,
+        elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+        elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+        exit_cond: F
+    ) -> Result<(), SynthesisError>
+    where
+        F: Fn(&NonNativeFieldGadget<SimulationF, ConstraintF>, &NonNativeFieldGadget<SimulationF, ConstraintF>) -> bool
+    {
+        let mut i = 0;
+        while !exit_cond(elem, elem_other) {
+            if elem.num_of_additions_over_normal_form >= elem_other.num_of_additions_over_normal_form
+            {
+                Self::reduce(cs.ns(|| format!("reduce elem {}", i)), elem)?;
+            } else {
+                Self::reduce(cs.ns(|| format!("reduce elem other {}", i)), elem_other)?;
+            }
+            i += 1;
+        }
+        Ok(())
+    }
+
     /// Optional reduction typically enforced before doing further additions.
     /// Checks if the resulting elem is still "small" enough for  a further addition with
     /// an element of at most the same size, and reduces it otherwise.
-    // TODO: let us modify it to `pre_add_reduce()` which takes two non-natives and checks
-    // if it needs ot reduce one of the two operands (or both) similar to `pre_eq_reduce()`. 
-    // Likewise, implement a `pre_sub_reduce()`.
-    pub fn post_add_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub fn pre_add_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+        elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         // Pre-add reduce: Since the sum of two non-natives is bounded by
@@ -124,17 +144,50 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         // TODO: we need to ensure that reduction does not exceed capacity. 
 
-        // TODO: let us do the correct reduction strategy, i.e.
-        // if `len(num_add(L) + num_add(R) + 2) + bits_per_limb > CAPACITY` then we 
-        //      either reduce `L` or `R`, or both.
-        // else do nothing.
-        let surfeit = overhead!(elem.num_of_additions_over_normal_form + ConstraintF::one()) + 1;
+        Self::reduce_until_cond_is_satisfied(
+            cs,
+            elem,
+            elem_other,
+            |elem, elem_other| {
+                let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
+                let surfeit = overhead!(sum_add + ConstraintF::from(2u8));
+                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize
+            }
+        )
+    }
 
-        if ConstraintF::size_in_bits() > 2 * params.bits_per_limb + surfeit + 1 {
-            Ok(())
-        } else {
-            Self::reduce(cs, elem)
-        }
+    /// Optional reduction typically enforced before doing further subtractions.
+    /// Checks if the resulting elem is still "small" enough for  a further subraction with
+    /// an element of at most the same size, and reduces it otherwise.
+    pub fn pre_sub_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+        cs: CS,
+        elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+        elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+    ) -> Result<(), SynthesisError> {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        // Pre-sub reduce. Sub is bounded by: 
+        // ``
+        //  sub < (num_add(L) + 2) * 2^bits_per_limb + 
+        //              (num_add(R) + 1) * 2^bits_per_limb,
+        //                   
+        // ``
+        // In order that this sub does not exceed the CAPACITY we need to ensure that 
+        // ``
+        //      bits_per_limb + len(num_add(L) + num_add(R) + 3) 
+        //           <= CAPACITY.
+        // ``
+        // TODO: we need to guarantee that a further reduction is possible without exceeding
+        // the capacity bound.
+        Self::reduce_until_cond_is_satisfied(
+            cs,
+            elem,
+            elem_other,
+            |elem, elem_other| {
+                let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
+                let surfeit = overhead!(sum_add + ConstraintF::from(3u8));
+                surfeit + params.bits_per_limb < ConstraintF::Params::CAPACITY as usize
+            }
+        )
     }
 
     /// Reduction used before multiplication to assure that the limbs of the product of the
@@ -153,65 +206,50 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             panic!("The current limb parameters do not support multiplication.");
         }
 
-        // TODO: Try to understand if one can write the optional reduction of one
-        // (or both) of the factors more elegantly.
-        let mut i = 0;
-        loop {
-            // If a limb in normal form undergoes `num_add` additions (with another limb of at most
-            // same length) then the sum is 
-            // ``
-            //   sum < (num_add + 1) * 2^{bits_per_limb} = 2^{log(num_add + 1) + bits_per_limb},
-            // ``
-            // and therefore `len(sum) <= ceil(log(num_add)) + bits_per_limb`.
-            // A product of two limbs of size `bits_per_limb + num_addtions_over_normal_form`
-            // is 
-            // `` 
-            //     < 2^{log(num_add(a) + 1) + bits_per_limb} * 2^{log(num_add(b) + 1) + bits_per_limb}
-            //     = 2^{log((num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb}.
-            // ``
-            // The sum of `num_limbs` many such limb products is bounded by
-            // ``
-            //     < num_limbs * 2^{log((num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb} 
-            //     = 2^{log(num_limbs*(num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb}   
-            // ``
-            // and therefore its length is bounded by
-            // ``
-            //    bits_per_mulresult_limb = 
-            //      len[num_limbs*(num_add(a) + 1)*(num_add(b)+1)] + 2 bits_per_limb. 
-            // ``
-            // TODO: we need to guarantee that a further reduction is possible without exceeding
-            // the capacity bound.
+        // If a limb in normal form undergoes `num_add` additions (with another limb of at most
+        // same length) then the sum is 
+        // ``
+        //   sum < (num_add + 1) * 2^{bits_per_limb} = 2^{log(num_add + 1) + bits_per_limb},
+        // ``
+        // and therefore `len(sum) <= ceil(log(num_add)) + bits_per_limb`.
+        // A product of two limbs of size `bits_per_limb + num_addtions_over_normal_form`
+        // is 
+        // `` 
+        //     < 2^{log(num_add(a) + 1) + bits_per_limb} * 2^{log(num_add(b) + 1) + bits_per_limb}
+        //     = 2^{log((num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb}.
+        // ``
+        // The sum of `num_limbs` many such limb products is bounded by
+        // ``
+        //     < num_limbs * 2^{log((num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb} 
+        //     = 2^{log(num_limbs*(num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb}   
+        // ``
+        // and therefore its length is bounded by
+        // ``
+        //    bits_per_mulresult_limb = 
+        //      len[num_limbs*(num_add(a) + 1)*(num_add(b)+1)] + 2 bits_per_limb. 
+        // ``
+        // TODO: we need to guarantee that a further reduction is possible without exceeding
+        // the capacity bound.
 
-            // TODO: the following computation of `bits_per_mulresult_limb` oversizes the
-            // the count by 2. Let us optimize according to the above formula.
-            let prod_of_num_of_additions = (elem.num_of_additions_over_normal_form
-                + ConstraintF::one())
-                * (elem_other.num_of_additions_over_normal_form + ConstraintF::one());
-            let overhead_limb = overhead!(prod_of_num_of_additions.mul(&ConstraintF::from_repr(
-                <ConstraintF as PrimeField>::BigInt::from((params.num_limbs) as u64)
-            )));
-            let bits_per_mulresult_limb = 2 * (params.bits_per_limb + 1) + overhead_limb;
+        // if the limb in a product has bit length <= CAPACITY, there is nothing to do.
+        // otherwise we reduce the factor which is expected to have larger excess
+        // over normal form.
+        Self::reduce_until_cond_is_satisfied(
+            cs.ns(|| "pre mul reduce"),
+            elem,
+            elem_other,
+            |elem, elem_other| {
+                let prod_of_num_of_additions = (elem.num_of_additions_over_normal_form
+                    + ConstraintF::one())
+                    * (elem_other.num_of_additions_over_normal_form + ConstraintF::one());
+                let overhead_limb = overhead!(prod_of_num_of_additions.mul(&ConstraintF::from_repr(
+                    <ConstraintF as PrimeField>::BigInt::from((params.num_limbs) as u64)
+                )));
+                let bits_per_mulresult_limb = 2 * params.bits_per_limb + overhead_limb;
 
-            // if the limb in a product has bit length <= CAPACITY,
-            // there is nothing to do.
-            // TODO: this condition is good enough for assuring a secure mul_without_reduce(),
-            // but it doesn't guarantee that the further operations in the reduce() of the 
-            // `NonNativeMulResultGadget` does not exceed the capacity. 
-            if bits_per_mulresult_limb < ConstraintF::size_in_bits() {
-                break;
+                bits_per_mulresult_limb < ConstraintF::size_in_bits()
             }
-
-            // otherwise we reduce the factor which is expected to have larger excess
-            // over normal form.
-            if elem.num_of_additions_over_normal_form
-                >= elem_other.num_of_additions_over_normal_form
-            {
-                Self::reduce(cs.ns(|| format!("reduce elem {}", i)), elem)?;
-            } else {
-                Self::reduce(cs.ns(|| format!("reduce elem other {}", i)), elem_other)?;
-            }
-            i += 1;
-        }
+        )?;
 
         Ok(())
     }
