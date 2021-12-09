@@ -1,7 +1,12 @@
+#![allow(unused_imports, unused_macros)]
+
 use crate::groups::{
     nonnative::short_weierstrass_jacobian::GroupAffineNonNativeGadget,
     test::{group_test_with_incomplete_add, mul_bits_native_test},
 };
+
+
+#[cfg(all(feature = "ed25519", feature = "tweedle"))]
 use algebra::{
     curves::ed25519::Ed25519Parameters,
     fields::{
@@ -74,7 +79,7 @@ macro_rules! nonnative_group_test_unsafe_add {
 );*/
 
 //TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
-#[cfg(feature = "density-optimized")]
+#[cfg(all(feature = "density-optimized", feature = "tweedle", feature = "ed25519"))]
 nonnative_group_test_unsafe_add!(
     TweedleFred25519Fq,
     1,

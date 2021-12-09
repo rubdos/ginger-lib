@@ -1,3 +1,17 @@
+#![allow(unused_imports)]
+
+use algebra::{
+    fields::{
+        FpParameters, PrimeField,
+    },
+    BigInteger,
+};
+
+use r1cs_core::{
+    ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
+};
+use rand::{thread_rng, Rng, RngCore};
+
 use crate::{
     alloc::AllocGadget,
     bits::boolean::Boolean,
@@ -11,21 +25,19 @@ use crate::{
     },
     FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget,
 };
-use algebra::{
-    fields::{
-        bn_382::{Fq as Bn382Fq, Fr as Bn382Fr},
-        ed25519::{fq::Fq as ed25519Fq, fr::Fr as ed25519Fr},
-        secp256k1::{Fq as secp256k1Fq, Fr as secp256k1Fr},
-        tweedle::{Fq as TweedleFq, Fr as TweedleFr},
-        FpParameters, PrimeField,
-    },
-    BigInteger,
-};
 
-use r1cs_core::{
-    ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
-};
-use rand::{thread_rng, Rng, RngCore};
+#[cfg(feature = "bn_382")]
+use algebra::fields::bn_382::{Fq as Bn382Fq, Fr as Bn382Fr};
+
+#[cfg(feature = "ed25519")]
+use algebra::fields::ed25519::{fq::Fq as ed25519Fq, fr::Fr as ed25519Fr};
+
+#[cfg(feature = "secp256k1")]
+use algebra::fields::secp256k1::{Fq as secp256k1Fq, Fr as secp256k1Fr};
+
+#[cfg(feature = "tweedle")]
+use algebra::fields::tweedle::{Fq as TweedleFq, Fr as TweedleFr};
+
 
 const NUM_REPETITIONS: usize = 10;
 const TEST_COUNT: usize = 10;
@@ -1014,19 +1026,35 @@ macro_rules! nonnative_test {
 }
 
 // Implementation of the above non-native arithmetic tests for different curves
+#[cfg(feature = "tweedle")]
 nonnative_test!(TweedleFqFr, TweedleFq, TweedleFr);
+
+#[cfg(feature = "tweedle")]
 nonnative_test!(TweedleFrFq, TweedleFr, TweedleFq);
+
+#[cfg(feature = "bn_382")]
 nonnative_test!(Bn382FqFr, Bn382Fq, Bn382Fr);
+
+#[cfg(feature = "bn_382")]
 nonnative_test!(Bn382FrFq, Bn382Fr, Bn382Fq);
+
+#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
 nonnative_test!(Bn382Frsecp256k1Fq, Bn382Fr, secp256k1Fq);
+
+#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
 nonnative_test!(Bn382Frsecp256k1Fr, Bn382Fr, secp256k1Fr);
+
 //TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
-#[cfg(feature = "density-optimized")]
+#[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_test!(TweedleFred25519Fq, TweedleFr, ed25519Fq);
+
 //TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
-#[cfg(feature = "density-optimized")]
+#[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_test!(TweedleFred25519Fr, TweedleFr, ed25519Fr);
+
+#[cfg(all(feature = "tweedle", feature = "bn_382"))]
 nonnative_test!(Bn382FrTweedleFq, Bn382Fr, TweedleFq);
+
 // TODO: This test, along with some others, seems to cause troubles
 //       with the enforce_in_field gadget. It doesn't work either in density-optimized or constraint-optimized mode. Fix it.
 nonnative_test!(
