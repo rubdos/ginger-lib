@@ -114,26 +114,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        // Since
+        // Pre-add reduce: Since the sum of two non-natives is bounded by
         // ``
-        //      (num_add + 1) * 2^{bits_per_limb} = 2^{log(num_add + 1) + bits_per_limb}
+        //      sum < (num_add(L) + 1 + num_add(R) + 1) * 2^bits_per_limb 
         // ``
-        // The length after `num_add` additions is `<= ceil(log[num_add + 1]) + bits_per_limb`.
-        // If 
+        // we need to assure that
         // ``
-        //      ceil(log[num_add + 1]) + bits_per_limb <= CAPACITY - 1
+        //      len(num_add(L) + num_add(R) + 2) + bits_per_limb <= CAPACITY.
         // ``
-        // then there is still a further addition possible. In other words, if 
-        // `` 
-        //      ceil(log[num_add + 1]) + 1 +  bits_per_limb <= CAPACITY
-        // `` 
-        // we do not need to reduce. 
+        // TODO: we need to ensure that reduction does not exceed capacity. 
 
-        // TODO: the following check is far too conservative. Let us change it to the above
-        // formula.
-        // If the function was for trimming the elem for a subsequent multiplication, then
-        // one should do it like `pre_mul_reduce()`. Otherwise, if it targets in fact a trimming
-        // for further additions, then the condition is too conservative. 
+        // TODO: let us do the correct reduction strategy, i.e.
+        // if `len(num_add(L) + num_add(R) + 2) + bits_per_limb > CAPACITY` then we 
+        //      either reduce `L` or `R`, or both.
+        // else do nothing.
         let surfeit = overhead!(elem.num_of_additions_over_normal_form + ConstraintF::one()) + 1;
 
         if ConstraintF::size_in_bits() > 2 * params.bits_per_limb + surfeit + 1 {
@@ -183,8 +177,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             // and therefore its length is bounded by
             // ``
             //    bits_per_mulresult_limb = 
-            //      ceil(log[num_limbs*(num_add(a) + 1)*(num_add(b)+1)]) + 2 bits_per_limb. 
+            //      len[num_limbs*(num_add(a) + 1)*(num_add(b)+1)] + 2 bits_per_limb. 
             // ``
+            // TODO: we need to guarantee that a further reduction is possible without exceeding
+            // the capacity bound.
 
             // TODO: the following computation of `bits_per_mulresult_limb` oversizes the
             // the count by 2. Let us optimize according to the above formula.
@@ -198,6 +194,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
 
             // if the limb in a product has bit length <= CAPACITY,
             // there is nothing to do.
+            // TODO: this condition is good enough for assuring a secure mul_without_reduce(),
+            // but it doesn't guarantee that the further operations in the reduce() of the 
+            // `NonNativeMulResultGadget` does not exceed the capacity. 
             if bits_per_mulresult_limb < ConstraintF::size_in_bits() {
                 break;
             }

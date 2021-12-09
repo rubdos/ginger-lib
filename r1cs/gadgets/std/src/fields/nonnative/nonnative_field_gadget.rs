@@ -134,6 +134,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         //      bits_per_limb + len(num_add(L) + num_add(R) + 3) 
         //           <= CAPACITY.
         // ``
+        // TODO: we need to guarantee that a further reduction is possible without exceeding
+        // the capacity bound.
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -146,6 +148,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let mut surfeit =
             overhead!(other.num_of_additions_over_normal_form + ConstraintF::one()) + 1;
         let mut other = other.clone();
+        // if `bits_per_limb + len(num_add(L) + num_add(R) + 3) > CAPACITY`.
+        //      then reduce &self or other or both.
+        // else do nothing
         if (surfeit + params.bits_per_limb > ConstraintF::size_in_bits() - 1)
             || (surfeit
                 + (SimulationF::size_in_bits() - params.bits_per_limb * (params.num_limbs - 1))
@@ -588,6 +593,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
             simulation_phantom: PhantomData,
         };
 
+        // Lets remove the post_add_reduce() here, 
+        // and do a `pre_add_reduce()` before the add.
         Reducer::<SimulationF, ConstraintF>::post_add_reduce(
             cs.ns(|| "post add reduce"),
             &mut res,
@@ -604,6 +611,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         other: &Self,
     ) -> Result<Self, SynthesisError> {
         let mut result = self.sub_without_reduce(cs.ns(|| "sub without reduce"), other)?;
+        // TODO: let us remove this and integrate a pre_sub_reduce() within 
+        // sub_without_reduce.
         Reducer::<SimulationF, ConstraintF>::post_add_reduce(
             cs.ns(|| "post sub reduce"),
             &mut result,
@@ -736,6 +745,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
     // Security Note: In this current implementation yields the bits of 
     // a representant mod p in *normal form*. This representant might
     // is only assured to be of same length as `p`.
+    // TODO: let us simply call to_bits_strict()
     fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -787,6 +797,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
     //             - `bits_per_limb` as from `&self` 
     //             - `surfeit` as the `num_additions_over_normal_form` in `&self`,
     //             - `shift_per_limb` as `bits_per_limb`.
+
+    // Or even simpler
+    //      1. alloc a vector `B` of modulus many Booleans, having the native bits of 
+    //         `get_value(&self)`
+    //      2. use enforce_in_field() on `B`
+    //      3. construct a non-native `N` from `B`, using from_bits()
+    //      4. use enforce_equal(&self, N).
     fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
