@@ -15,6 +15,7 @@ use algebra::fields::{FpParameters, PrimeField};
 use num_bigint::BigUint;
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::{marker::PhantomData, vec::Vec};
+use core::cmp::max;
 
 #[derive(Debug)]
 #[must_use]
@@ -26,6 +27,8 @@ pub struct NonNativeFieldMulResultGadget<SimulationF: PrimeField, ConstraintF: P
     ///     limbs[i] < (prod_of_num_additions + 1) * 2^{2*bits_per_limb},
     /// ``
     /// for all limbs except the first one, and similarly for the most significant limb.
+    // TODO: let us rename `prod_of_num_additions` to `addtions_over_normal_form`
+    // or similar.
     pub prod_of_num_of_additions: ConstraintF,
     #[doc(hidden)]
     pub simulation_phantom: PhantomData<SimulationF>,
@@ -92,7 +95,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         //    Sum_{i=0..} limb[i] * A^i = k * p + r
         // ``
         // by means of `group_and_check_equality()`. The left hand side is length bounded by
-        //    < 2^{2*len(p) + surfeit + 1
+        //    < 2^{2*len(p) + surfeit + 1}
         // with surfeit = len(num_adds + 1)
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -112,15 +115,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         }
         let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: p_gadget_limbs,
-            num_of_additions_over_normal_form: ConstraintF::one(),
-            is_in_the_normal_form: false,
+            num_of_additions_over_normal_form: ConstraintF::zero(),
+            is_in_the_normal_form: true,
             simulation_phantom: PhantomData,
         };
 
         // Step 2: compute surfeit
-        // TODO: There is one + 1 too much.
-        // NOTE: surfeit should always be defined as overhead!(num_adds + 1).
-        let surfeit = overhead!(self.prod_of_num_of_additions + ConstraintF::one()) + 1 + 1;
+        let surfeit = overhead!(self.prod_of_num_of_additions + ConstraintF::one());
 
         // Step 3: allocate k
         let k_bits = {
@@ -135,7 +136,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             let mut k_cur = value_bigint / p_bigint; // drops the remainder
 
             // The total length of k
-            let total_len = SimulationF::size_in_bits() + surfeit;
+            let total_len = SimulationF::size_in_bits() + surfeit + 1;
 
             for i in 0..total_len {
                 res.push(Boolean::alloc(
@@ -147,7 +148,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             res
         };
 
-        // TODO: let us use from_bits() for non-natives.
+        // TODO: let us use from_bits() for non-natives, if possible
         let k_limbs = {
             let zero = FpGadget::zero(cs.ns(|| "hardcode zero for k_limbs"))?;
             let mut limbs = Vec::new();
@@ -195,9 +196,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 self.value()
             })?;
 
-        // TODO: params is already fetched above. Remove this line.
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-
         // Step 1: reduce `self` and `other` if necessary
         let mut prod_limbs = Vec::new();
         let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "hardcode zero for step 1"))?;
@@ -226,11 +224,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         let mut kp_plus_r_gadget = Self {
             limbs: prod_limbs,
-            prod_of_num_of_additions: (p_gadget.num_of_additions_over_normal_form
-                + ConstraintF::one())
-                * (k_gadget.num_of_additions_over_normal_form + ConstraintF::one()),
+            prod_of_num_of_additions: ConstraintF::from(params.num_limbs as u64) 
+                * (p_gadget.num_of_additions_over_normal_form + ConstraintF::one())
+                * (k_gadget.num_of_additions_over_normal_form + ConstraintF::one()) 
+                + ConstraintF::one(),
             simulation_phantom: PhantomData,
         };
+        let surfeit_kp_plus_r = overhead!(kp_plus_r_gadget.prod_of_num_of_additions + ConstraintF::one());
 
         let kp_plus_r_limbs_len = kp_plus_r_gadget.limbs.len();
         for (i, limb) in r_gadget.limbs.iter().rev().enumerate() {
@@ -248,7 +248,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         Reducer::<SimulationF, ConstraintF>::group_and_check_equality(
             cs.ns(|| "group and check equality"),
-            surfeit,
+            max(surfeit, surfeit_kp_plus_r),
             2 * params.bits_per_limb,
             params.bits_per_limb,
             &self.limbs,

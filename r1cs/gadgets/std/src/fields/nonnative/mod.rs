@@ -1,5 +1,5 @@
-//! A module for simulating non-native field arithmetics using the techniques of [[Kosba et al]] 
-//! and [Ozdemir et al]. Ported from [[arkworks/nonnative]].
+//! A module for simulating non-native field arithmetics using the techniques of [[Kosba et al]]. 
+//! Ported from [[arkworks/nonnative]]. 
 //! The following types are defined/supported:
 //! - `NonNativeFieldParams` specifies the constraint prime field (called `ConstraintF`),
 //!     the simulated prime field (called `SimulationF`), and internal parameters.
@@ -11,7 +11,6 @@
 //! DISCLAIMER: THIS LIBRARY IS EXPERIMENTAL AND NEEDS TO UNDERGO A MORE IN-DEPTH REVIEW
 //! 
 //! [Kosba et al]: https://ieeexplore.ieee.org/document/8418647
-//! [Ozdemir et al]: https://eprint.iacr.org/2019/1494
 //! [arkworks]: https://github.com/arkworks-rs/nonnative
 use std::fmt::Debug;
 
