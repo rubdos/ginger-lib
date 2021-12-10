@@ -89,6 +89,21 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     }
 
     /// Reduction to normal form, which again has no excess in its limbs.
+    /// Assumes that 
+    /// ``
+    ///     bits_per_limb + len(num_add(L) + 3) <= CAPACITY - 2.
+    /// ``
+    // Costs`
+    //    ``
+    //     C = len(p) + 3 * S + surfeit + num_limbs(p) + 1
+    // ``
+    // constraints, where 
+    // ``
+    //      S =  2 + Floor[
+    //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
+    //          ],   
+    // ``
+    // and `surfeit = len(3 + num_add(elem))`.
     pub fn reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
@@ -98,6 +113,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         let new_elem = NonNativeFieldGadget::alloc(cs.ns(|| "alloc normal form"), || {
             Ok(elem.get_value().unwrap_or_default())
         })?;
+        // We do not need to panic if the aforementioned assumption is not met,
+        // as enforce_equal will do.
         elem.enforce_equal(cs.ns(|| "elem == new_elem"), &new_elem)?;
         *elem = new_elem;
         Ok(())
@@ -146,6 +163,21 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        // To assure that the limbs of the product representation do not exceed the capacity
+        // bound, we demand
+        // ``
+        //      2 * bits_per_limb + surfeit(product) <= CAPACITY,
+        // ``
+        // where 
+        // ``
+        //      surfeit(product) = len(num_limbs * (num_add(L)+1) * (num_add(R) + 1).
+        // ``
+        // To allow for a subsequent reduction we need to assure the stricter condition 
+        // that 
+        // ``
+        //     2 * bits_per_limb + surfeit(product) + len(num_limbs) <= CAPACITY - 2.
+        // ``
 
         if 2 * params.bits_per_limb + algebra::log2(params.num_limbs) as usize
             > ConstraintF::size_in_bits() - 1
@@ -245,21 +277,34 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     ///     limb_size = bits_per_limb + surfeit.
     /// `` 
     /// Implements the grouping technique from [[Kosba et al]] to reduce the number of 
-    /// constraints for the carries. Costs 
+    /// constraints for the carries. 
+    /// Assumes that
     /// ``
-    ///      (S-1) * (1 + limb_size + 2 - shift_per_limb) + 1
+    ///     bits_per_limb + surfeit + 2 <= ConstraintF::CAPACITY,
     /// ``
-    /// constraints, where `1 <= S <= num_limbs` is the number of groups.
+    /// and `shift_per_limb >= 2`. 
     /// 
     /// [Kosba et al]: https://ieeexplore.ieee.org/document/8418647
+    // Costs
+    // ``
+    //      (S-1) * (1 + bits_per_limb + surfeit + 2 - shift_per_limb) + 1
+    // ``
+    // constraints, where `1 <= S <= num_limbs` is the number of groups, determined
+    // by 
+    // ``
+    //  S - 1 = Floor[
+    //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
+    //      ].
+    // ``
     pub fn group_and_check_equality<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
-        // The additional number of bits beyond `bits_per_limb`
+        // The additional number of bits beyond `bits_per_limb`. Hence the current
+        // limbsize is `bits_per_limb + surfeit`.
         surfeit: usize,
         // The number of bits  
         bits_per_limb: usize,
         // defines arity of the limb representation, i.e. `A= 2^{shift_per_limb}`.
-        // Security note: must be >= 2.
+        // MUST be >= 2.
         shift_per_limb: usize,
         left: &[FpGadget<ConstraintF>],
         right: &[FpGadget<ConstraintF>],
@@ -301,7 +346,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
 
         assert!(shift_per_limb >= 2);
-        assert!(bits_per_limb >= shift_per_limb);
+        
         assert!(
             ConstraintF::Params::CAPACITY as usize >= 
                 2
@@ -309,6 +354,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
                 + bits_per_limb 
         );
 
+        // TODO: remove the following assert. Don't know why I put it there.
+        assert!(bits_per_limb >= shift_per_limb);  
+        
         let num_limb_in_a_group = (ConstraintF::Params::CAPACITY as usize
             - 2
             - surfeit
@@ -555,9 +603,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
                 )?;
             } else {
                 // The length restriction for the carry
-                // Costs `surfeit + bits_per_limb` many constraints.
-                // NOTE: as showed above, seems to be improvable to `bits_per_limb + surfeit + 2 - shift_per_limb`
-                // many constraints.
+                // Costs `bits_per_limb + surfeit + 2 - shift_per_limb` many constraints.
                 Reducer::<SimulationF, ConstraintF>::limb_to_bits(
                     cs.ns(|| format!("carry_to_bits_{}", group_id)),
                     &carry,

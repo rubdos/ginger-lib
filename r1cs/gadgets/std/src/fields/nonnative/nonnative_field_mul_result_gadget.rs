@@ -19,14 +19,24 @@ use core::cmp::max;
 
 #[derive(Debug)]
 #[must_use]
+/// The gadget for the non-reduced products of `NonNativeFieldGadget`s. 
 pub struct NonNativeFieldMulResultGadget<SimulationF: PrimeField, ConstraintF: PrimeField> {
-    /// Limbs of the intermediate representations, starting with the most significant limb.
+    /// Limbs of the product representation, starting with the most significant limb.
+    /// Normal form corresponds to the limb sizes 
+    /// ``
+    ///     bits_per_limb[i] = 2 * NonNativeFieldParams::bits_per_limb,
+    /// ``
+    /// for all except the most significant limb, for which 
+    /// ``
+    ///     bits_per_limb[0] = 2 * (NonNativeFieldParams::bits_per_limb
+    ///                                         % SimulationF::bit_size()).
+    /// ``
     pub limbs: Vec<FpGadget<ConstraintF>>,
-    /// Used to determine the strict limb bound 
+    /// As `num_add_over_normal_form` for `NonNativeGadget`s, keeps track of the limb 
+    /// size bound 
     /// ``
-    ///     limbs[i] < (prod_of_num_additions + 1) * 2^{2*bits_per_limb},
+    ///     limbs[i] < (prod_of_num_additions + 1) * 2^bits_per_limb[i].
     /// ``
-    /// for all limbs except the first one, and similarly for the most significant limb.
     // TODO: let us rename `prod_of_num_additions` to `addtions_over_normal_form`
     // or similar.
     pub prod_of_num_of_additions: ConstraintF,
@@ -83,8 +93,29 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         Ok(res)
     }
 
-    /// Constraints for reducing the result of a multiplication to a non-native field gadget
-    /// in normal form.
+    /// Reducing a NonNativeMulResultGadget back to a non-native field gadget
+    /// in normal form. Assumes that 
+    /// ``
+    ///     2 * bits_per_limb + surfeit + len(num_limbs) <= CAPACITY - 2.
+    /// ``
+    /// where 
+    /// ``
+    ///     bits_per_limb = NonNativeFieldParams::bits_per_limb, 
+    ///     surfeit = len(num_add(self) + 1), 
+    ///     num_limbs = NonNativeFieldParams::num_limbs.
+    /// ``
+    // Costs
+    // ``
+    //     C =  len(p) + surfeit 
+    //          +  num_limbs^2
+    //          +  (S-1) * (3 + bits_per_limb + surfeit + len(num_limbs)) + 1
+    // ``
+    // constraints, where 
+    // ``
+    //    S - 1 = Floor[
+    //          (ConstraintF::CAPACITY - 2 - surfeit  - len(num_limbs)) / bits_per_limb
+    //          ] - 2.
+    // ``
     pub fn reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -92,13 +123,30 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // This is just paraphrasing the reduction of non-natives. We enforce the large integer 
         // equality
         // ``
-        //    Sum_{i=0..} limb[i] * A^i = k * p + r
+        //    Sum_{i=0..} limb[i] * A^i = k * p + r,
         // ``
-        // by means of `group_and_check_equality()`. The left hand side is length bounded by
-        //    < 2^{2*len(p) + surfeit + 1}
-        // with surfeit = len(num_adds + 1)
+        // where `0 <= r < 2^len(p)` and `k >= 0`, by means of `group_and_check_equality()`. 
+        // As the left hand side is length bounded by
+        // ``
+        //   Sum_{i=0..} limb[i] * A^i < (num_adds + 1) * 2^{2*len(p)}
+        // ``
+        // the quotient `k` is length bounded by
+        // ``
+        //      len(k) <= len(p) + len(num_adds + 1). 
+        // `` 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
+        // Note: To assure that the limb-wise computation of the `k * p + r` does not 
+        // exceed the capacity bound, we demand 
+        // ``
+        //     2 * bits_per_limb + surfeit + len(num_limbs) <= CAPACITY.
+        // ``
+        // However, as the final `group_and_check_equality()` panics iff
+        // ``
+        //     2 * bits_per_limb + surfeit + len(num_limbs) > CAPACITY - 2.
+        // ``
+        // there is no need to throw an error here.
+    
         // Step 1: get p
         let p_representations =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations_from_big_integer(
@@ -123,7 +171,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // Step 2: compute surfeit
         let surfeit = overhead!(self.prod_of_num_of_additions + ConstraintF::one());
 
-        // Step 3: allocate k
+        // Step 3: allocate k,
+        // Costs `C = len(p) + surfeit` constraints.
         let k_bits = {
             let mut res = Vec::new();
 
@@ -136,6 +185,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             let mut k_cur = value_bigint / p_bigint; // drops the remainder
 
             // The total length of k
+            // TODO: The length is oversized. Drop the + 1 here.
             let total_len = SimulationF::size_in_bits() + surfeit + 1;
 
             for i in 0..total_len {
@@ -148,7 +198,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             res
         };
 
-        // TODO: let us use from_bits() for non-natives, if possible
+        // We define the non-native gadget of `k` by using exactly `num_limbs`
+        // limbs, having all limbs except the most significant one in normal form.
         let k_limbs = {
             let zero = FpGadget::zero(cs.ns(|| "hardcode zero for k_limbs"))?;
             let mut limbs = Vec::new();
@@ -159,6 +210,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 let this_limb_size = if i != params.num_limbs - 1 {
                     params.bits_per_limb
                 } else {
+                    // The most significant limb is oversized by 
+                    // `surfeit = len(num_adds + 1)`
                     k_bits.len() - (params.num_limbs - 1) * params.bits_per_limb
                 };
 
@@ -183,6 +236,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             limbs
         };
 
+        // TODO: let us remove the declaration of `num_adds` as it is not used 
+        // anyway.
         let k_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: k_limbs,
             num_of_additions_over_normal_form: self.prod_of_num_of_additions,
@@ -190,20 +245,22 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             simulation_phantom: PhantomData,
         };
 
-        // alloc r in normal form.
+        // alloc r in normal form. 
+        // Costs `C = len(p)` constraints.
         let r_gadget =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc r"), || {
                 self.value()
             })?;
 
-        // Step 1: reduce `self` and `other` if necessary
+        // Compute the product representation for `k*p`
+        // Costs `C =  num_limbs^2` constraintss.
         let mut prod_limbs = Vec::new();
         let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "hardcode zero for step 1"))?;
 
         for _ in 0..2 * params.num_limbs - 1 {
             prod_limbs.push(zero.clone());
         }
-        // TODO: let us use the Kosba method to enforce the limbs of the product k*p
+
         for i in 0..params.num_limbs {
             for j in 0..params.num_limbs {
                 let mul_result = p_gadget.limbs[i].mul(
@@ -222,6 +279,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             }
         }
 
+        // Compute the limbs of `k * p + r`. Does not cost any constraint.
+        // TODO: Let us remove the `num_adds` declaration, as it is not used anyway.
+        // The surfeit for the limbs of `k*p + r` is bounded by
+        // ``
+        //      surfeit(kp + r) <= len(num_limbs) + surfeit(k)
+        //                  = len(num_limbs) + len(num_adds + 1)
+        // ``
         let mut kp_plus_r_gadget = Self {
             limbs: prod_limbs,
             prod_of_num_of_additions: ConstraintF::from(params.num_limbs as u64) 
@@ -246,10 +310,30 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             )?;
         }
 
+        // Assumes that 
+        // ``
+        //     2 * bits_per_limb + surfeit + len(num_limbs) <= CAPACITY - 2.
+        // ``
+        // Costs
+        // ``
+        //      (S-1) * (1 + 2*bits_per_limb + surfeit + len(num_limbs) + 2 - bits_per_limb) + 1
+        // ``
+        // constraints, with
+        // ``
+        //  S - 1 = Floor[
+        //          (ConstraintF::CAPACITY - 2 - (2 * bits_per_limb + surfeit  + len(num_limbs)) / bits_per_limb
+        //      ] 
+        //        = Floor[
+        //          (ConstraintF::CAPACITY - 2 - (surfeit  + len(num_limbs)) / bits_per_limb
+        //      ] - 2.
+        // ``
         Reducer::<SimulationF, ConstraintF>::group_and_check_equality(
             cs.ns(|| "group and check equality"),
+            // TODO: let us simply put `len(num_limbs) + surfeit`.
             max(surfeit, surfeit_kp_plus_r),
+            // bits_per_limb
             2 * params.bits_per_limb,
+            // shift_per_limb
             params.bits_per_limb,
             &self.limbs,
             &kp_plus_r_gadget.limbs,
