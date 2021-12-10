@@ -629,34 +629,33 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
     }
 
     /// Addition of non-natives, outputs non-normal form.
-    // TODO: after modifying `post_add_reduce()` to `pre_add_reduce()`, apply it before
-    // the limb-wise addition.
-    // The low-level `add_without_prereduce()` needs to assume that 
-    // ``
-    //     bits_per_limb + len(num_add(L) + num_add(R) + 4) <= CAPACITY - 2,
-    // `` 
-    // to assure a secure add together with an optional subsequent reduce:
-    // To output a sum which does not exceed the capacity bound, we need to demand that
-    // ``
-    //     bits_per_limb + len(num_add(sum) + 1) <= CAPACITY,
-    // `` 
-    // where `num_add(sum) = num_add(L) + num_add(R) + 1`. To allow a subsequent reduction 
-    // we need to assure the stricter condition
-    // ``
-    //     bits_per_limb + len(num_add(sum) + 3) <= CAPACITY - 2.
-    // `` 
     fn add<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
+        let mut elem_self = self.clone();
+        let mut elem_other = other.clone();
+        Reducer::<SimulationF, ConstraintF>::pre_add_reduce(
+            cs.ns(|| "pre add reduce"),
+            &mut elem_self,
+            &mut elem_other
+        )?;
+        
+        // TODO: move the following logic to a separate low-level function
+        // `add_without_prereduce()`.  This function assumes that  
+        // ``
+        //     bits_per_limb + len(num_add(L) + num_add(R) + 4) <= CAPACITY - 2,
+        // `` 
+        // and panics if not.
+        
         let mut limbs = Vec::new();
-        for (i, (this_limb, other_limb)) in self.limbs.iter().zip(other.limbs.iter()).enumerate() {
+        for (i, (this_limb, other_limb)) in elem_self.limbs.iter().zip(elem_other.limbs.iter()).enumerate() {
             let sum = this_limb.add(cs.ns(|| format!("add limbs {}", i)), other_limb)?;
             limbs.push(sum);
         }
 
-        let mut res = Self {
+        Ok(Self {
             limbs,
             // Since 
             // ``
@@ -664,37 +663,36 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
             //                  + (num_add(R) + 1) * 2^bits_per_limb
             // ``
             // we set `num_add(T) = num_add(L) + num_add(R) + 1`.
-            num_of_additions_over_normal_form: self
+            num_of_additions_over_normal_form: elem_self
                 .num_of_additions_over_normal_form
-                .add(&other.num_of_additions_over_normal_form)
+                .add(&elem_other.num_of_additions_over_normal_form)
                 .add(&ConstraintF::one()),
             is_in_the_normal_form: false,
             simulation_phantom: PhantomData,
-        };
-
-        // Lets remove the post_add_reduce() here, 
-        // and do a `pre_add_reduce()` before the add.
-        Reducer::<SimulationF, ConstraintF>::post_add_reduce(
-            cs.ns(|| "post add reduce"),
-            &mut res,
-        )?;
-
-        Ok(res)
+        })
     }
 
-    /// Substraction of non-natives, outputs non-normal form.
+    /// Subtract a nonnative field element `other` from `self` modulo `p`. Outputs 
+    /// non-normal form.
+    // NOTE: Costs no constraints and only slightly increases the additions over normal form.
     fn sub<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
-        let mut result = self.sub_without_reduce(cs.ns(|| "sub without reduce"), other)?;
-        // TODO: let us remove this and do a pre_sub_reduce() before 
-        // sub_withouth_prereduce().
-        Reducer::<SimulationF, ConstraintF>::post_add_reduce(
-            cs.ns(|| "post sub reduce"),
-            &mut result,
+
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        // pre-reduction step
+        let mut elem_self = self.clone();
+        let mut elem_other = other.clone();
+        Reducer::pre_sub_reduce(
+            cs.ns(|| "pre sub reduce"),
+            &mut elem_self,
+            &mut elem_other,
         )?;
+        // TODO: call sub_without_prereduce()
+
         Ok(result)
     }
 
@@ -823,76 +821,41 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ConstantGadget<Simulation
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    // To bits. 
-    // Security Note: In this current implementation yields the bits of 
-    // a representant mod p in *normal form*. This representant might
-    // is only assured to be of same length as `p`.
-    // TODO: let us simply call to_bits_strict()
     fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
-        mut cs: CS,
+        cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-
-        // Reduce to the normal form, which has no excess in its limbs,
-        // but still might be larger than the modulus.
-        let mut self_normal = self.clone();
-        Reducer::<SimulationF, ConstraintF>::pre_eq_reduce(
-            cs.ns(|| "pre eq reduce"),
-            &mut self_normal,
-        )?;
-
-        // Therefore, we convert it to bits and enforce that it is in the field
-        let mut bits = Vec::<Boolean>::new();
-
-        // Separate treatment of the first limb, as we want to return
-        // exactly SimulationF::size_in_bits() bits
-        bits.extend_from_slice(&Reducer::<SimulationF, ConstraintF>::limb_to_bits(
-            cs.ns(|| "limb 0 to bits"),
-            &self_normal.limbs[0],
-            SimulationF::size_in_bits() % params.bits_per_limb,
-        )?);
-
-        for (i, limb) in self_normal.limbs.iter().skip(1).enumerate() {
-            bits.extend_from_slice(&Reducer::<SimulationF, ConstraintF>::limb_to_bits(
-                cs.ns(|| format!("limb {} to bits", i + 1)),
-                &limb,
-                params.bits_per_limb,
-            )?);
-        }
-
-        Ok(bits)
+        self.to_bits_strict(cs)
     }
 
-    // Enforces the bit representation of `&self` as output by `to_bits()` 
-    // to be strictly smaller than `p`.
-    
-    // TODO: this function is correct, but not complete. In some situations
-    // reducing to normal form and then demanding the latter to be less than p
-    // is not satisfiable. Instead, let us implement `to_bits_strict()` as
-    // follows:
-    //      1. alloc a non-native, using a slice of Booleans which 
-    //        satisfies the `enforce_in_field()`.
-    //      2. pad the slice of limbs of the non-native to the same length
-    //        as the limb slice of  `&self`.
-    //      3. use `group_and_check_equality()` of the two limb slices, choosing 
-    //             - `bits_per_limb` as from `&self` 
-    //             - `surfeit` as the `num_additions_over_normal_form` in `&self`,
-    //             - `shift_per_limb` as `bits_per_limb`.
-
-    // Or even simpler
-    //      1. alloc a vector `B` of modulus many Booleans, having the native bits of 
-    //         `get_value(&self)`
-    //      2. use enforce_in_field() on `B`
-    //      3. construct a non-native `N` from `B`, using from_bits()
-    //      4. use enforce_equal(&self, N).
+    // Enforces the bit representation of `self` to be strictly smaller than `p`.
     fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
-    ) -> Result<Vec<Boolean>, SynthesisError> {
-        let bits = self.to_bits(cs.ns(|| "to bits"))?;
+    ) -> Result<Vec<Boolean>, SynthesisError> 
+    {
+        // alloc a vector of SimulationF many Booleans, representing the bits of 'self'
+        let bits = Vec::<Boolean>::alloc(
+            cs.ns(|| "alloc self bits"),
+            || Ok(self.get_value().unwrap_or_default().write_bits())
+        )?;
+
+        // enforce the bits being strictly smaller than the modulus
         Boolean::enforce_in_field::<_, _, SimulationF>(&mut cs, bits.as_slice())?;
 
+        // construct another NonNativeFieldGadget out of the 'self' bits
+        let other_self = Self::from_bits(
+            cs.ns(|| "construct other self from self bits"),
+            bits.as_slice()
+        )?;
+
+        // enforce the equality with 'self'
+        self.enforce_equal(
+            cs.ns(|| "self == from_bits(self_bits)"),
+            &other_self
+        )?;
+
+        // Return bits
         Ok(bits)
     }
 }
@@ -1356,7 +1319,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
 
         // Get delta = self - other, costs no constraints
         let zero = Self::zero(cs.ns(|| "hardcode zero"))?;
-        let mut delta = self.sub_without_reduce(cs.ns(|| "delta = self - other"), other)?;
+        let mut delta = self.sub(cs.ns(|| "delta = self - other"), other)?;
         delta = Self::conditionally_select(
             cs.ns(|| "select delta or zero"),
             should_enforce,

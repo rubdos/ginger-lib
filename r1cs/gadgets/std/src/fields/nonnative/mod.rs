@@ -25,7 +25,7 @@ pub mod nonnative_field_gadget;
 /// The intermediate non-normalized representation resulting from products.
 pub mod nonnative_field_mul_result_gadget;
 
-#[cfg(all(test, feature = "density-optimized"))]
+#[cfg(test)]
 mod tests;
 
 /// a macro for computing the bit length ceil(log2(x)) of a field element x
