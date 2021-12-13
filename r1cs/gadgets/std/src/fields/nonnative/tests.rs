@@ -123,6 +123,35 @@ fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
     assert!(cs.is_satisfied());
 }
 
+fn multiplication_by_constant_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+    let a_native = SimulationF::rand(rng);
+    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+        Ok(a_native)
+    })
+    .unwrap();
+
+    let b_native = SimulationF::rand(rng);
+
+    let a_times_b = a.mul_by_constant(cs.ns(|| "a * b"), &b_native).unwrap();
+
+    let a_times_b_actual = a_times_b.get_value().unwrap();
+    let a_times_b_expected = a_native * &b_native;
+
+    assert!(
+        a_times_b_actual.eq(&a_times_b_expected),
+        "a_times_b = {:?}, a_times_b_actual = {:?}, a_times_b_expected = {:?}",
+        a_times_b,
+        a_times_b_actual.into_repr().as_ref(),
+        a_times_b_expected.into_repr().as_ref()
+    );
+
+    if !cs.is_satisfied() {
+        println!("{:?}", cs.which_is_unsatisfied());
+    }
+    assert!(cs.is_satisfied());
+}
+
 /// Checks the `mul` of two randomly sampled non-natives against the expected
 /// value as NonNativeFieldGadget in reduced form.
 fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
@@ -463,6 +492,33 @@ fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
         .unwrap();
         num_native *= &next_native;
         num.mul_in_place(cs.ns(|| format!("num *= next {}", i)), &next)
+            .unwrap();
+
+        assert!(num.get_value().unwrap().eq(&num_native));
+    }
+
+    if !cs.is_satisfied() {
+        println!("{:?}", cs.which_is_unsatisfied());
+    }
+    assert!(cs.is_satisfied());
+}
+
+/// Tests correctness of `TEST_COUNT` many `mul_in_place` on a random instance.
+fn multiplication_by_constant_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
+    rng: &mut R,
+) {
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+
+    let mut num_native = SimulationF::rand(rng);
+    let mut num =
+        NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "initial num"), || {
+            Ok(num_native)
+        })
+        .unwrap();
+    for i in 0..TEST_COUNT {
+        let next_native = SimulationF::rand(rng);
+        num_native *= &next_native;
+        num = num.mul_by_constant(cs.ns(|| format!("num *= next {}", i)), &next_native)
             .unwrap();
 
         assert!(num.get_value().unwrap().eq(&num_native));
@@ -959,6 +1015,12 @@ macro_rules! nonnative_test {
             $test_constraint_field
         );
         nonnative_test_individual!(
+            multiplication_by_constant_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
             equality_test,
             $test_name,
             $test_simulation_field,
@@ -1014,6 +1076,12 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             multiplication_stress_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            multiplication_by_constant_stress_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
@@ -1088,19 +1156,15 @@ nonnative_test!(Bn382Frsecp256k1Fq, Bn382Fr, secp256k1Fq);
 #[cfg(all(feature = "bn_382", feature = "secp256k1"))]
 nonnative_test!(Bn382Frsecp256k1Fr, Bn382Fr, secp256k1Fr);
 
-//TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
 #[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_test!(TweedleFred25519Fq, TweedleFr, ed25519Fq);
 
-//TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
 #[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_test!(TweedleFred25519Fr, TweedleFr, ed25519Fr);
 
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
 nonnative_test!(Bn382FrTweedleFq, Bn382Fr, TweedleFq);
 
-// TODO: This test, along with some others, seems to cause troubles
-//       with the enforce_in_field gadget. It doesn't work either in density-optimized or constraint-optimized mode. Fix it.
 nonnative_test!(
     TweedleFqBn382Fr,
     TweedleFq,

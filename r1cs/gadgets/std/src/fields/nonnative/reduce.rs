@@ -9,7 +9,7 @@ use crate::{
         fp::FpGadget,
         nonnative::{nonnative_field_gadget::NonNativeFieldGadget, params::get_params},
     },
-    overhead,
+    bitlen,
     prelude::*,
 };
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
@@ -143,7 +143,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     }
 
     /// Optional reduction which assures that the resulting operands produce a "reducible" sum. 
-    pub fn pre_add_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub(crate) fn pre_add_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
@@ -158,21 +158,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         //     bits_per_limb + len(num_add(sum) + 3) <= CAPACITY - 2.
         // `` 
-        // TODO: correct the reduction condition.
         Self::reduce_until_cond_is_satisfied(
             cs,
             elem,
             elem_other,
             |elem, elem_other| {
                 let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
-                let surfeit = overhead!(sum_add + ConstraintF::from(2u8));
-                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize
+                let surfeit = bitlen!(sum_add + ConstraintF::from(3u8));
+                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )
     }
 
     /// Optional reduction which assures that the resulting operands produce a "reducible" sub result. 
-    pub fn pre_sub_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub(crate) fn pre_sub_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
@@ -183,15 +182,15 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         //     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 2,
         // `` 
         // to assure a secure substraction together with an optional reduce.
-        // TODO: correct the reduction condition.
+
         Self::reduce_until_cond_is_satisfied(
             cs,
             elem,
             elem_other,
             |elem, elem_other| {
                 let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
-                let surfeit = overhead!(sum_add + ConstraintF::from(3u8));
-                surfeit + params.bits_per_limb < ConstraintF::Params::CAPACITY as usize
+                let surfeit = bitlen!(sum_add + ConstraintF::from(5u8));
+                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )
     }
@@ -199,7 +198,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// Reduction used before multiplication to assure that the limbs of the product of the
     /// the two non-natives `elem` and `elem_other` are length bounded by CAPACITY - 1. 
     /// Optionally reduces one or both of the operands to normal form.
-    pub fn pre_mul_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub(crate) fn pre_mul_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
@@ -220,72 +219,21 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         //     2 * bits_per_limb + surfeit(product) + len(num_limbs) <= CAPACITY - 2.
         // ``
-
-        if 2 * params.bits_per_limb + algebra::log2(params.num_limbs) as usize
-            > ConstraintF::size_in_bits() - 1
-        {
-            panic!("The current limb parameters do not support multiplication.");
-        }
-
-        // If a limb in normal form undergoes `num_add` additions (with another limb of at most
-        // same length) then the sum is 
-        // ``
-        //   sum < (num_add + 1) * 2^{bits_per_limb} = 2^{log(num_add + 1) + bits_per_limb},
-        // ``
-        // and therefore `len(sum) <= ceil(log(num_add)) + bits_per_limb`.
-        // A product of two limbs of size `bits_per_limb + num_addtions_over_normal_form`
-        // is 
-        // `` 
-        //     < 2^{log(num_add(a) + 1) + bits_per_limb} * 2^{log(num_add(b) + 1) + bits_per_limb}
-        //     = 2^{log((num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb}.
-        // ``
-        // The sum of `num_limbs` many such limb products is bounded by
-        // ``
-        //     < num_limbs * 2^{log((num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb} 
-        //     = 2^{log(num_limbs*(num_add(a) + 1)*(num_add(b)+1)) + 2 bits_per_limb}   
-        // ``
-        // and therefore its length is bounded by
-        // ``
-        //    bits_per_mulresult_limb = 
-        //      len[num_limbs*(num_add(a) + 1)*(num_add(b)+1)] + 2 bits_per_limb. 
-        // ``
-        // TODO: we need to guarantee that a further reduction is possible without exceeding
-        // the capacity bound.
-
-        // if the limb in a product has bit length <= CAPACITY, there is nothing to do.
-        // otherwise we reduce the factor which is expected to have larger excess
-        // over normal form.
         Self::reduce_until_cond_is_satisfied(
             cs.ns(|| "pre mul reduce"),
             elem,
             elem_other,
             |elem, elem_other| {
-                let prod_of_num_of_additions = (elem.num_of_additions_over_normal_form
-                    + ConstraintF::one())
+                let num_add_bound = ConstraintF::from(params.num_limbs as u64) 
+                    * (elem.num_of_additions_over_normal_form + ConstraintF::one())
                     * (elem_other.num_of_additions_over_normal_form + ConstraintF::one());
-                let overhead_limb = overhead!(prod_of_num_of_additions.mul(&ConstraintF::from_repr(
-                    <ConstraintF as PrimeField>::BigInt::from((params.num_limbs) as u64)
-                )));
-                let bits_per_mulresult_limb = 2 * params.bits_per_limb + overhead_limb;
-
-                bits_per_mulresult_limb < ConstraintF::size_in_bits()
+                let surfeit_product = bitlen!(num_add_bound);
+    
+                2 * params.bits_per_limb + surfeit_product + algebra::log2(params.num_limbs) as usize <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )?;
 
         Ok(())
-    }
-
-    /// Reduction to the normal form
-    // TODO: not needed, let us purge it.
-    pub fn pre_eq_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
-        cs: CS,
-        elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
-    ) -> Result<(), SynthesisError> {
-        if elem.is_in_the_normal_form {
-            return Ok(());
-        }
-
-        Self::reduce(cs, elem)
     }
 
     /// The core piece for comparing two big integers in non-normal form. 
@@ -374,14 +322,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         //      ].
         // ``
 
-        assert!(shift_per_limb >= 2);
+        if shift_per_limb < 2 {
+            return Err(SynthesisError::Other(format!("shift_per_limb must be smaller than 2. Found: {}", shift_per_limb)));
+        }
         
-        assert!(
-            ConstraintF::Params::CAPACITY as usize >= 
-                2
-                + surfeit
-                + bits_per_limb 
-        );
+        if ConstraintF::Params::CAPACITY as usize - 2 < surfeit + bits_per_limb 
+        {
+            return Err(SynthesisError::Other(format!("Security bound exceeded for group_and_check_equality. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, surfeit + bits_per_limb)));
+        }
 
         // TODO: remove the following assert. Don't know why I put it there.
         assert!(bits_per_limb >= shift_per_limb);  

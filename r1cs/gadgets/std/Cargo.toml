@@ -52,7 +52,6 @@ secp256k1 = ["algebra/secp256k1"]
 ed25519 = ["algebra/ed25519"]
 
 nonnative = ["num-traits", "num-bigint", "num-integer"]
-density-optimized = []
 
 [dev-dependencies]
 paste = "1.0"

@@ -78,8 +78,7 @@ macro_rules! nonnative_group_test_unsafe_add {
     secp256k1Fq
 );*/
 
-//TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
-#[cfg(all(feature = "density-optimized", feature = "tweedle", feature = "ed25519"))]
+#[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_group_test_unsafe_add!(
     TweedleFred25519Fq,
     1,

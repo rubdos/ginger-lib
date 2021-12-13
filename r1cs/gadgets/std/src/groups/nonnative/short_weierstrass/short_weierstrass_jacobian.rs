@@ -84,8 +84,7 @@ where
         &mut self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
-        let x_squared = self.x.mul_without_reduce(cs.ns(|| "x^2"), &self.x)?;
-        //TODO: Once mul_by_constant is implemented properly we can avoid all these adds
+        let x_squared = self.x.mul_without_prereduce(cs.ns(|| "x^2"), &self.x)?;
         let three_x_squared_plus_a = x_squared
             .add(cs.ns(|| "2x^2"), &x_squared)?
             .add(cs.ns(|| "3x^2"), &x_squared)?
@@ -1092,8 +1091,8 @@ where
 
         // Check that y^2 = x^3 + ax +b
         // We do this by checking that y^2 - b = x * (x^2 +a)
-        let x2 = x.mul_without_reduce(cs.ns(|| "x^2"), &x)?;
-        let y2 = y.mul_without_reduce(cs.ns(|| "y^2"), &y)?;
+        let x2 = x.mul_without_prereduce(cs.ns(|| "x^2"), &x)?;
+        let y2 = y.mul_without_prereduce(cs.ns(|| "y^2"), &y)?;
 
         let x2_plus_a = x2
             .add_constant(cs.ns(|| "x^2 + a"), &a)?

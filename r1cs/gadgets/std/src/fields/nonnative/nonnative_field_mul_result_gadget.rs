@@ -7,7 +7,7 @@ use crate::{
             reduce::{bigint_to_constraint_field, limbs_to_bigint, Reducer},
         },
     },
-    overhead,
+    bitlen,
     prelude::*,
     FromGadget,
 };
@@ -37,9 +37,7 @@ pub struct NonNativeFieldMulResultGadget<SimulationF: PrimeField, ConstraintF: P
     /// ``
     ///     limbs[i] < (prod_of_num_additions + 1) * 2^bits_per_limb[i].
     /// ``
-    // TODO: let us rename `prod_of_num_additions` to `addtions_over_normal_form`
-    // or similar.
-    pub prod_of_num_of_additions: ConstraintF,
+    pub num_add_over_normal_form: ConstraintF,
     #[doc(hidden)]
     pub simulation_phantom: PhantomData<SimulationF>,
 }
@@ -59,12 +57,12 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         limbs.resize(2 * params.num_limbs - 1, FpGadget::<ConstraintF>::zero(cs)?);
         limbs.reverse();
 
-        let prod_of_num_of_additions =
+        let num_add_over_normal_form =
             other.num_of_additions_over_normal_form + &ConstraintF::one();
 
         Ok(Self {
             limbs,
-            prod_of_num_of_additions,
+            num_add_over_normal_form,
             simulation_phantom: PhantomData,
         })
     }
@@ -169,7 +167,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         };
 
         // Step 2: compute surfeit
-        let surfeit = overhead!(self.prod_of_num_of_additions + ConstraintF::one());
+        let surfeit = bitlen!(self.num_add_over_normal_form + ConstraintF::one());
 
         // Step 3: allocate k,
         // Costs `C = len(p) + surfeit` constraints.
@@ -240,7 +238,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // anyway.
         let k_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: k_limbs,
-            num_of_additions_over_normal_form: self.prod_of_num_of_additions,
+            num_of_additions_over_normal_form: self.num_add_over_normal_form,
             is_in_the_normal_form: false,
             simulation_phantom: PhantomData,
         };
@@ -288,13 +286,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         let mut kp_plus_r_gadget = Self {
             limbs: prod_limbs,
-            prod_of_num_of_additions: ConstraintF::from(params.num_limbs as u64) 
+            num_add_over_normal_form: ConstraintF::from(params.num_limbs as u64) 
                 * (p_gadget.num_of_additions_over_normal_form + ConstraintF::one())
                 * (k_gadget.num_of_additions_over_normal_form + ConstraintF::one()) 
                 + ConstraintF::one(),
             simulation_phantom: PhantomData,
         };
-        let surfeit_kp_plus_r = overhead!(kp_plus_r_gadget.prod_of_num_of_additions + ConstraintF::one());
+        let surfeit_kp_plus_r = bitlen!(kp_plus_r_gadget.num_add_over_normal_form + ConstraintF::one());
 
         let kp_plus_r_limbs_len = kp_plus_r_gadget.limbs.len();
         for (i, limb) in r_gadget.limbs.iter().rev().enumerate() {
@@ -357,8 +355,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         Ok(Self {
             limbs: new_limbs,
-            prod_of_num_of_additions: self.prod_of_num_of_additions
-                + other.prod_of_num_of_additions,
+            num_add_over_normal_form: self.num_add_over_normal_form
+                + other.num_add_over_normal_form,
             simulation_phantom: PhantomData,
         })
     }
@@ -391,7 +389,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         Ok(Self {
             limbs: new_limbs,
-            prod_of_num_of_additions: self.prod_of_num_of_additions + ConstraintF::one(),
+            num_add_over_normal_form: self.num_add_over_normal_form + ConstraintF::one(),
             simulation_phantom: PhantomData,
         })
     }

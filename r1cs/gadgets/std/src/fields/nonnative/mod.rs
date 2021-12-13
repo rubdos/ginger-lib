@@ -31,7 +31,7 @@ mod tests;
 /// a macro for computing the bit length ceil(log2(x)) of a field element x
 #[doc(hidden)]
 #[macro_export]
-macro_rules! overhead {
+macro_rules! bitlen {
     ($x:expr) => {{
         use algebra::BigInteger;
         let num = $x;
