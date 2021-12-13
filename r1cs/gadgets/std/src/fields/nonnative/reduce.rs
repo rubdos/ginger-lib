@@ -1,4 +1,4 @@
-//! A submodule of low-level function for modular reduction/normalization of non-native field gadgets.
+//! A submodule of low-level functions for modular reduction/normalization of non-native field gadgets.
 use algebra::{
     biginteger::BigInteger,
     fields::{FpParameters, PrimeField},
@@ -276,8 +276,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     }
 
     /// Reduction to the normal form
-    // TODO: the name is misleading, as normal form does not help in 
-    // any equality check. Let us rename it.
+    // TODO: not needed, let us purge it.
     pub fn pre_eq_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
@@ -289,17 +288,18 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         Self::reduce(cs, elem)
     }
 
-    /// The low-level function for the equality check of two non-natives 
+    /// The core piece for comparing two big integers in non-normal form. 
+    /// Checks the equality of 
     /// ``
     ///     left = Sum_{i=0..} left[i] * A^i, 
-    ///     right= Sum_{i=0..} right[i] * A^i
+    ///     right= Sum_{i=0..} right[i] * A^i,
     /// `` 
-    /// as big integers, given as equally long slices of limbs 
+    /// given as equally long slices of limbs 
     /// ``
     ///     [left[0], left[1], ...], 
     ///     [right[0], right[1], ...],
     /// `` 
-    /// where each limb being length bounded by 
+    /// with each limb being length bounded by 
     /// ``
     ///     limb_size = bits_per_limb + surfeit.
     /// `` 
@@ -323,6 +323,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
     //      ].
     // ``
+    // TODO: can be slightly optimized by using the number of additions over normal
+    // form instead of `surfeit`.
     pub fn group_and_check_equality<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         // The additional number of bits beyond `bits_per_limb`. Hence the current
@@ -330,7 +332,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         surfeit: usize,
         // The number of bits  
         bits_per_limb: usize,
-        // defines arity of the limb representation, i.e. `A= 2^{shift_per_limb}`.
+        // defines arity of the limb representation, i.e. `A= 2^shift_per_limb`.
         // MUST be >= 2.
         shift_per_limb: usize,
         left: &[FpGadget<ConstraintF>],
@@ -361,11 +363,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         //      bits_per_group + 1 <= ConstraintF::CAPACITY,
         // ``
-        // as described below. This yields 
+        // as described in detail below. This yields the security condition
         // ``
         //      bits_per_limb + surfeit + (S - 1) * shift_per_limb + 2 <= ConstraintF::CAPACITY,
         // ``
-        // and thus
+        // where
         // ``
         //      S - 1 = Floor[
         //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
@@ -463,24 +465,24 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         //      Sum_{i>=0} shift_constant * A^i.
         // ``
-        // The constant `shift_constant = 2^bits_per_group  - 1` is to circumvent underflows in an
+        // The constant `shift_constant = 2^bits_per_group  - 1` is to circumvent underflows in a
         // length-preserving manner. With this choice  
         // ``
         //     0 <=  shift_constant - R[i] < 2^bits_per_group,
         // `` 
         // and hence
         // ``
-        //      L[i] + shift_constant - R[i] < 2^{bits_per_group + 1},
+        //      L[i] + (shift_constant - R[i]) < 2^{bits_per_group + 1},
         // ``
         // Since the length of the carries are throughout `<= bits_per_limb + surfeit`, 
-        // see below, we have `carry[i-1] + L[i] < 2^bits_per_group`, and the overall sum 
+        // we also have `carry[i-1] + L[i] < 2^bits_per_group`, and the overall sum 
         // ``
         //      carry[i-1] + L[i] + (shift_constant - R[i]) 
         // `` 
-        // is of length `<= bits_per_group + 1`.
+        // is still of length `<= bits_per_group + 1`.
         
-        // NOTE: Since `len(carry) <= bits_per_limb + surfeit`, the length bound for
-        // `carry + L[i]` is the same as for `L[i]`, since
+        // Why carries don't effect the length bound: 
+        // Assuming `len(carry) <= bits_per_limb + surfeit`, which is shown in detail below, 
         // `` 
         //   carry + limb[0] + limb[1] * A < 2 * A * 2^limb_size
         // ``
@@ -491,7 +493,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         //   carry + limb[0] + limb[1] * A + ... + limb[S-1] * A^{S-1} <
         //                       < 2 * A^{S-1} * 2^limb_size.
         // ``
-        // Hence
+        // Thus
         // ``
         //   len(carry + L[i]) <= 
         //              limb_size + 1 + (S-1) * len(A) = bits_per_group.
@@ -514,21 +516,17 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             // ``
             // and the length restrictions for the carry
             // ``
-            //        len(carry) <= bits_per_limb + surfeit.        
+            //        len(carry) <= bits_per_limb + surfeit + 2 - shift_per_limb       
             // ``
             // The length bound assures that no modular reduction takes place on both 
             // sides of the quotient-remainder constraint.
 
-            // NOTE: the carries are length bounded by `bits_per_limb + surfeit`, which follows
-            // from the optimized length bound on the group totals:
+            // Why the carries are length bounded by `bits_per_limb + surfeit`: 
+            // By the length bound on the group totals, we have 
             // ``
             //      len(carry[i]) <= bits_per_group + 1 - shift_per_limb * S 
-            //          =  bits_per_limb + surfeit + 2 - shift_per_limb
-            //          <= bits_per_limb + surfeit.
-            // ``
-            // under the assumption that `shift_per_limb >= 2`. I do not see a reason for 
-            // relaxing the stricter bound `bits_per_limb + surfeit + 2 - shift_per_limb`,
-            // as it significantly improves the number of constraints.
+            //          =  bits_per_limb + surfeit + 2 - shift_per_limb.
+            // `` 
             
             // Computing the shift constant `pad_limb`:
             // ``
