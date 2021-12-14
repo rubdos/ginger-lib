@@ -23,8 +23,8 @@ license = "MIT/Apache-2.0"
 ################################# Dependencies ################################
 
 [dependencies]
-algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development" }
-r1cs-core = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development" }
+algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "import_ed25519" }
+r1cs-core = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "import_ed25519" }
 derivative = "2.2.0"
 
 num-traits = { version = "0.2", default-features = false, optional = true }
@@ -37,7 +37,7 @@ rand = { version = "0.8.4" }
 [features]
 llvm_asm = ["algebra/llvm_asm"]
 
-full = [ "bls12_377", "bn_382", "edwards_bls12", "edwards_sw6", "jubjub", "mnt4_753", "mnt6_753", "tweedle", "secp256k1" ]
+full = [ "bls12_377", "bn_382", "edwards_bls12", "edwards_sw6", "jubjub", "mnt4_753", "mnt6_753", "tweedle", "secp256k1", "ed25519"]
 
 bls12_381 = ["algebra/bls12_381"]
 bls12_377 = [ "algebra/bls12_377" ]
@@ -49,6 +49,7 @@ mnt4_753 = [ "algebra/mnt4_753" ]
 mnt6_753 = [ "algebra/mnt6_753" ]
 tweedle = [ "algebra/tweedle" ]
 secp256k1 = ["algebra/secp256k1"]
+ed25519 = ["algebra/ed25519"]
 
 nonnative = ["num-traits", "num-bigint", "num-integer"]
 density-optimized = []
@@ -57,4 +58,4 @@ density-optimized = []
 paste = "1.0"
 rand = { version = "0.8.4" }
 rand_xorshift = { version = "0.3.0" }
-r1cs-std = { path = "../std", features = ["bls12_381", "jubjub", "tweedle", "secp256k1", "bn_382"] }
+r1cs-std = { path = "../std", features = ["bls12_381", "jubjub", "tweedle", "secp256k1", "bn_382", "ed25519"] }
