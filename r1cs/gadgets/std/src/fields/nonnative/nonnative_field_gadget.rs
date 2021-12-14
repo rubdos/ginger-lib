@@ -373,12 +373,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// reduced back to the `NonNativeFieldGadget`.
     /// Assumes that
     /// ``
-    ///     2 * bits_per_limb + surfeit + len(num_limbs) <= CAPACITY - 2,
+    ///     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
     /// ``
     /// where
     /// ``
-    ///      surfeit = len(num_limbs * (num_add(L)+1) * (num_add(R) + 1)).
+    ///      surfeit' = len(num_limbs^2 * (num_add(L)+1) * (num_add(R) + 1) + 1).
     /// ``
+    //  Costs `num_limbs^2` constraints.
     pub fn mul_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -396,22 +397,23 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // To allow for a subsequent reduction we need to assure the stricter condition 
         // that 
         // ``
-        //     2 * bits_per_limb + surfeit(product) + len(num_limbs) <= CAPACITY - 2.
+        //     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
         // ``
-
-        // TODO: panic if 
-        // ``
-        //      2 * bits_per_limb + surfeit(product) + len(num_limbs) > CAPACITY - 2.
-        // ``
+        // with `surfeit'` as above.
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = ConstraintF::from(params.num_limbs as u64) 
+        let num_add_bound = ConstraintF::from((params.num_limbs as u64)^2) 
             * (self.num_of_additions_over_normal_form + ConstraintF::one())
-            * (other.num_of_additions_over_normal_form + ConstraintF::one());
-        let surfeit_product = bitlen!(num_add_bound);
+            * (other.num_of_additions_over_normal_form + ConstraintF::one()) 
+            + ConstraintF::one();
+        let surfeit_prime = bitlen!(num_add_bound);
 
-        if 2 * params.bits_per_limb + surfeit_product + algebra::log2(params.num_limbs) as usize > ConstraintF::Params::CAPACITY as usize - 2 {
-            return Err(SynthesisError::Other(format!("Security bound exceeded for mul_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, 2 * params.bits_per_limb + surfeit_product + algebra::log2(params.num_limbs) as usize)));
+        if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
+            return Err(SynthesisError::Other(format!("Security bound exceeded for mul_without_prereduce. Max: {}, Actual: {}", 
+                ConstraintF::Params::CAPACITY as usize - 2, 
+                2 * params.bits_per_limb + surfeit_prime 
+                ))
+            );
         }
 
         let mut prod_limbs = Vec::new();
@@ -474,11 +476,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// reduced back to the `NonNativeFieldGadget`.
     /// Assumes that
     /// ``
-    ///     2 * bits_per_limb + surfeit + len(num_limbs) <= CAPACITY - 2,
+    ///     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
     /// ``
     /// where
     /// ``
-    ///      surfeit = len(num_limbs * (num_add(L)+1) * (num_add(R) + 1)).
+    ///      surfeit' = len(num_limbs^2 * (num_add(L)+1) + 1).
     /// ``
     pub fn mul_by_constant_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
@@ -497,21 +499,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // To allow for a subsequent reduction we need to assure the stricter condition 
         // that 
         // ``
-        //     2 * bits_per_limb + surfeit(product) + len(num_limbs) <= CAPACITY - 2.
+        //     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
         // ``
-
-        // TODO: panic if 
-        // ``
-        //      2 * bits_per_limb + surfeit(product) + len(num_limbs) > CAPACITY - 2.
-        // ``
+        // with `surfeit' = len(num_limbs^2 * (num_add(L)+1) + 1)`.
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = ConstraintF::from(params.num_limbs as u64) 
-            * (self.num_of_additions_over_normal_form + ConstraintF::one());
-        let surfeit_product = bitlen!(num_add_bound);
+        let num_add_bound = ConstraintF::from((params.num_limbs as u64)^2) 
+            * (self.num_of_additions_over_normal_form + ConstraintF::one())
+            + ConstraintF::one();
+        let surfeit_prime = bitlen!(num_add_bound);
 
-        if 2 * params.bits_per_limb + surfeit_product + algebra::log2(params.num_limbs) as usize > ConstraintF::Params::CAPACITY as usize - 2 {
-            return Err(SynthesisError::Other(format!("Security bound exceeded for mul_by_constant_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, 2 * params.bits_per_limb + surfeit_product + algebra::log2(params.num_limbs) as usize)));
+        if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
+            return Err(SynthesisError::Other(format!("Security bound exceeded for mul_by_constant_without_prereduce. Max: {}, Actual: {}", 
+                ConstraintF::Params::CAPACITY as usize - 2, 
+                2 * params.bits_per_limb + surfeit_prime )));
         }
 
         let mut prod_limbs = Vec::new();
@@ -717,7 +718,29 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         Self::zero(cs.ns(|| "hardcode zero"))?.sub(cs.ns(|| "0 - self"), self)
     }
 
-    /// Multiplication of two non-natives, outputs normal form.
+    /// Multiplication of two non-natives, reduced back to normal form.
+    // Costs
+    // ``
+    //     C =  2 *(len(p) + num_limbs^2) + surfeit 
+    //          +  (S-1) * (3 + bits_per_limb + surfeit + len(num_limbs)) + 1
+    // ``
+    // constraints, where `surfeit =  len(num_limbs)` and
+    // ``
+    //    S - 1 = Floor[
+    //          (ConstraintF::CAPACITY - 2 - surfeit  - len(num_limbs)) / bits_per_limb
+    //          ] - 2.
+    // ``
+    // In short,
+    // ``
+    //     C =  2 *(len(p) + num_limbs^2) + len(num_limbs) 
+    //          +  (S-1) * (3 + bits_per_limb + 2 * len(num_limbs)) + 1
+    // ``
+    // constraints, where `surfeit =  len(num_limbs)` and
+    // ``
+    //    S - 1 = Floor[
+    //          (ConstraintF::CAPACITY - 2) / bits_per_limb
+    //          ] - 2.
+    // ``
     fn mul<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -1186,8 +1209,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
             )?);
         }
 
-        // TODO: set num_add to zero().
-        let num_of_additions_over_normal_form = ConstraintF::one();
+        let num_of_additions_over_normal_form = ConstraintF::zero();
 
         // We constrain all limbs to use at most `bits_per_limb` many bits
         for (i, limb) in limbs.iter().rev().take(params.num_limbs - 1).enumerate() {
@@ -1205,11 +1227,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
             SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb,
         )?;
 
-        // TODO: the allocated non-native is in normal form, hence set `is_in_the_normal_form = true`       
         Ok(Self {
             limbs,
             num_of_additions_over_normal_form,
-            is_in_the_normal_form: false,
+            is_in_the_normal_form: true,
             simulation_phantom: PhantomData,
         })
     }
@@ -1355,10 +1376,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         }
         let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: p_gadget_limbs,
-            num_of_additions_over_normal_form: ConstraintF::one(),
-            // TODO: p_gadget as defined by the limbs has normal form.
-            // Find out if there is a particular reason why `is_normal_form` is set `false`.
-            is_in_the_normal_form: false,
+            num_of_additions_over_normal_form: ConstraintF::zero(),
+            is_in_the_normal_form: true,
             simulation_phantom: PhantomData,
         };
 

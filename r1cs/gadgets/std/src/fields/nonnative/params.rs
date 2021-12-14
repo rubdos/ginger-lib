@@ -11,7 +11,8 @@ pub const fn get_params(target_field_size: usize, base_field_size: usize) -> Non
     }
 }
 
-/// A function to search for parameters for nonnative field gadgets
+/// Finding parameters which optimize the number of constraints of a `single mul_without_prereduce()`
+/// and a subsequent `reduce()`, assuming `surfeit = 10`.
 pub const fn find_parameters(
     base_field_prime_length: usize,
     target_field_prime_bit_length: usize,

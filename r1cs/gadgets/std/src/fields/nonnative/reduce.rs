@@ -217,19 +217,24 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // To allow for a subsequent reduction we need to assure the stricter condition 
         // that 
         // ``
-        //     2 * bits_per_limb + surfeit(product) + len(num_limbs) <= CAPACITY - 2.
+        //     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
+        // ``
+        // where
+        // ``
+        //      surfeit' = len(num_limbs^2 * (num_add(L)+1) * (num_add(R) + 1) + 1).
         // ``
         Self::reduce_until_cond_is_satisfied(
             cs.ns(|| "pre mul reduce"),
             elem,
             elem_other,
             |elem, elem_other| {
-                let num_add_bound = ConstraintF::from(params.num_limbs as u64) 
+                let num_add_bound = ConstraintF::from((params.num_limbs as u64)^2) 
                     * (elem.num_of_additions_over_normal_form + ConstraintF::one())
-                    * (elem_other.num_of_additions_over_normal_form + ConstraintF::one());
-                let surfeit_product = bitlen!(num_add_bound);
+                    * (elem_other.num_of_additions_over_normal_form + ConstraintF::one()) 
+                    + ConstraintF::one();
+                let surfeit_prime = bitlen!(num_add_bound);
     
-                2 * params.bits_per_limb + surfeit_product + algebra::log2(params.num_limbs) as usize <= ConstraintF::Params::CAPACITY as usize - 2
+                2 * params.bits_per_limb + surfeit_prime <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )?;
 
@@ -260,12 +265,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// and `shift_per_limb >= 2`. 
     /// 
     /// [Kosba et al]: https://ieeexplore.ieee.org/document/8418647
+    /// 
     // Costs
     // ``
-    //      (S-1) * (1 + bits_per_limb + surfeit + 2 - shift_per_limb) + 1
+    //      num_groups * (1 + bits_per_limb + surfeit + 2 - shift_per_limb) + 2
     // ``
-    // constraints, where `1 <= S <= num_limbs` is the number of groups, determined
-    // by 
+    // constraints, where `1 <= num_groups <= num_limbs` is the number of groups, determined
+    // by `num_groups = Ceil[num_limbs / S]` with 
     // ``
     //  S - 1 = Floor[
     //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / shift_per_limb
@@ -468,6 +474,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             // ``
             // The length bound assures that no modular reduction takes place on both 
             // sides of the quotient-remainder constraint.
+
 
             // Why the carries are length bounded by `bits_per_limb + surfeit`: 
             // By the length bound on the group totals, we have 
