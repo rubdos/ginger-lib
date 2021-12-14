@@ -65,7 +65,6 @@ macro_rules! nonnative_group_test_unsafe_add {
         );
     };
 }
-
 /*nonnative_group_test_unsafe_add!(
     Bn382Frsecp256k1Fq,
     1,

@@ -39,8 +39,8 @@ debug = true
 # algebra = { path = './algebra' }
 # r1cs-core = { path = "./r1cs/core" }
 
-#[patch.'https://github.com/HorizenLabs/marlin']
-#marlin = { path = '../marlin' }
-#
-#[patch.'https://github.com/HorizenLabs/poly-commit']
-#poly-commit = { path = '../poly-commit' }
+# [patch.'https://github.com/HorizenLabs/marlin']
+# marlin = { path = '../marlin' }
+
+# [patch.'https://github.com/HorizenLabs/poly-commit']
+# poly-commit = { path = '../poly-commit' }
