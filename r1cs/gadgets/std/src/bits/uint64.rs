@@ -393,22 +393,19 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for UInt64 {
             .zip(&false_value.bits)
             .enumerate()
             .map(|(i, (t, f))| {
-                Boolean::conditionally_select(&mut cs.ns(|| format!("bit {}", i)), cond, t, f)
-            });
-        let mut bits = [Boolean::Constant(false); 64];
-        for (result, new) in bits.iter_mut().zip(selected_bits) {
-            *result = new?;
-        }
-
-        let value = cond.get_value().and_then(|cond| {
-            if cond {
+                Boolean::conditionally_select(&mut cs.ns(|| format!("select bit {}", i)), cond, t, f)
+            })
+            .collect::<Result<_, _>>()?;
+        
+        let value = 
+            if cond.get_value().get()? {
                 true_value.get_value()
             } else {
                 false_value.get_value()
-            }
-        });
+            };
+    
         Ok(Self {
-            bits: bits.to_vec(),
+            bits: selected_bits,
             value,
         })
     }
