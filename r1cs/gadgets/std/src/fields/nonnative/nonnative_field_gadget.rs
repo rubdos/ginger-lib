@@ -402,7 +402,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // with `surfeit'` as above.
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = ConstraintF::from((params.num_limbs as u64)^2) 
+        let num_add_bound = ConstraintF::from((params.num_limbs as u64)*(params.num_limbs as u64)) 
             * (self.num_of_additions_over_normal_form + ConstraintF::one())
             * (other.num_of_additions_over_normal_form + ConstraintF::one()) 
             + ConstraintF::one();
@@ -504,7 +504,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // with `surfeit' = len(num_limbs^2 * (num_add(L)+1) + 1)`.
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = ConstraintF::from((params.num_limbs as u64)^2) 
+        let num_add_bound = ConstraintF::from((params.num_limbs as u64)*(params.num_limbs as u64)) 
             * (self.num_of_additions_over_normal_form + ConstraintF::one())
             + ConstraintF::one();
         let surfeit_prime = bitlen!(num_add_bound);

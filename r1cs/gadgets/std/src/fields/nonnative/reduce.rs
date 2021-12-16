@@ -228,7 +228,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             elem,
             elem_other,
             |elem, elem_other| {
-                let num_add_bound = ConstraintF::from((params.num_limbs as u64)^2) 
+                let num_add_bound = ConstraintF::from((params.num_limbs as u64)*(params.num_limbs as u64)) 
                     * (elem.num_of_additions_over_normal_form + ConstraintF::one())
                     * (elem_other.num_of_additions_over_normal_form + ConstraintF::one()) 
                     + ConstraintF::one();
