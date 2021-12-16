@@ -127,12 +127,32 @@ impl<F: PrimeField> FpGadget<F> {
     /// Helper function to check `self < other` and output a result bit. This
     /// function assumes `self` and `other` are `<= (p-1)/2` and does not
     /// generate constraints to verify that.
+    // Note that `len((p-1)/2) = len(p) - 1 = CAPACITY`.
     fn is_smaller_than_unchecked<CS: ConstraintSystem<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<Boolean, SynthesisError> {
+        // Since `a = self` and `b = other` are from `[0, (p-1)/2]`, we know that 
+        // ``
+        //      self - other
+        // ``
+        // is from the range `[-(p-1)/2, (p-1)/2]`, where this range has no overlap
+        // due to modular reduction.  Hence
+        //
+        // ``
+        //      0 <= 2 * (self - other) <= (p-1),
+        // ``
+        // and the least significant bit of `2 * (self - other) mod p` is zero. 
+        // Otherwise, if `self < other`, then 
+        // ``
+        //      2 * (self - other) mod p =  2 * (self - other) + p
+        // ``
+        // which is a positive odd number, having least significant bit equal to `1`.
+        // To assure the right decision we need to return the least significant
+        // bit of the NATIVE bit representation of `2 * (self - other)`. Hence we 
+        // need to use `to_bits_strict()`.
         Ok(self.sub(cs.ns(|| "sub"), other)?
             .double(cs.ns(|| "double"))?
-            .to_bits(cs.ns(|| "to bits"))?
-            .into_iter().rev().collect::<Vec<_>>()
-            .first()
+            .to_bits_strict(cs.ns(|| "to bits"))? // returns big endian
+            .into_iter().rev().collect::<Vec<_>>() 
+            .first() 
             .unwrap()
             .clone())
     }
