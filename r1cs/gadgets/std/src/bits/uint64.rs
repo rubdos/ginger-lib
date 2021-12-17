@@ -622,6 +622,11 @@ mod test {
         NegatedAllocatedTrue,
         NegatedAllocatedFalse,
     }
+    #[derive(Copy, Clone, Debug)]
+    enum VariableType {
+        Constant,
+        Allocated,
+    }
 
     #[test]
     fn test_uint64_cond_select() {
@@ -633,6 +638,10 @@ mod test {
             OperandType::NegatedAllocatedTrue,
             OperandType::NegatedAllocatedFalse,
         ];
+        let var_type = [
+            VariableType::Constant,
+            VariableType::Allocated,
+        ];
 
         use rand::thread_rng;
         let rng = &mut thread_rng();
@@ -640,58 +649,70 @@ mod test {
         //random generates a and b numbers and check all the conditions for each couple
         for _ in 0..1000 {
             for condition in variants.iter().cloned() {
-                let mut cs = TestConstraintSystem::<Fr>::new();
-                let cond;
-                let a;
-                let b;
+                for var_a_type in var_type.iter().cloned() {
+                    for var_b_type in var_type.iter().cloned() {
+                        let mut cs = TestConstraintSystem::<Fr>::new();
+                        let cond;
+                        let a;
+                        let b;
 
-                {
-                    let mut dyn_construct = |operand, name| {
-                        let cs = cs.ns(|| name);
+                        {
+                            let mut dyn_construct = |operand, name| {
+                                let cs = cs.ns(|| name);
 
-                        match operand {
-                            OperandType::True => Boolean::constant(true),
-                            OperandType::False => Boolean::constant(false),
-                            OperandType::AllocatedTrue => {
-                                Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap())
-                            }
-                            OperandType::AllocatedFalse => {
-                                Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap())
-                            }
-                            OperandType::NegatedAllocatedTrue => {
-                                Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap()).not()
-                            }
-                            OperandType::NegatedAllocatedFalse => {
-                                Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap()).not()
-                            }
+                                match operand {
+                                    OperandType::True => Boolean::constant(true),
+                                    OperandType::False => Boolean::constant(false),
+                                    OperandType::AllocatedTrue => {
+                                        Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap())
+                                    }
+                                    OperandType::AllocatedFalse => {
+                                        Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap())
+                                    }
+                                    OperandType::NegatedAllocatedTrue => {
+                                        Boolean::from(AllocatedBit::alloc(cs, || Ok(true)).unwrap()).not()
+                                    }
+                                    OperandType::NegatedAllocatedFalse => {
+                                        Boolean::from(AllocatedBit::alloc(cs, || Ok(false)).unwrap()).not()
+                                    }
+                                }
+                            };
+                            cond = dyn_construct(condition, "cond");
                         }
-                    };
+                        {
+                            let mut dyn_construct_var = |var_type, name, value| {
+                                let cs = cs.ns(|| name);
+                                match var_type {
+                                    VariableType::Constant => UInt64::constant(value),
+                                    VariableType::Allocated => UInt64::alloc(cs, Some(value)).unwrap(),
+                                }
+                            };
 
-                    cond = dyn_construct(condition, "cond");
-                    a = UInt64::constant(rng.gen());
-                    b = UInt64::constant(rng.gen());
-                }
+                            a = dyn_construct_var(var_a_type,"var_a",rng.gen());
+                            b = dyn_construct_var(var_b_type,"var_b",rng.gen());
+                        }
+                        let before = cs.num_constraints();
+                        let c = UInt64::conditionally_select(&mut cs, &cond, &a, &b).unwrap();
+                        let after = cs.num_constraints();
 
-                let before = cs.num_constraints();
-                let c = UInt64::conditionally_select(&mut cs, &cond, &a, &b).unwrap();
-                let after = cs.num_constraints();
-
-                assert!(
-                    cs.is_satisfied(),
-                    "failed with operands: cond: {:?}, a: {:?}, b: {:?}",
-                    condition,
-                    a,
-                    b,
-                );
-                assert_eq!(
-                    c.get_value(),
-                    if cond.get_value().unwrap() {
-                        a.get_value()
-                    } else {
-                        b.get_value()
+                        assert!(
+                            cs.is_satisfied(),
+                            "failed with operands: cond: {:?}, a: {:?}, b: {:?}",
+                            condition,
+                            a,
+                            b,
+                        );
+                        assert_eq!(
+                            c.get_value(),
+                            if cond.get_value().unwrap() {
+                                a.get_value()
+                            } else {
+                                b.get_value()
+                            }
+                        );
+                        assert!(<UInt64 as CondSelectGadget<Fr>>::cost() >= after - before);
                     }
-                );
-                assert!(<UInt64 as CondSelectGadget<Fr>>::cost() >= after - before);
+                }
             }
         }
     }
