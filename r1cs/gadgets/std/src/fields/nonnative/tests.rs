@@ -49,16 +49,30 @@ fn get_params_test() {
 
     // from independent computation using Wolfram Mathematica.
     let test_vector_ins = vec![
+        // Base Field 255 bit
         (255usize, 255usize), 
-        (255,256), 
+        (255, 256), 
         (255, 382),
-        (255, 4096) 
+        (255, 2048),
+        (255, 4096),
+        // Base field 382 bit
+        (382, 255),
+        (382, 256),
+        (382, 2048),
+        (382, 4096),
     ];
     let test_vector_out = vec![
+        // Base Field 255 bit
         (6usize, 43usize, 751usize),
-        (6, 43, 753),
+        (6, 43, 753), 
         (7, 55, 1223),
-        (57, 72, 20710)
+        (28, 74, 8580),
+        (57, 72, 20710),
+        // Base Field 382 bit
+        (4, 64, 657),
+        (4, 64, 659),
+        (24, 86, 7060),
+        (36, 114, 15992),
     ];
 
     let mut out = vec![];
@@ -1203,6 +1217,7 @@ nonnative_test!(TweedleFred25519Fr, TweedleFr, ed25519Fr);
 
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
 nonnative_test!(Bn382FrTweedleFq, Bn382Fr, TweedleFq);
+
 
 nonnative_test!(
     TweedleFqBn382Fr,

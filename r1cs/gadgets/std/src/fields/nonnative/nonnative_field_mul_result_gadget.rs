@@ -41,10 +41,13 @@ pub struct NonNativeFieldMulResultGadget<SimulationF: PrimeField, ConstraintF: P
     pub simulation_phantom: PhantomData<SimulationF>,
 }
 
+
 impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     FromGadget<&NonNativeFieldGadget<SimulationF, ConstraintF>, ConstraintF>
     for NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
 {
+
+
     fn from<CS: ConstraintSystemAbstract<ConstraintF>>(
         other: &NonNativeFieldGadget<SimulationF, ConstraintF>,
         cs: CS,
@@ -70,6 +73,31 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
 {
+    /// A function for test purposes. Returns `true` if `&self.num_add` respects 
+    /// the capacity bound, and bounds all the limbs correctly.
+    #[cfg(test)]
+    fn check(&self) -> bool {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        let valid_num_limbs = self.limbs.len() == 2 * params.num_limbs - 1;
+
+        let normal_form_bound = ConstraintF::from(2u64).pow(&[(2 * params.bits_per_limb) as u64]);
+        let num_add_plus_one = self.num_add_over_normal_form + ConstraintF::one();
+        let limb_bound = num_add_plus_one * normal_form_bound;
+        
+        let valid_num_adds = 2 * params.bits_per_limb + ceil_log_2!(num_add_plus_one)
+             < ConstraintF::size_in_bits() - 1;
+
+        // k-ary and of the limb checks.
+        let valid_limbs = self.limbs.iter().all(|limb|{
+            let val_limb = limb.get_value().unwrap();
+            
+            val_limb < limb_bound
+        });
+
+        valid_num_limbs && valid_num_adds && valid_limbs
+    }
+
     /// Get the value of the multiplication result
     pub fn value(&self) -> Result<SimulationF, SynthesisError> {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
@@ -121,6 +149,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         &self,
         mut cs: CS,
     ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {
+        debug_assert!(
+            self.check()
+        );
         // This is just paraphrasing the reduction of non-natives. We enforce the large integer 
         // equality
         // ``
