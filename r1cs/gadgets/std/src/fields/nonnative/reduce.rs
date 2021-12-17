@@ -268,7 +268,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// 
     // Costs
     // ``
-    //      num_groups * (1 + bits_per_limb + surfeit + 2 - shift_per_limb) + 2
+    //      (num_groups - 1) * (1 + bits_per_limb + surfeit + 2 - shift_per_limb) + 2
     // ``
     // constraints, where `1 <= num_groups <= num_limbs` is the number of groups, determined
     // by `num_groups = Ceil[num_limbs / S]` with 
@@ -292,6 +292,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         left: &[FpGadget<ConstraintF>],
         right: &[FpGadget<ConstraintF>],
     ) -> Result<(), SynthesisError> {
+        
         let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "hardcode zero"))?;
 
         let mut limb_pairs = Vec::<(FpGadget<ConstraintF>, FpGadget<ConstraintF>)>::new();

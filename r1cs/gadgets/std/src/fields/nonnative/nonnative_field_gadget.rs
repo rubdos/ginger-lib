@@ -74,6 +74,34 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
 impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     NonNativeFieldGadget<SimulationF, ConstraintF>
 {
+    /// A function for test purposes. Returns `true` if `&self.num_add` respects 
+    /// the capacity bound, and bounds all the limbs correctly.
+    #[cfg(test)]
+    pub(crate) fn check(&self) -> bool {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        let valid_num_limbs = self.limbs.len() == params.num_limbs;
+        let valid_num_adds = self.num_of_additions_over_normal_form.into_repr().to_bits().len() + params.bits_per_limb 
+            <= ConstraintF::size_in_bits() - 1;
+
+        let max_val_normal_form = ConstraintF::from(2u64).pow(&[params.bits_per_limb as u64]);
+        let num_add_plus_one = self.num_of_additions_over_normal_form + ConstraintF::one();
+        let max_len_limb = params.bits_per_limb + bitlen!(num_add_plus_one);  
+        let max_val_limb = num_add_plus_one * max_val_normal_form;
+        
+        // k-ary and of the limb checks.
+        let valid_limbs = self.limbs.iter().all(|limb|{
+            let val_limb = limb.get_value().unwrap();
+            
+            val_limb.into_repr().to_bits().len() <=  max_len_limb 
+                && val_limb <  max_val_limb
+            }
+        );
+
+        valid_num_limbs && valid_num_adds && valid_limbs
+    }
+    
+
     /// Obtain the non-native value from a vector of not necessarily normalized
     /// limb elements.
     // TODO: Can we use the functions limbs_to_bigint and bigint_to_constraint_field? 
@@ -124,6 +152,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         mut cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
+        debug_assert!(
+            self.check() && other.check()
+        );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         let surfeit = bitlen!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(4u8));
@@ -178,6 +209,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         mut cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
+        debug_assert!(
+            self.check() && other.check()
+        );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         let surfeit = bitlen!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(5u8));
@@ -377,7 +411,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// ``
     /// where
     /// ``
-    ///      surfeit' = len(num_limbs^2 * (num_add(L)+1) * (num_add(R) + 1) + 1).
+    ///      surfeit' = len(num_limbs * (num_adds(prod) + 1) + 1) =
+    ///             = len(num_limbs^2* (num_add(L) + 1) * (num_add(R) + 1)  + 1)
     /// ``
     //  Costs `num_limbs^2` constraints.
     pub fn mul_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -385,6 +420,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         mut cs: CS,
         other: &Self,
     ) -> Result<NonNativeFieldMulResultGadget<SimulationF, ConstraintF>, SynthesisError> {
+
+        debug_assert!(
+            self.check() && other.check()
+        );
+
         // To assure that the limbs of the product representation do not exceed the capacity
         // bound, we demand
         // ``
@@ -392,7 +432,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         // where 
         // ``
-        //      surfeit(product) = len(num_limbs * (num_add(L)+1) * (num_add(R) + 1).
+        //      surfeit(product) = len(num_limbs * (num_add(L)+1) * (num_add(R) + 1)).
         // ``
         // To allow for a subsequent reduction we need to assure the stricter condition 
         // that 
@@ -400,7 +440,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         //     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
         // ``
         // with `surfeit'` as above.
-
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         let num_add_bound = ConstraintF::from((params.num_limbs as u64)*(params.num_limbs as u64)) 
             * (self.num_of_additions_over_normal_form + ConstraintF::one())
@@ -718,27 +757,22 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         Self::zero(cs.ns(|| "hardcode zero"))?.sub(cs.ns(|| "0 - self"), self)
     }
 
-    /// Multiplication of two non-natives, reduced back to normal form.
-    // Costs
+    /// Multiplication of two non-natives, reduced back to normal form. 
+    // If no prereduction step is performed, costs
     // ``
-    //     C =  2 *(len(p) + num_limbs^2) + surfeit 
-    //          +  (S-1) * (3 + bits_per_limb + surfeit + len(num_limbs)) + 1
+    //     C =  2 *(len(p) + num_limbs^2) + surfeit' 
+    //          +  num_groups * (3 + bits_per_limb + surfeit') + 1
     // ``
-    // constraints, where `surfeit =  len(num_limbs)` and
+    // constraints, where 
     // ``
-    //    S - 1 = Floor[
-    //          (ConstraintF::CAPACITY - 2 - surfeit  - len(num_limbs)) / bits_per_limb
-    //          ] - 2.
+    //      surfeit' =  len(num_limbs * (num_adds(prod) + 1) + 1)
+    //              = len(num_limbs^2 * (num_add(L)+1) * (num_add(R) + 1)),
+    //      num_groups = Ceil[num_limbs / S],
     // ``
-    // In short,
-    // ``
-    //     C =  2 *(len(p) + num_limbs^2) + len(num_limbs) 
-    //          +  (S-1) * (3 + bits_per_limb + 2 * len(num_limbs)) + 1
-    // ``
-    // constraints, where `surfeit =  len(num_limbs)` and
+    // and
     // ``
     //    S - 1 = Floor[
-    //          (ConstraintF::CAPACITY - 2) / bits_per_limb
+    //          (ConstraintF::CAPACITY - 2 - surfeit') / bits_per_limb
     //          ] - 2.
     // ``
     fn mul<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -1341,6 +1375,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         other: &Self,
         should_enforce: &Boolean,
     ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            self.check() && other.check()
+        );
+        
         // Equality mod p is proven by the integer equation
         // ``
         //       Sum_{i=0}^{num_limbs -1} D[i] * A^i   = k * p,

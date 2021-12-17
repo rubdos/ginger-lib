@@ -42,6 +42,43 @@ use algebra::fields::tweedle::{Fq as TweedleFq, Fr as TweedleFr};
 const NUM_REPETITIONS: usize = 10;
 const TEST_COUNT: usize = 10;
 
+
+#[test]
+fn get_params_test() {
+    use crate::fields::nonnative::params::find_parameters;
+
+    // from independent computation using Wolfram Mathematica.
+    let test_vector_ins = vec![
+        (255usize, 255usize), 
+        (255,256), 
+        (255, 382),
+        (255, 4096) 
+    ];
+    let test_vector_out = vec![
+        (6usize, 43usize, 751usize),
+        (6, 43, 753),
+        (7, 55, 1223),
+        (57, 72, 20710)
+    ];
+
+    let mut out = vec![];
+    for (base_field_size, target_field_size) in test_vector_ins.iter() {
+        let (num_limbs, bits_per_limb, constraints) = find_parameters(*base_field_size, *target_field_size);
+        out.push((num_limbs, bits_per_limb, constraints));
+
+        println!("base field size: {}", base_field_size);
+        println!("target field size: {}", target_field_size);
+        println!("num_limbs: {}", num_limbs);
+        println!("bits_per_limb: {}", bits_per_limb);
+        println!("constraints: {}", constraints);
+    }
+
+    assert_eq!(
+        out,
+        test_vector_out        
+    );
+}
+
 fn allocation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
     let a_native = SimulationF::rand(rng);

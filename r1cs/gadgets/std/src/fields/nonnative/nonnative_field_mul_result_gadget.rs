@@ -93,14 +93,15 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// Reducing a NonNativeMulResultGadget back to a non-native field gadget
     /// in normal form. Assumes that 
     /// ``
-    ///     2 * bits_per_limb + surfeit' <= CAPACITY - 2.
+    ///     2 * bits_per_limb<= CAPACITY - 2.
     /// ``
     /// where 
     /// ``
     ///     bits_per_limb = NonNativeFieldParams::bits_per_limb, 
     ///     surfeit' =  len(num_limbs * (num_adds + 1) + 1), 
-    ///     num_limbs = NonNativeFieldParams::num_limbs.
+    ///     num_limbs = NonNativeFieldParams::num_limbs,
     /// ``
+    /// and `num_adds` is as in the NonNativeMulResultGadget.
     // Costs
     // ``
     //     C =  len(p) + surfeit' 
@@ -139,11 +140,12 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // Note: To assure that the limb-wise computation of the `k * p + r` does not 
         // exceed the capacity bound, we demand 
         // ``
-        //     2 * bits_per_limb + surfeit + len(num_limbs) <= CAPACITY.
+        //     2 * bits_per_limb + surfeit'  <= CAPACITY,
         // ``
+        // with `surfeit' =  len(num_limbs * (num_adds + 1) + 1),`.
         // However, as the final `group_and_check_equality()` panics iff
         // ``
-        //     2 * bits_per_limb + surfeit + len(num_limbs) > CAPACITY - 2.
+        //     2 * bits_per_limb + surfeit' > CAPACITY - 2.
         // ``
         // there is no need to throw an error here.
     
@@ -252,7 +254,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             })?;
 
         // Compute the product representation for `k*p`
-        // Costs `C =  num_limbs^2` constraintss.
+        // Costs `C =  num_limbs^2` constraints.
         let mut prod_limbs = Vec::new();
         let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "hardcode zero for step 1"))?;
 
@@ -286,9 +288,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         //                      + 2^bits_per_limb[i] 
         //                      <= (num_limbs * (num_add + 1) + 1) * 2^{2*bits_per_limb[i]}. 
         // ``
-        // Hence the surfeit for the limbs of `k*p + r` is 
+        // Hence we may set num_adds and surfeit for the limbs of `k*p + r` according
+        // to
         // ``
-        //      surfeit(kp + r) <= len(num_limbs * (num_adds + 1) + 1)
+        //      num_adds(kp + r) = (num_limbs * (num_add + 1),
+        //      surfeit(kp + r) = len(num_limbs * (num_adds + 1) + 1).
         // ``
         let mut kp_plus_r_gadget = Self {
             limbs: prod_limbs,
@@ -319,9 +323,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // where `surfeit' = len(num_limbs * (num_adds + 1) + 1)`.
         // Costs
         // ``
-        //      (S-1) * (1 + 2*bits_per_limb + surfeit' + 2 - bits_per_limb) + 1
+        //      (num_groups - 1) * (1 + 2*bits_per_limb + surfeit' + 2 - bits_per_limb) + 2
         // ``
-        // constraints, with
+        // constraints, where `num_groups = Ceil[num_limbs / S]`, and
         // ``
         //  S - 1 = Floor[
         //          (ConstraintF::CAPACITY - 2 - (2 * bits_per_limb + surfeit') / bits_per_limb
