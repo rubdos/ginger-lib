@@ -9,7 +9,7 @@ use crate::{
         fp::FpGadget,
         nonnative::{nonnative_field_gadget::NonNativeFieldGadget, params::get_params},
     },
-    bitlen,
+    ceil_log_2,
     prelude::*,
 };
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
@@ -164,7 +164,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             elem_other,
             |elem, elem_other| {
                 let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
-                let surfeit = bitlen!(sum_add + ConstraintF::from(3u8));
+                let surfeit = ceil_log_2!(sum_add + ConstraintF::from(3u8));
                 surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )
@@ -189,7 +189,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             elem_other,
             |elem, elem_other| {
                 let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
-                let surfeit = bitlen!(sum_add + ConstraintF::from(5u8));
+                let surfeit = ceil_log_2!(sum_add + ConstraintF::from(5u8));
                 surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )
@@ -232,7 +232,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
                     * (elem.num_of_additions_over_normal_form + ConstraintF::one())
                     * (elem_other.num_of_additions_over_normal_form + ConstraintF::one()) 
                     + ConstraintF::one();
-                let surfeit_prime = bitlen!(num_add_bound);
+                let surfeit_prime = ceil_log_2!(num_add_bound);
     
                 2 * params.bits_per_limb + surfeit_prime <= ConstraintF::Params::CAPACITY as usize - 2
             }

@@ -7,7 +7,7 @@ use crate::{
             reduce::{bigint_to_constraint_field, limbs_to_bigint, Reducer},
         },
     },
-    bitlen,
+    ceil_log_2,
     prelude::*,
     FromGadget,
 };
@@ -171,7 +171,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         };
 
         // Step 2: compute surfeit
-        let surfeit = bitlen!(self.num_add_over_normal_form + ConstraintF::one());
+        let surfeit = ceil_log_2!(self.num_add_over_normal_form + ConstraintF::one());
 
         // Step 3: allocate k,
         // Costs `C = len(p) + surfeit` constraints.
@@ -300,7 +300,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 * (k_gadget.num_of_additions_over_normal_form + ConstraintF::one()),
             simulation_phantom: PhantomData,
         };
-        let surfeit_kp_plus_r = bitlen!(kp_plus_r_gadget.num_add_over_normal_form + ConstraintF::one());
+        let surfeit_kp_plus_r = ceil_log_2!(kp_plus_r_gadget.num_add_over_normal_form + ConstraintF::one());
 
         let kp_plus_r_limbs_len = kp_plus_r_gadget.limbs.len();
         for (i, limb) in r_gadget.limbs.iter().rev().enumerate() {

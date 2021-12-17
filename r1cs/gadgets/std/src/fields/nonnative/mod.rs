@@ -28,10 +28,11 @@ pub mod nonnative_field_mul_result_gadget;
 #[cfg(test)]
 mod tests;
 
-/// a macro for computing the bit length ceil(log2(x)) of a field element x
+
+/// a macro for computing the ceil(log2(x)) of a field element x
 #[doc(hidden)]
 #[macro_export]
-macro_rules! bitlen {
+macro_rules! ceil_log_2 {
     ($x:expr) => {{
         use algebra::BigInteger;
         let num = $x;

@@ -87,6 +87,8 @@ fn allocation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>
     })
     .unwrap();
 
+    assert!(a.check());
+
     let a_actual = a.get_value().unwrap();
     let a_expected = a_native;
     assert!(

@@ -18,7 +18,7 @@ use crate::{
         reduce::{bigint_to_constraint_field, limbs_to_bigint, Reducer},
     },
     fields::FieldGadget,
-    bitlen,
+    ceil_log_2,
     prelude::*,
     to_field_gadget_vec::ToConstraintFieldGadget,
     Assignment,
@@ -81,22 +81,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         let valid_num_limbs = self.limbs.len() == params.num_limbs;
-        let valid_num_adds = self.num_of_additions_over_normal_form.into_repr().to_bits().len() + params.bits_per_limb 
-            <= ConstraintF::size_in_bits() - 1;
 
-        let max_val_normal_form = ConstraintF::from(2u64).pow(&[params.bits_per_limb as u64]);
+        let normal_form_bound = ConstraintF::from(2u64).pow(&[params.bits_per_limb as u64]);
         let num_add_plus_one = self.num_of_additions_over_normal_form + ConstraintF::one();
-        let max_len_limb = params.bits_per_limb + bitlen!(num_add_plus_one);  
-        let max_val_limb = num_add_plus_one * max_val_normal_form;
+        let limb_bound = num_add_plus_one * normal_form_bound;
         
+        let valid_num_adds = params.bits_per_limb + ceil_log_2!(num_add_plus_one)
+             < ConstraintF::size_in_bits() - 1;
+
         // k-ary and of the limb checks.
         let valid_limbs = self.limbs.iter().all(|limb|{
             let val_limb = limb.get_value().unwrap();
             
-            val_limb.into_repr().to_bits().len() <=  max_len_limb 
-                && val_limb <  max_val_limb
-            }
-        );
+            val_limb < limb_bound
+        });
 
         valid_num_limbs && valid_num_adds && valid_limbs
     }
@@ -157,7 +155,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let surfeit = bitlen!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(4u8));
+        let surfeit = ceil_log_2!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(4u8));
         
         if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for add_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)));
@@ -214,7 +212,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let surfeit = bitlen!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(5u8));
+        let surfeit = ceil_log_2!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(5u8));
         
         if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for sub_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)));
@@ -445,7 +443,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             * (self.num_of_additions_over_normal_form + ConstraintF::one())
             * (other.num_of_additions_over_normal_form + ConstraintF::one()) 
             + ConstraintF::one();
-        let surfeit_prime = bitlen!(num_add_bound);
+        let surfeit_prime = ceil_log_2!(num_add_bound);
 
         if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for mul_without_prereduce. Max: {}, Actual: {}", 
@@ -546,7 +544,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let num_add_bound = ConstraintF::from((params.num_limbs as u64)*(params.num_limbs as u64)) 
             * (self.num_of_additions_over_normal_form + ConstraintF::one())
             + ConstraintF::one();
-        let surfeit_prime = bitlen!(num_add_bound);
+        let surfeit_prime = ceil_log_2!(num_add_bound);
 
         if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for mul_by_constant_without_prereduce. Max: {}, Actual: {}", 
@@ -1453,7 +1451,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
             ))
         })?;
 
-        let surfeit = bitlen!(delta.num_of_additions_over_normal_form + ConstraintF::one());
+        let surfeit = ceil_log_2!(delta.num_of_additions_over_normal_form + ConstraintF::one());
         Reducer::<SimulationF, ConstraintF>::limb_to_bits(
             cs.ns(|| "k limb to bits"),
             &k_gadget,
