@@ -15,6 +15,16 @@ use algebra::{
     },
 };
 
+#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
+use algebra::{
+    curves::secp256k1::Secp256k1Parameters,
+    fields::{
+        secp256k1::fq::Fq as secp256k1Fq,
+        bn_382::fr::Fr as BN382Fr,
+    },
+};
+
+
 macro_rules! nonnative_test_individual {
     ($test_method:ident, $test_name:ident, $num_samples:expr, $group_params:ty, $test_constraint_field:ty, $test_simulation_field:ty) => {
         paste::item! {
@@ -70,13 +80,15 @@ macro_rules! nonnative_group_test_unsafe_add {
         );
     };
 }
-/*nonnative_group_test_unsafe_add!(
+
+#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
+nonnative_group_test_unsafe_add!(
     Bn382Frsecp256k1Fq,
     1,
     Secp256k1Parameters,
     BN382Fr,
     secp256k1Fq
-);*/
+);
 
 #[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_group_test_unsafe_add!(

@@ -27,8 +27,8 @@ pub struct NonNativeFieldMulResultGadget<SimulationF: PrimeField, ConstraintF: P
     /// ``
     /// for all except the most significant limb, for which 
     /// ``
-    ///     bits_per_limb[0] = 2 * (NonNativeFieldParams::bits_per_limb
-    ///                                         % SimulationF::bit_size()).
+    ///     bits_per_limb[0] = 2 * (SimulationF::size_in_bits() 
+    ///      - (NonNativeFieldParams::numlimbs - 1) * NonNativeFieldParams::bits_per_limb)
     /// ``
     pub limbs: Vec<FpGadget<ConstraintF>>,
     /// As `num_add_over_normal_form` for `NonNativeGadget`s, keeps track of the limb 
@@ -75,24 +75,32 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 {
     /// A function for test purposes. Returns `true` if `&self.num_add` respects 
     /// the capacity bound, and bounds all the limbs correctly.
-    #[cfg(test)]
+    //#[cfg(test)]
     fn check(&self) -> bool {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         let valid_num_limbs = self.limbs.len() == 2 * params.num_limbs - 1;
 
         let normal_form_bound = ConstraintF::from(2u64).pow(&[(2 * params.bits_per_limb) as u64]);
+        let normal_form_bound_ms = ConstraintF::from(2u64).pow(
+            &[2*(SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb) as u64]
+        );
         let num_add_plus_one = self.num_add_over_normal_form + ConstraintF::one();
         let limb_bound = num_add_plus_one * normal_form_bound;
+        let limb_bound_ms = num_add_plus_one * normal_form_bound_ms;
         
         let valid_num_adds = 2 * params.bits_per_limb + ceil_log_2!(num_add_plus_one)
              < ConstraintF::size_in_bits() - 1;
 
         // k-ary and of the limb checks.
-        let valid_limbs = self.limbs.iter().all(|limb|{
+        let valid_limbs = self.limbs.iter().enumerate().all(|(i,limb)|{
             let val_limb = limb.get_value().unwrap();
-            
-            val_limb < limb_bound
+
+            if i==0 {
+                val_limb < limb_bound_ms
+            } else {
+                val_limb < limb_bound
+            }
         });
 
         valid_num_limbs && valid_num_adds && valid_limbs
@@ -150,7 +158,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         mut cs: CS,
     ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {
         debug_assert!(
-            self.check()
+            self.check(),
+            "reduce(): wrong number of additions claimed in mul result gadget" 
         );
         // This is just paraphrasing the reduction of non-natives. We enforce the large integer 
         // equality
@@ -197,7 +206,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: p_gadget_limbs,
             num_of_additions_over_normal_form: ConstraintF::zero(),
-            is_in_the_normal_form: true,
             simulation_phantom: PhantomData,
         };
 
@@ -273,7 +281,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let k_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: k_limbs,
             num_of_additions_over_normal_form: self.num_add_over_normal_form,
-            is_in_the_normal_form: false,
             simulation_phantom: PhantomData,
         };
 
@@ -385,6 +392,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         mut cs: CS,
         other: &Self,
     ) -> Result<Self, SynthesisError> {
+        debug_assert!(
+            self.check() && other.check(),
+            "add(): wrong number of additions claimed in mul result gadget" 
+        );
+
         let mut new_limbs = Vec::new();
 
         for (i, (l1, l2)) in self.limbs.iter().zip(other.limbs.iter()).enumerate() {
@@ -406,6 +418,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         mut cs: CS,
         other: &SimulationF,
     ) -> Result<Self, SynthesisError> {
+        debug_assert!(
+            self.check(),
+            "add_constant(): wrong number of additions claimed in mul result gadget" 
+        );
+
         let mut other_limbs =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations(other)?;
         other_limbs.reverse();

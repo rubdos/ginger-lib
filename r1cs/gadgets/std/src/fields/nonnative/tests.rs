@@ -1218,9 +1218,5 @@ nonnative_test!(TweedleFred25519Fr, TweedleFr, ed25519Fr);
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
 nonnative_test!(Bn382FrTweedleFq, Bn382Fr, TweedleFq);
 
-
-nonnative_test!(
-    TweedleFqBn382Fr,
-    TweedleFq,
-    Bn382Fr
-);
+#[cfg(all(feature = "tweedle", feature = "bn_382"))]
+nonnative_test!(TweedleFqBn382Fr, TweedleFq, Bn382Fr);

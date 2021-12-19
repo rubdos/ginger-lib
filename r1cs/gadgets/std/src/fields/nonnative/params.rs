@@ -63,6 +63,8 @@ pub(crate) const fn find_parameters(
             * num_adds_plus_one
             * num_adds_plus_one
             - 1;
+        // TODO: this computes the bit length instead of the ceil log_2,
+        // which might cause slightly different results.
         let surfeit_prod = std::mem::size_of::<u128>() * 8 - 
            ((num_add_prod + 1) as u128).leading_zeros() as usize;
 
@@ -73,6 +75,8 @@ pub(crate) const fn find_parameters(
 
         // The surfeit caused by (k*p + r)
         let num_add_kp_r = num_limbs * (num_add_prod + 1);  
+        // TODO: this computes the bit length instead of the ceil log_2,
+        // which might cause slightly different results.
         let surfeit_kp_r = std::mem::size_of::<u128>() * 8 - 
            ((num_add_kp_r + 1) as u128).leading_zeros() as usize;
    

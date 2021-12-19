@@ -91,7 +91,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// Reduction to normal form, which again has no excess in its limbs.
     /// Assumes that 
     /// ``
-    ///     bits_per_limb + len(num_add(L) + 3) <= CAPACITY - 2.
+    ///     bits_per_limb + log(num_add(elem) + 3) <= CAPACITY - 2.
     /// ``
     // Costs`
     //    ``
@@ -103,7 +103,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
     //          ],   
     // ``
-    // and `surfeit = len(3 + num_add(elem))`.
+    // and `surfeit = log(3 + num_add(elem))`.
     pub fn reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
@@ -113,6 +113,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         let new_elem = NonNativeFieldGadget::alloc(cs.ns(|| "alloc normal form"), || {
             Ok(elem.get_value().unwrap_or_default())
         })?;
+
+        debug_assert!(
+            new_elem.check(),
+            "reduce(): allocated gadget failed on check()"
+        );
         // We do not need to panic if the aforementioned assumption is not met,
         // as enforce_equal will do.
         elem.enforce_equal(cs.ns(|| "elem == new_elem"), &new_elem)?;
@@ -148,15 +153,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            elem.check() && elem_other.check(),
+            "pre_add_reduce(): check() on gadgets failed"
+        );
+
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         // To output a sum which does not exceed the capacity bound, we need to demand that
         // ``
-        //     bits_per_limb + len(num_add(sum) + 1) <= CAPACITY,
+        //     bits_per_limb + log(num_add(sum) + 1) <= CAPACITY,
         // `` 
         // where `num_add(sum) = num_add(L) + num_add(R) + 1`. To allow a subsequent reduction 
         // we need to assure the stricter condition
         // ``
-        //     bits_per_limb + len(num_add(sum) + 3) <= CAPACITY - 2.
+        //     bits_per_limb + log(num_add(sum) + 3) <= CAPACITY - 2.
         // `` 
         Self::reduce_until_cond_is_satisfied(
             cs,
@@ -176,6 +186,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            elem.check() && elem_other.check(),
+            "pre_sub_reduce(): check() on gadgets failed"
+        );
+
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         // The sub_without_prereduce() assumes that 
         // ``
@@ -203,6 +218,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
     ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            elem.check() && elem_other.check(),
+            "pre_mul_reduce(): check() on gadgets failed"
+        );
+
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         // To assure that the limbs of the product representation do not exceed the capacity
@@ -228,11 +248,12 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             elem,
             elem_other,
             |elem, elem_other| {
-                let num_add_bound = ConstraintF::from((params.num_limbs as u64)*(params.num_limbs as u64)) 
+                let num_add_bound = ConstraintF::from(params.num_limbs as u64) 
                     * (elem.num_of_additions_over_normal_form + ConstraintF::one())
-                    * (elem_other.num_of_additions_over_normal_form + ConstraintF::one()) 
-                    + ConstraintF::one();
-                let surfeit_prime = ceil_log_2!(num_add_bound);
+                    * (elem_other.num_of_additions_over_normal_form + ConstraintF::one());
+                let surfeit_prime = ceil_log_2!(
+                    ConstraintF::from(params.num_limbs as u64) * num_add_bound + ConstraintF::one()
+                );
     
                 2 * params.bits_per_limb + surfeit_prime <= ConstraintF::Params::CAPACITY as usize - 2
             }
