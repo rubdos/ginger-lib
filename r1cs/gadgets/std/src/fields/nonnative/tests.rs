@@ -38,6 +38,9 @@ use algebra::fields::secp256k1::{Fq as secp256k1Fq, Fr as secp256k1Fr};
 #[cfg(feature = "tweedle")]
 use algebra::fields::tweedle::{Fq as TweedleFq, Fr as TweedleFr};
 
+#[cfg(feature = "mnt4_753")]
+use algebra::fields::mnt4753::{Fq as Mnt4753Fq, Fr as Mnt4753Fr};
+
 
 const NUM_REPETITIONS: usize = 10;
 const TEST_COUNT: usize = 10;
@@ -53,12 +56,14 @@ fn get_params_test() {
         (255usize, 255usize), 
         (255, 256), 
         (255, 382),
+        (255, 753),
         (255, 2048),
         (255, 4096),
         // Base field 382 bit
         (382, 255),
         (382, 256),
         (382, 382),
+        (382, 753),
         (382, 2048),
         (382, 4096),
     ];
@@ -67,12 +72,14 @@ fn get_params_test() {
         (6usize, 43usize, 751usize),
         (6, 43, 753), 
         (7, 55, 1223),
+        (14, 54, 2689),
         (28, 74, 8580),
         (57, 72, 20710),
         // Base Field 382 bit
         (4, 64, 657),
         (4, 64, 659),
         (6, 64, 1047),
+        (9, 84, 2264),
         (24, 86, 7060),
         (36, 114, 15992),
     ];
@@ -1222,3 +1229,6 @@ nonnative_test!(Bn382FrTweedleFq, Bn382Fr, TweedleFq);
 
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
 nonnative_test!(TweedleFqBn382Fr, TweedleFq, Bn382Fr);
+
+#[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
+nonnative_test!(TweedleFrMnt4753Fq, TweedleFr, Mnt4753Fq);

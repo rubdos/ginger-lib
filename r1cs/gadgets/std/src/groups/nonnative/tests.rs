@@ -15,6 +15,15 @@ use algebra::{
     },
 };
 
+#[cfg(all(feature = "secp256k1", feature = "tweedle"))]
+use algebra::{
+    curves::secp256k1::Secp256k1Parameters,
+    fields::{
+        secp256k1::fq::Fq as secp256k1Fq,
+        tweedle::Fr as TweedleFr,
+    },
+};
+
 #[cfg(all(feature = "bn_382", feature = "secp256k1"))]
 use algebra::{
     curves::secp256k1::Secp256k1Parameters,
