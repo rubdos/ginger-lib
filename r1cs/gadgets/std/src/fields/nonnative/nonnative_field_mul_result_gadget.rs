@@ -159,7 +159,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {
         debug_assert!(
             self.check(),
-            "reduce(): wrong number of additions claimed in mul result gadget" 
+            "reduce(): check() failed on input mul result gadget" 
         );
         // This is just paraphrasing the reduction of non-natives. We enforce the large integer 
         // equality
@@ -394,7 +394,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     ) -> Result<Self, SynthesisError> {
         debug_assert!(
             self.check() && other.check(),
-            "add(): wrong number of additions claimed in mul result gadget" 
+            "add():: check() failed on input mul result gadgets" 
         );
 
         let mut new_limbs = Vec::new();
@@ -420,7 +420,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     ) -> Result<Self, SynthesisError> {
         debug_assert!(
             self.check(),
-            "add_constant(): wrong number of additions claimed in mul result gadget" 
+            "add_constant(): check() failed on input mul result gadgets" 
         );
 
         let mut other_limbs =

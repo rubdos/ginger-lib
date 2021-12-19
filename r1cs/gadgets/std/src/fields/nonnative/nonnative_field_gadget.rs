@@ -157,7 +157,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     ) -> Result<Self, SynthesisError> {
         debug_assert!(
             self.check() && other.check(),
-            "add_without_prereduce(): wrong number of additions claimed in gadget" 
+            "add_without_prereduce(): check() failed on input gadgets" 
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
@@ -213,7 +213,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     ) -> Result<Self, SynthesisError> {
         debug_assert!(
             self.check() && other.check(),
-            "sub_without_prereduce(): wrong number of additions claimed in gadget" 
+            "sub_without_prereduce(): check() failed on input gadgets" 
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
@@ -425,7 +425,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         debug_assert!(
             self.check() && other.check(),
-            "mul_without_prereduce(): wrong number of additions claimed in gadget" 
+            "mul_without_prereduce(): check() failed on input gadgets" 
         );
 
         // To assure that the limbs of the product representation do not exceed the capacity
@@ -794,11 +794,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
             &mut other_reduced,
         )?;
 
-        debug_assert!(
-            self_reduced.check() && other_reduced.check(),
-            "mul(): check() on gadgets after pre-reduction failed"
-        );
-
         // Step 2: mul without pre reduce
         let res = self_reduced.mul_without_prereduce(
             cs.ns(|| "mul"),
@@ -807,11 +802,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
 
         // Step 3: reduction of the product to normal form
         let res_reduced = res.reduce(cs.ns(|| "reduce result"))?;
-
-        debug_assert!(
-            self_reduced.check() && other.check(),
-            "mul_by_constant(): check() on gadgets after reduction failed"
-        );
 
         Ok(res_reduced)
     }
@@ -853,11 +843,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
             &mut self_reduced,
             &mut other,
         )?;
-        
-        debug_assert!(
-            self_reduced.check() && other.check(),
-            "mul_by_constant(): check() on gadgets after reduction failed"
-        );
 
         // Step 2: mul without pre reduce
         let res = self_reduced.mul_by_constant_without_prereduce(
@@ -1390,7 +1375,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
     ) -> Result<(), SynthesisError> {
         debug_assert!(
             self.check() && other.check(),
-            "conditional_enforce_equal(): wrong number of additions claimed in gadget" 
+            "conditional_enforce_equal(): check() failed on input gadgets" 
         );
         
         // Equality mod p is proven by the integer equation

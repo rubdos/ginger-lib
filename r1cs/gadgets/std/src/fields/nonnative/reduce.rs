@@ -114,10 +114,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             Ok(elem.get_value().unwrap_or_default())
         })?;
 
-        debug_assert!(
-            new_elem.check(),
-            "reduce(): allocated gadget failed on check()"
-        );
         // We do not need to panic if the aforementioned assumption is not met,
         // as enforce_equal will do.
         elem.enforce_equal(cs.ns(|| "elem == new_elem"), &new_elem)?;
@@ -155,7 +151,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     ) -> Result<(), SynthesisError> {
         debug_assert!(
             elem.check() && elem_other.check(),
-            "pre_add_reduce(): check() on gadgets failed"
+            "pre_add_reduce(): check() failed on input gadgets"
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
@@ -188,7 +184,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     ) -> Result<(), SynthesisError> {
         debug_assert!(
             elem.check() && elem_other.check(),
-            "pre_sub_reduce(): check() on gadgets failed"
+            "pre_sub_reduce(): check() failed on input gadgets"
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
@@ -220,7 +216,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     ) -> Result<(), SynthesisError> {
         debug_assert!(
             elem.check() && elem_other.check(),
-            "pre_mul_reduce(): check() on gadgets failed"
+            "pre_mul_reduce(): check() failed on input gadgets"
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
