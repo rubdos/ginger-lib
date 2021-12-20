@@ -93,6 +93,42 @@ pub trait FieldGadget<F: Field, ConstraintF: Field>:
         )
     }
 
+    fn conditionally_add<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        bit: &Boolean,
+        other: &Self
+    ) -> Result<Self, SynthesisError> {
+        let added_values_g = self.add(cs.ns(|| "added values"),&other)?;
+        Self::conditionally_select(
+            cs.ns(|| "select added_values or original value"),
+            bit,
+            &added_values_g,
+            &self
+        )
+    }
+
+    fn conditionally_add_constant<CS: ConstraintSystem<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        bit: &Boolean,
+        other: F
+    ) -> Result<Self, SynthesisError> {
+        let other = <Self as ConstantGadget<F, ConstraintF>>::from_value(
+            cs.ns(|| "hardcode constant"),
+            &other
+        );
+
+        let added_values_g = self.add(cs.ns(|| "added values"), &other)?;
+
+        Self::conditionally_select(
+            cs.ns(|| "select added_values or original value"),
+            bit,
+            &added_values_g,
+            &self
+        )
+    }
+
     fn double<CS: ConstraintSystem<ConstraintF>>(&self, cs: CS) -> Result<Self, SynthesisError> {
         self.add(cs, &self)
     }

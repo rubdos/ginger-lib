@@ -26,7 +26,6 @@ edition = "2018"
 algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "rc/feat/comp_gadget", features = [ "parallel" ] }
 primitives = {path = "../../../primitives"}
 r1cs-core = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "rc/feat/comp_gadget" }
-
 r1cs-std = { path = "../std"}
 proof-systems = { path = "../../../proof-systems", features = ["groth16", "gm17"], optional = true }
 bench-utils = { path = "../../../bench-utils" }
