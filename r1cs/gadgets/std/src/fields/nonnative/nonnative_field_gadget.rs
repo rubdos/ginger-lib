@@ -91,13 +91,15 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         // k-ary and of the limb checks.
         let valid_limbs = self.limbs.iter().enumerate().all(|(i,limb)|{
-            let val_limb = limb.get_value().unwrap();
-
-            if i == 0{
-                val_limb < limb_bound_ms
+            if let Some(val_limb) = limb.get_value() {
+                if i == 0 {
+                    val_limb < limb_bound_ms
+                } else {
+                    val_limb < limb_bound
+                } 
             } else {
-                val_limb < limb_bound
-            } 
+                true
+            }
         });
 
         valid_num_limbs && valid_num_adds && valid_limbs

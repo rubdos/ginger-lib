@@ -46,8 +46,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     FromGadget<&NonNativeFieldGadget<SimulationF, ConstraintF>, ConstraintF>
     for NonNativeFieldMulResultGadget<SimulationF, ConstraintF>
 {
-
-
     fn from<CS: ConstraintSystemAbstract<ConstraintF>>(
         other: &NonNativeFieldGadget<SimulationF, ConstraintF>,
         cs: CS,
@@ -93,12 +91,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         // k-ary and of the limb checks.
         let valid_limbs = self.limbs.iter().enumerate().all(|(i,limb)|{
-            let val_limb = limb.get_value().unwrap();
-
-            if i==0 {
-                val_limb < limb_bound_ms
+            if let Some(val_limb) = limb.get_value() {
+                if i == 0{
+                    val_limb < limb_bound_ms
+                } else {
+                    val_limb < limb_bound
+                } 
             } else {
-                val_limb < limb_bound
+                true
             }
         });
 
