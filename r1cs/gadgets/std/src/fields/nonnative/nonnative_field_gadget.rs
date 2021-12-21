@@ -974,6 +974,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ConstantGadget<Simulation
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
+    // Returns the big endian bit representation of `self mod p`. 
     fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
@@ -981,13 +982,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
         self.to_bits_strict(cs)
     }
 
-    // Enforces the bit representation of `self` to be strictly smaller than `p`.
+    // Returns the big endian bit representation of `self mod p`. 
     fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> 
     {
-        // alloc a vector of SimulationF many Booleans, representing the bits of 'self'
+        // alloc a vector of SimulationF many Booleans, representing the bits of 'self'.
+        // big endian order
         let bits = Vec::<Boolean>::alloc(
             cs.ns(|| "alloc self bits"),
             || Ok(self.get_value().unwrap_or_default().write_bits())
@@ -1016,7 +1018,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBitsGadget<ConstraintF>
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> FromBitsGadget<ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
-    // Packs a bit sequence (which does not exceed the length of a normal form) into a NonNativeFieldGadget
+    // Packs a big endian bit sequence (which does not exceed the length of a normal form) 
+    // into a NonNativeFieldGadget
     fn from_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         bits: &[Boolean],
@@ -1029,22 +1032,29 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FromBitsGadget<Constraint
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBytesGadget<ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
+    // Returns the big endian bit representation of `self mod p`. 
     fn to_bytes<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
+        // big endian bits of `&self`
         let mut bits = self.to_bits(cs.ns(|| "self to bits"))?;
-        bits.reverse();
 
         let mut bytes = Vec::<UInt8>::new();
-        bits.chunks(8).for_each(|bits_per_byte| {
-            let mut bits_per_byte: Vec<Boolean> = bits_per_byte.to_vec();
-            if bits_per_byte.len() < 8 {
-                bits_per_byte.resize_with(8, || Boolean::constant(false));
-            }
 
-            bytes.push(UInt8::from_bits_le(&bits_per_byte));
-        });
+        // convert to little endian, split into chunks of 8 bits,
+        // and define a `UInt8` from them.
+        bits.reverse();
+        bits.chunks(8).for_each(
+            |bits_per_byte| {
+                let mut bits_per_byte: Vec<Boolean> = bits_per_byte.to_vec();
+                if bits_per_byte.len() < 8 {
+                    bits_per_byte.resize_with(8, || Boolean::constant(false));
+                }
+
+                bytes.push(UInt8::from_bits_le(&bits_per_byte));
+            }
+        );
 
         Ok(bytes)
     }
@@ -1053,6 +1063,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBytesGadget<ConstraintF
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
+        // 
         let mut bits = self.to_bits_strict(cs.ns(|| "self to bits strict"))?;
         bits.reverse();
 

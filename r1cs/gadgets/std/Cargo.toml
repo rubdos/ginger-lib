@@ -57,3 +57,4 @@ nonnative = ["num-traits", "num-bigint", "num-integer"]
 paste = "1.0"
 rand = { version = "0.8.4" }
 rand_xorshift = { version = "0.3.0" }
+serial_test = { version = "0.5.1"}

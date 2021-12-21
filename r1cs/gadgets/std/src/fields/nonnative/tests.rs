@@ -1,4 +1,7 @@
 #![allow(unused_imports)]
+
+use serial_test::serial;
+
 use algebra::{
     fields::{
         FpParameters, PrimeField,
@@ -25,21 +28,6 @@ use crate::{
     },
     FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget,
 };
-
-#[cfg(feature = "bn_382")]
-use algebra::fields::bn_382::{Fq as Bn382Fq, Fr as Bn382Fr};
-
-#[cfg(feature = "ed25519")]
-use algebra::fields::ed25519::{fq::Fq as ed25519Fq, fr::Fr as ed25519Fr};
-
-#[cfg(feature = "secp256k1")]
-use algebra::fields::secp256k1::{Fq as secp256k1Fq, Fr as secp256k1Fr};
-
-#[cfg(feature = "tweedle")]
-use algebra::fields::tweedle::{Fq as TweedleFq, Fr as TweedleFr};
-
-#[cfg(feature = "mnt4_753")]
-use algebra::fields::mnt4753::{Fq as Mnt4753Fq, Fr as Mnt4753Fr};
 
 const TEST_COUNT: usize = 50;
 const STRESS_TEST_COUNT: usize = 200;
@@ -100,6 +88,11 @@ fn get_params_test() {
     );
 }
 
+/*************************************************************************************************
+ * 
+ * elementary arithemtic tests
+ * 
+ * ***********************************************************************************************/
 fn allocation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
@@ -530,6 +523,12 @@ fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
     }
 }
 
+/*************************************************************************************************
+ * 
+ * stress tests
+ * 
+ * ***********************************************************************************************/
+
 /// Tests correctness of `STRESS_TEST_COUNT` many `add_in_place` on a random instance.
 fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
@@ -943,6 +942,12 @@ fn even_odd_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
+/*************************************************************************************************
+ * 
+ * other tests
+ * 
+ * ***********************************************************************************************/
+
 /// Test basic correctness of from_bits for NonNativeFieldGadget over TEST_COUNT many random instances.
 fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R) {
     let num_bits_modulus = SimulationF::size_in_bits();
@@ -1090,7 +1095,11 @@ fn to_bytes_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: 
         .map(|v| v.get_value().unwrap())
         .collect();
 
-    // 123456 = 65536 + 226 * 256 + 64
+    println!("byte[0]: {}", target_to_bytes[0]);
+    println!("byte[1]: {}", target_to_bytes[1]);
+    println!("byte[2]: {}", target_to_bytes[2]);
+
+    // 123456 = 1 * 2^16 + 226 * 2^8 + 64
     assert_eq!(target_to_bytes[0], 64);
     assert_eq!(target_to_bytes[1], 226);
     assert_eq!(target_to_bytes[2], 1);
@@ -1109,6 +1118,11 @@ fn to_bytes_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: 
         let f = SimulationF::rand(rng);
         let mut f_bytes = Vec::with_capacity(f.serialized_size());
         CanonicalSerialize::serialize(&f, &mut f_bytes).unwrap();
+        // in some cases, e.g. secp256k1, the current implementation of serialize produces an 
+        // extra u64 limb.
+        f_bytes.truncate(
+            (SimulationF::size_in_bits() + 7)/8
+        );
 
         let f_var = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_input(
             cs.ns(|| "alloc input f"),
@@ -1131,12 +1145,18 @@ fn to_bytes_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: 
     }
 }
 
-/* Macros for implementing above tests on non-native arithmetics
-*/
+
+
+/*************************************************************************************************
+ *
+ *   Macros for implementing above tests on non-native arithmetics
+ * 
+**************************************************************************************************/
 macro_rules! nonnative_test_individual {
     ($test_method:ident, $test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
         paste::item! {
             #[test]
+            #[serial]
             fn [<$test_method _ $test_name:lower>]() {
                 let rng = &mut thread_rng();
                 $test_method::<$test_simulation_field, $test_constraint_field, _>(rng);
@@ -1308,7 +1328,27 @@ macro_rules! nonnative_test {
     };
 }
 
-// Implementation of the above non-native arithmetic tests for different curves
+/*******************************************************************************
+ * 
+ *  Implementation of the above non-native arithmetic tests for different curves
+ * 
+ * *****************************************************************************/
+
+ #[cfg(feature = "bn_382")]
+ use algebra::fields::bn_382::{Fq as Bn382Fq, Fr as Bn382Fr};
+ 
+ #[cfg(feature = "ed25519")]
+ use algebra::fields::ed25519::{fq::Fq as ed25519Fq, fr::Fr as ed25519Fr};
+ 
+ #[cfg(feature = "secp256k1")]
+ use algebra::fields::secp256k1::{Fq as secp256k1Fq, Fr as secp256k1Fr};
+ 
+ #[cfg(feature = "tweedle")]
+ use algebra::fields::tweedle::{Fq as TweedleFq, Fr as TweedleFr};
+ 
+ #[cfg(feature = "mnt4_753")]
+ use algebra::fields::mnt4753::{Fq as Mnt4753Fq, Fr as Mnt4753Fr};
+
 #[cfg(feature = "tweedle")]
 nonnative_test!(TweedleFq_over_Fr, TweedleFq, TweedleFr);
 
