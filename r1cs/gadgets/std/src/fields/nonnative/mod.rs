@@ -34,8 +34,18 @@ mod tests;
 #[macro_export]
 macro_rules! ceil_log_2 {
     ($x:expr) => {{
+        // Let `len` be the number of bits, and let `z` be the number 
+        // of leading zeros. Then
+        // ``
+        //             z        len - z
+        //      ------------- -----------
+        //      0    ....   0 1 ** .... *
+        // ``
+        // Hence `ceil_log_2(x) = len - z` if `x` is not a pure power 
+        // of two. Otherwise `ceil_log_2(x) = len - z - 1`.                   
         use algebra::BigInteger;
         let num = $x;
+        // big endian bit rep, might have leading zeros.
         let num_bits = num.into_repr().to_bits();
         let mut skipped_bits = 0;
         for b in num_bits.iter() {
@@ -54,9 +64,9 @@ macro_rules! ceil_log_2 {
         }
 
         if is_power_of_2 {
-            num_bits.len() - skipped_bits
+            num_bits.len() - skipped_bits - 1 
         } else {
-            num_bits.len() - skipped_bits + 1
+            num_bits.len() - skipped_bits 
         }
     }};
 }

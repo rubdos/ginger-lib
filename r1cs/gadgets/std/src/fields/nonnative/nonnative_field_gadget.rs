@@ -24,6 +24,7 @@ use crate::{
     Assignment,
 };
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
+use rand::{Rng, RngCore};
 use std::cmp::max;
 use std::marker::PhantomData;
 use std::{borrow::Borrow, vec, vec::Vec};
@@ -105,7 +106,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         valid_num_limbs && valid_num_adds && valid_limbs
     }
     
-
     /// Obtain the non-native value from a vector of not necessarily normalized
     /// limb elements.
     // TODO: Can we use the functions limbs_to_bigint and bigint_to_constraint_field? 
@@ -143,6 +143,68 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         }
 
         result
+    }
+
+    // A function for allocating a random non-native with oversized limbs, having 
+    // a surfeit s.t. `surfeit + bits_per_limbs <= ConstraintF::size_in_bits() - 1`.
+    #[cfg(test)]
+    pub(crate) fn alloc_random<R, CS>(mut cs: CS, rng: &mut R, surfeit: usize) 
+    -> Result<Self, SynthesisError>
+    where 
+        R: RngCore,
+        CS: ConstraintSystemAbstract<ConstraintF>,
+    {
+        // We sample random limbs of `limb_size[i] = surfeit + bits_per_limbs[i]`. As
+        // ``
+        //      limb[i] < 2^{surfeit + bits_per_limb[i]} = 2^surfeit * 2^bits_per_limb[i],
+        // ``
+        // we may choose `num_adds +  1 = 2^surfeit`.
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        
+        assert!(params.bits_per_limb + surfeit <= ConstraintF::size_in_bits()-1);
+
+        // compute 2^surfeit as bigint
+        let mut num_add_plus_one: <ConstraintF as PrimeField>::BigInt =
+            ConstraintF::one().into_repr();
+        num_add_plus_one.muln(surfeit as u32);
+
+        assert!(
+            ceil_log_2!(ConstraintF::from_repr(num_add_plus_one)) == surfeit,
+            "ceil_log_2 is different from surfeit."
+        );
+
+        let mut limbs = Vec::new();
+
+        for i in 0..params.num_limbs {
+            // compute target limb size 
+            let num_bits:usize = if i == 0 {
+                // most significant limb 
+                surfeit + SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb
+            } else {
+                // the other limbs
+                surfeit + params.bits_per_limb
+            };
+
+            let bits = (0..num_bits).map(|_|
+                rng.gen()
+            )
+            .collect::<Vec<bool>>(); 
+            
+            let limb_val = ConstraintF::read_bits(bits).unwrap();
+            let limb = FpGadget::<ConstraintF>::alloc(
+                cs.ns(|| format!("alloc limb {}", i)),
+                || Ok(limb_val),
+            )?;
+            limbs.push(limb);
+        };
+
+        let result = Self{
+            limbs: limbs,
+            num_of_additions_over_normal_form: ConstraintF::from_repr(num_add_plus_one) - ConstraintF::one(),
+            simulation_phantom: PhantomData
+        };
+
+        Ok(result)
     }
 
     /// Low level function for addition of non-natives. In order to guarantee

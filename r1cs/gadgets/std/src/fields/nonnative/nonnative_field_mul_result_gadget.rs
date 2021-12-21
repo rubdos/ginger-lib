@@ -292,6 +292,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         // Compute the product representation for `k*p`
         // Costs `C =  num_limbs^2` constraints.
+        // TODO: let us use `mul_by_constant()` and `add_by_constant()`. Costs no constraints.
         let mut prod_limbs = Vec::new();
         let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "hardcode zero for step 1"))?;
 
@@ -328,7 +329,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // Hence we may set num_adds and surfeit for the limbs of `k*p + r` according
         // to
         // ``
-        //      num_adds(kp + r) = (num_limbs * (num_add + 1),
+        //      num_adds(kp + r) = num_limbs * (num_add + 1),
         //      surfeit(kp + r) = len(num_limbs * (num_adds + 1) + 1).
         // ``
         let mut kp_plus_r_gadget = Self {

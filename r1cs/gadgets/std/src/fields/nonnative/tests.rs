@@ -11,14 +11,17 @@ use algebra::{
 
 use r1cs_core::{
     ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
+    SynthesisError
 };
 use rand::{thread_rng, Rng, RngCore};
+use std::marker::PhantomData;
 
 use crate::{
     alloc::AllocGadget,
     bits::boolean::Boolean,
     eq::EqGadget,
     fields::{
+        fp::FpGadget,
         nonnative::{
             nonnative_field_gadget::NonNativeFieldGadget,
             nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget,
@@ -26,7 +29,7 @@ use crate::{
         },
         FieldGadget,
     },
-    FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget,
+    FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget, ceil_log_2
 };
 
 const TEST_COUNT: usize = 50;
@@ -88,6 +91,9 @@ fn get_params_test() {
     );
 }
 
+
+
+
 /*************************************************************************************************
  * 
  * elementary arithemtic tests
@@ -117,6 +123,30 @@ fn allocation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>
         assert!(cs.is_satisfied());
     }
 }
+
+fn alloc_random_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let surfeit = rng.gen_range(0..(ConstraintF::size_in_bits() - params.bits_per_limb - 1));
+        
+        println!("expected surfeit: {} ", surfeit);
+
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random" ),
+            rng, 
+            surfeit).unwrap();
+
+        println!("actual surfeit: {} ", ceil_log_2!(a.num_of_additions_over_normal_form + ConstraintF::one()));
+
+        assert!(
+            a.check(),
+            "allocated random fails on check()"
+        )
+    }   
+}
+
 
 fn addition_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
@@ -1171,6 +1201,12 @@ macro_rules! nonnative_test {
         */
         nonnative_test_individual!(
             allocation_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            alloc_random_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
