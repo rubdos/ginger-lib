@@ -75,8 +75,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 {
     /// A function for test purposes. Returns `true` if `&self.num_add` respects 
     /// the capacity bound, and bounds all the limbs correctly.
-    //#[cfg(test)]
-    fn check(&self) -> bool {
+    pub(crate) fn check(&self) -> bool {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
         let valid_num_limbs = self.limbs.len() == 2 * params.num_limbs - 1;

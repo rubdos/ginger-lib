@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-
 use algebra::{
     fields::{
         FpParameters, PrimeField,
@@ -20,6 +19,7 @@ use crate::{
         nonnative::{
             nonnative_field_gadget::NonNativeFieldGadget,
             nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget,
+            params::get_params
         },
         FieldGadget,
     },
@@ -41,10 +41,8 @@ use algebra::fields::tweedle::{Fq as TweedleFq, Fr as TweedleFr};
 #[cfg(feature = "mnt4_753")]
 use algebra::fields::mnt4753::{Fq as Mnt4753Fq, Fr as Mnt4753Fr};
 
-
-const NUM_REPETITIONS: usize = 10;
-const TEST_COUNT: usize = 10;
-
+const TEST_COUNT: usize = 50;
+const STRESS_TEST_COUNT: usize = 200;
 
 #[test]
 fn get_params_test() {
@@ -103,247 +101,294 @@ fn get_params_test() {
 }
 
 fn allocation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-    let a_native = SimulationF::rand(rng);
-    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-        Ok(a_native)
-    })
-    .unwrap();
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let a_native = SimulationF::rand(rng);
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+            Ok(a_native)
+        })
+        .unwrap();
 
-    assert!(a.check());
+        assert!(a.check());
 
-    let a_actual = a.get_value().unwrap();
-    let a_expected = a_native;
-    assert!(
-        a_actual.eq(&a_expected),
-        "allocated value does not equal the expected value"
-    );
+        let a_actual = a.get_value().unwrap();
+        let a_expected = a_native;
+        assert!(
+            a_actual.eq(&a_expected),
+            "allocated value does not equal the expected value"
+        );
 
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
     }
-    assert!(cs.is_satisfied());
 }
 
 fn addition_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
-    let a_native = SimulationF::rand(rng);
-    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-        Ok(a_native)
-    })
-    .unwrap();
+        let a_native = SimulationF::rand(rng);
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+            Ok(a_native)
+        })
+        .unwrap();
 
-    let b_native = SimulationF::rand(rng);
-    let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
-        Ok(b_native)
-    })
-    .unwrap();
+        let b_native = SimulationF::rand(rng);
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
+            Ok(b_native)
+        })
+        .unwrap();
 
-    let a_plus_b = a.add(cs.ns(|| "a + b"), &b).unwrap();
+        let a_plus_b = a.add(cs.ns(|| "a + b"), &b).unwrap();
+        assert!(
+            a_plus_b.check()
+        );
 
-    let a_plus_b_actual = a_plus_b.get_value().unwrap();
-    let a_plus_b_expected = a_native + &b_native;
-    assert!(a_plus_b_actual.eq(&a_plus_b_expected), "a + b failed");
+        let a_plus_b_actual = a_plus_b.get_value().unwrap();
+        let a_plus_b_expected = a_native + &b_native;
+        assert!(a_plus_b_actual.eq(&a_plus_b_expected), "a + b failed");
 
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
     }
-    assert!(cs.is_satisfied());
+}
+
+fn substraction_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+
+        let a_native = SimulationF::rand(rng);
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+            Ok(a_native)
+        })
+        .unwrap();
+
+        let b_native = SimulationF::rand(rng);
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
+            Ok(b_native)
+        })
+        .unwrap();
+
+        let a_minus_b = a.sub(cs.ns(|| "a + b"), &b).unwrap();
+        assert!(
+            a_minus_b.check()
+        );
+
+        let a_minus_b_actual = a_minus_b.get_value().unwrap();
+        let a_minus_b_expected = a_native - &b_native;
+        assert!(a_minus_b_actual.eq(&a_minus_b_expected), "a - b failed");
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+    }
 }
 
 fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-    let a_native = SimulationF::rand(rng);
-    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-        Ok(a_native)
-    })
-    .unwrap();
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let a_native = SimulationF::rand(rng);
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+            Ok(a_native)
+        })
+        .unwrap();
 
-    let b_native = SimulationF::rand(rng);
-    let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
-        Ok(b_native)
-    })
-    .unwrap();
+        let b_native = SimulationF::rand(rng);
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
+            Ok(b_native)
+        })
+        .unwrap();
 
-    let a_times_b = a.mul(cs.ns(|| "a * b"), &b).unwrap();
+        let a_times_b = a.mul(cs.ns(|| "a * b"), &b).unwrap();
 
-    let a_times_b_actual = a_times_b.get_value().unwrap();
-    let a_times_b_expected = a_native * &b_native;
+        let a_times_b_actual = a_times_b.get_value().unwrap();
+        let a_times_b_expected = a_native * &b_native;
 
-    assert!(
-        a_times_b_actual.eq(&a_times_b_expected),
-        "a_times_b = {:?}, a_times_b_actual = {:?}, a_times_b_expected = {:?}",
-        a_times_b,
-        a_times_b_actual.into_repr().as_ref(),
-        a_times_b_expected.into_repr().as_ref()
-    );
+        assert!(
+            a_times_b_actual.eq(&a_times_b_expected),
+            "a_times_b = {:?}, a_times_b_actual = {:?}, a_times_b_expected = {:?}",
+            a_times_b,
+            a_times_b_actual.into_repr().as_ref(),
+            a_times_b_expected.into_repr().as_ref()
+        );
 
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
     }
-    assert!(cs.is_satisfied());
 }
 
 fn multiplication_by_constant_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-    let a_native = SimulationF::rand(rng);
-    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-        Ok(a_native)
-    })
-    .unwrap();
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let a_native = SimulationF::rand(rng);
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+            Ok(a_native)
+        })
+        .unwrap();
 
-    let b_native = SimulationF::rand(rng);
+        let b_native = SimulationF::rand(rng);
 
-    let a_times_b = a.mul_by_constant(cs.ns(|| "a * b"), &b_native).unwrap();
+        let a_times_b = a.mul_by_constant(cs.ns(|| "a * b"), &b_native).unwrap();
 
-    let a_times_b_actual = a_times_b.get_value().unwrap();
-    let a_times_b_expected = a_native * &b_native;
+        let a_times_b_actual = a_times_b.get_value().unwrap();
+        let a_times_b_expected = a_native * &b_native;
 
-    assert!(
-        a_times_b_actual.eq(&a_times_b_expected),
-        "a_times_b = {:?}, a_times_b_actual = {:?}, a_times_b_expected = {:?}",
-        a_times_b,
-        a_times_b_actual.into_repr().as_ref(),
-        a_times_b_expected.into_repr().as_ref()
-    );
+        assert!(
+            a_times_b_actual.eq(&a_times_b_expected),
+            "a_times_b = {:?}, a_times_b_actual = {:?}, a_times_b_expected = {:?}",
+            a_times_b,
+            a_times_b_actual.into_repr().as_ref(),
+            a_times_b_expected.into_repr().as_ref()
+        );
 
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
     }
-    assert!(cs.is_satisfied());
 }
 
 /// Checks the `mul` of two randomly sampled non-natives against the expected
 /// value as NonNativeFieldGadget in reduced form.
 fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
-    let a_native = SimulationF::rand(rng);
-    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-        Ok(a_native)
-    })
-    .unwrap();
-
-    let b_native = SimulationF::rand(rng);
-    let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
-        Ok(b_native)
-    })
-    .unwrap();
-
-    let a_times_b = a.mul(cs.ns(|| "a * b"), &b).unwrap();
-
-    let a_times_b_expected = a_native * &b_native;
-    let a_times_b_expected_gadget =
-        NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a * b"), || {
-            Ok(a_times_b_expected)
+        let a_native = SimulationF::rand(rng);
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+            Ok(a_native)
         })
         .unwrap();
 
-    assert!(
-        a_times_b.get_value().unwrap() == a_times_b_expected
-    );
-
-    a_times_b
-        .enforce_equal(cs.ns(|| "expected == actual"), &a_times_b_expected_gadget)
+        let b_native = SimulationF::rand(rng);
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
+            Ok(b_native)
+        })
         .unwrap();
 
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
+        let a_times_b = a.mul(cs.ns(|| "a * b"), &b).unwrap();
+
+        let a_times_b_expected = a_native * &b_native;
+        let a_times_b_expected_gadget =
+            NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a * b"), || {
+                Ok(a_times_b_expected)
+            })
+            .unwrap();
+
+        assert!(
+            a_times_b.get_value().unwrap() == a_times_b_expected
+        );
+
+        a_times_b
+            .enforce_equal(cs.ns(|| "expected == actual"), &a_times_b_expected_gadget)
+            .unwrap();
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
     }
-    assert!(cs.is_satisfied());
 }
 
 /// Tests all combinations of `add` and `mul` of a randomly sampled non-native
 /// with the neutral elements of non-native field arithmetics.
 fn edge_cases_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
-    let zero_native = SimulationF::zero();
-    let zero =
-        NonNativeFieldGadget::<SimulationF, ConstraintF>::zero(cs.ns(|| "alloc zero")).unwrap();
-    let one = NonNativeFieldGadget::<SimulationF, ConstraintF>::one(cs.ns(|| "alloc one")).unwrap();
+        let zero_native = SimulationF::zero();
+        let zero =
+            NonNativeFieldGadget::<SimulationF, ConstraintF>::zero(cs.ns(|| "alloc zero")).unwrap();
+        let one = NonNativeFieldGadget::<SimulationF, ConstraintF>::one(cs.ns(|| "alloc one")).unwrap();
 
-    let a_native = SimulationF::rand(rng);
-    let minus_a_native = SimulationF::zero() - &a_native;
-    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-        Ok(a_native)
-    })
-    .unwrap();
+        let a_native = SimulationF::rand(rng);
+        let minus_a_native = SimulationF::zero() - &a_native;
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
+            Ok(a_native)
+        })
+        .unwrap();
 
-    let a_plus_zero = a.add(cs.ns(|| "a + 0"), &zero).unwrap();
-    let a_minus_zero = a.sub(cs.ns(|| "a - 0"), &zero).unwrap();
-    let zero_minus_a = zero.sub(cs.ns(|| "0 - a"), &a).unwrap();
-    let a_times_zero = a.mul(cs.ns(|| "a * 0"), &zero).unwrap();
+        let a_plus_zero = a.add(cs.ns(|| "a + 0"), &zero).unwrap();
+        let a_minus_zero = a.sub(cs.ns(|| "a - 0"), &zero).unwrap();
+        let zero_minus_a = zero.sub(cs.ns(|| "0 - a"), &a).unwrap();
+        let a_times_zero = a.mul(cs.ns(|| "a * 0"), &zero).unwrap();
 
-    let zero_plus_a = zero.add(cs.ns(|| "0 + a"), &a).unwrap();
-    let zero_times_a = zero.mul(cs.ns(|| "0 * a"), &a).unwrap();
+        let zero_plus_a = zero.add(cs.ns(|| "0 + a"), &a).unwrap();
+        let zero_times_a = zero.mul(cs.ns(|| "0 * a"), &a).unwrap();
 
-    let a_times_one = a.mul(cs.ns(|| "a * 1"), &one).unwrap();
-    let one_times_a = one.mul(cs.ns(|| "1 * a"), &a).unwrap();
+        let a_times_one = a.mul(cs.ns(|| "a * 1"), &one).unwrap();
+        let one_times_a = one.mul(cs.ns(|| "1 * a"), &a).unwrap();
 
-    let a_plus_zero_native = a_plus_zero.get_value().unwrap();
-    let a_minus_zero_native = a_minus_zero.get_value().unwrap();
-    let zero_minus_a_native = zero_minus_a.get_value().unwrap();
-    let a_times_zero_native = a_times_zero.get_value().unwrap();
-    let zero_plus_a_native = zero_plus_a.get_value().unwrap();
-    let zero_times_a_native = zero_times_a.get_value().unwrap();
-    let a_times_one_native = a_times_one.get_value().unwrap();
-    let one_times_a_native = one_times_a.get_value().unwrap();
+        let a_plus_zero_native = a_plus_zero.get_value().unwrap();
+        let a_minus_zero_native = a_minus_zero.get_value().unwrap();
+        let zero_minus_a_native = zero_minus_a.get_value().unwrap();
+        let a_times_zero_native = a_times_zero.get_value().unwrap();
+        let zero_plus_a_native = zero_plus_a.get_value().unwrap();
+        let zero_times_a_native = zero_times_a.get_value().unwrap();
+        let a_times_one_native = a_times_one.get_value().unwrap();
+        let one_times_a_native = one_times_a.get_value().unwrap();
 
-    assert!(
-        a_plus_zero_native.eq(&a_native),
-        "a_plus_zero = {:?}, a = {:?}",
-        a_plus_zero_native.into_repr().as_ref(),
-        a_native.into_repr().as_ref()
-    );
-    assert!(
-        a_minus_zero_native.eq(&a_native),
-        "a_minus_zero = {:?}, a = {:?}",
-        a_minus_zero_native.into_repr().as_ref(),
-        a_native.into_repr().as_ref()
-    );
-    assert!(
-        zero_minus_a_native.eq(&minus_a_native),
-        "zero_minus_a = {:?}, minus_a = {:?}",
-        zero_minus_a_native.into_repr().as_ref(),
-        minus_a_native.into_repr().as_ref()
-    );
-    assert!(
-        a_times_zero_native.eq(&zero_native),
-        "a_times_zero = {:?}, zero = {:?}",
-        a_times_zero_native.into_repr().as_ref(),
-        zero_native.into_repr().as_ref()
-    );
-    assert!(
-        zero_plus_a_native.eq(&a_native),
-        "zero_plus_a = {:?}, a = {:?}",
-        zero_plus_a_native.into_repr().as_ref(),
-        a_native.into_repr().as_ref()
-    );
-    assert!(
-        zero_times_a_native.eq(&zero_native),
-        "zero_times_a = {:?}, zero = {:?}",
-        zero_times_a_native.into_repr().as_ref(),
-        zero_native.into_repr().as_ref()
-    );
-    assert!(
-        a_times_one_native.eq(&a_native),
-        "a_times_one = {:?}, a = {:?}",
-        a_times_one_native.into_repr().as_ref(),
-        a_native.into_repr().as_ref()
-    );
-    assert!(
-        one_times_a_native.eq(&a_native),
-        "one_times_a = {:?}, a = {:?}",
-        one_times_a_native.into_repr().as_ref(),
-        a_native.into_repr().as_ref()
-    );
+        assert!(
+            a_plus_zero_native.eq(&a_native),
+            "a_plus_zero = {:?}, a = {:?}",
+            a_plus_zero_native.into_repr().as_ref(),
+            a_native.into_repr().as_ref()
+        );
+        assert!(
+            a_minus_zero_native.eq(&a_native),
+            "a_minus_zero = {:?}, a = {:?}",
+            a_minus_zero_native.into_repr().as_ref(),
+            a_native.into_repr().as_ref()
+        );
+        assert!(
+            zero_minus_a_native.eq(&minus_a_native),
+            "zero_minus_a = {:?}, minus_a = {:?}",
+            zero_minus_a_native.into_repr().as_ref(),
+            minus_a_native.into_repr().as_ref()
+        );
+        assert!(
+            a_times_zero_native.eq(&zero_native),
+            "a_times_zero = {:?}, zero = {:?}",
+            a_times_zero_native.into_repr().as_ref(),
+            zero_native.into_repr().as_ref()
+        );
+        assert!(
+            zero_plus_a_native.eq(&a_native),
+            "zero_plus_a = {:?}, a = {:?}",
+            zero_plus_a_native.into_repr().as_ref(),
+            a_native.into_repr().as_ref()
+        );
+        assert!(
+            zero_times_a_native.eq(&zero_native),
+            "zero_times_a = {:?}, zero = {:?}",
+            zero_times_a_native.into_repr().as_ref(),
+            zero_native.into_repr().as_ref()
+        );
+        assert!(
+            a_times_one_native.eq(&a_native),
+            "a_times_one = {:?}, a = {:?}",
+            a_times_one_native.into_repr().as_ref(),
+            a_native.into_repr().as_ref()
+        );
+        assert!(
+            one_times_a_native.eq(&a_native),
+            "one_times_a = {:?}, a = {:?}",
+            one_times_a_native.into_repr().as_ref(),
+            a_native.into_repr().as_ref()
+        );
 
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
     }
-    assert!(cs.is_satisfied());
 }
 
 /// Checks the validity of the distributive law `(a+b)*c= a*c + b*c` on randomly
@@ -351,68 +396,70 @@ fn edge_cases_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>
 fn distribution_law_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-    let a_native = SimulationF::rand(rng);
-    let b_native = SimulationF::rand(rng);
-    let c_native = SimulationF::rand(rng);
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let a_native = SimulationF::rand(rng);
+        let b_native = SimulationF::rand(rng);
+        let c_native = SimulationF::rand(rng);
 
-    let a_plus_b_native = a_native + &b_native;
-    let a_times_c_native = a_native * &c_native;
-    let b_times_c_native = b_native * &c_native;
-    let a_plus_b_times_c_native = a_plus_b_native * &c_native;
-    let a_times_c_plus_b_times_c_native = a_times_c_native + &b_times_c_native;
+        let a_plus_b_native = a_native + &b_native;
+        let a_times_c_native = a_native * &c_native;
+        let b_times_c_native = b_native * &c_native;
+        let a_plus_b_times_c_native = a_plus_b_native * &c_native;
+        let a_times_c_plus_b_times_c_native = a_times_c_native + &b_times_c_native;
 
-    assert!(
-        a_plus_b_times_c_native.eq(&a_times_c_plus_b_times_c_native),
-        "(a + b) * c doesn't equal (a * c) + (b * c)"
-    );
+        assert!(
+            a_plus_b_times_c_native.eq(&a_times_c_plus_b_times_c_native),
+            "(a + b) * c doesn't equal (a * c) + (b * c)"
+        );
 
-    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "a"), || Ok(a_native))
-        .unwrap();
-    let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "b"), || Ok(b_native))
-        .unwrap();
-    let c = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "c"), || Ok(c_native))
-        .unwrap();
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "a"), || Ok(a_native))
+            .unwrap();
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "b"), || Ok(b_native))
+            .unwrap();
+        let c = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "c"), || Ok(c_native))
+            .unwrap();
 
-    let a_plus_b = a.add(cs.ns(|| "a + b"), &b).unwrap();
-    let a_times_c = a.mul(cs.ns(|| "a * c"), &c).unwrap();
-    let b_times_c = b.mul(cs.ns(|| "b * c"), &c).unwrap();
-    let a_plus_b_times_c = a_plus_b.mul(cs.ns(|| "(a + b) * c"), &c).unwrap();
-    let a_times_c_plus_b_times_c = a_times_c.add(cs.ns(|| "ac + bc"), &b_times_c).unwrap();
+        let a_plus_b = a.add(cs.ns(|| "a + b"), &b).unwrap();
+        let a_times_c = a.mul(cs.ns(|| "a * c"), &c).unwrap();
+        let b_times_c = b.mul(cs.ns(|| "b * c"), &c).unwrap();
+        let a_plus_b_times_c = a_plus_b.mul(cs.ns(|| "(a + b) * c"), &c).unwrap();
+        let a_times_c_plus_b_times_c = a_times_c.add(cs.ns(|| "ac + bc"), &b_times_c).unwrap();
 
-    assert!(
-        a_plus_b.get_value().unwrap().eq(&a_plus_b_native),
-        "a + b doesn't match"
-    );
-    assert!(
-        a_times_c.get_value().unwrap().eq(&a_times_c_native),
-        "a * c doesn't match"
-    );
-    assert!(
-        b_times_c.get_value().unwrap().eq(&b_times_c_native),
-        "b * c doesn't match"
-    );
-    assert!(
-        a_plus_b_times_c
-            .get_value()
-            .unwrap()
-            .eq(&a_plus_b_times_c_native),
-        "(a + b) * c doesn't match"
-    );
-    assert!(
-        a_times_c_plus_b_times_c
-            .get_value()
-            .unwrap()
-            .eq(&a_times_c_plus_b_times_c_native),
-        "(a * c) + (b * c) doesn't match"
-    );
-    assert!(
-        a_plus_b_times_c_native.eq(&a_times_c_plus_b_times_c_native),
-        "(a + b) * c != (a * c) + (b * c)"
-    );
-    assert!(cs.is_satisfied());
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
+        assert!(
+            a_plus_b.get_value().unwrap().eq(&a_plus_b_native),
+            "a + b doesn't match"
+        );
+        assert!(
+            a_times_c.get_value().unwrap().eq(&a_times_c_native),
+            "a * c doesn't match"
+        );
+        assert!(
+            b_times_c.get_value().unwrap().eq(&b_times_c_native),
+            "b * c doesn't match"
+        );
+        assert!(
+            a_plus_b_times_c
+                .get_value()
+                .unwrap()
+                .eq(&a_plus_b_times_c_native),
+            "(a + b) * c doesn't match"
+        );
+        assert!(
+            a_times_c_plus_b_times_c
+                .get_value()
+                .unwrap()
+                .eq(&a_times_c_plus_b_times_c_native),
+            "(a * c) + (b * c) doesn't match"
+        );
+        assert!(
+            a_plus_b_times_c_native.eq(&a_times_c_plus_b_times_c_native),
+            "(a + b) * c != (a * c) + (b * c)"
+        );
+        assert!(cs.is_satisfied());
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
     }
 }
 
@@ -423,71 +470,73 @@ fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
 ) {
     use rand::prelude::SliceRandom;
 
-    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
-    // Sample random operations to perform
-    let mut operations = (0..=2)
-        .flat_map(|op| vec![op; TEST_COUNT])
-        .collect::<Vec<_>>();
-    operations.shuffle(rng);
+        // Sample random operations to perform
+        let mut operations = (0..=2)
+            .flat_map(|op| vec![op; TEST_COUNT])
+            .collect::<Vec<_>>();
+        operations.shuffle(rng);
 
-    let mut num_native = SimulationF::rand(rng);
-    let mut num =
-        NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "initial num"), || {
-            Ok(num_native)
-        })
-        .unwrap();
-    for (i, op) in operations.iter().enumerate() {
-        let next_native = SimulationF::rand(rng);
-        let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
-            cs.ns(|| format!("next num for repetition {}", i)),
-            || Ok(next_native),
-        )
-        .unwrap();
-        match op {
-            0 => {
-                num_native += &next_native;
-                num.add_in_place(cs.ns(|| format!("num += next {}", i)), &next)
-                    .unwrap();
-            }
-            // 1 => {
-            //     num_native *= &next_native;
-            //     num.mul_in_place(cs.ns(|| format!("num *= next {}", i)), &next)
-            //         .unwrap();
-            //     assert!(num.get_value().unwrap().eq(&num_native));
-            //     println!("i: {}", i);
-            //     println!("mul:{}", num.get_value().unwrap().eq(&num_native));
-            // }
-            2 => {
-                num_native -= &next_native;
-                num.sub_in_place(cs.ns(|| format!("num -= next {}", i)), &next)
-                    .unwrap();
-                assert!(num.get_value().unwrap().eq(&num_native));
-                println!("i: {}", i);
-                println!("sub:{}", num.get_value().unwrap().eq(&num_native));
-            }
-            _ => (),
-        };
+        let mut num_native = SimulationF::rand(rng);
+        let mut num =
+            NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "initial num"), || {
+                Ok(num_native)
+            })
+            .unwrap();
+        for (i, op) in operations.iter().enumerate() {
+            let next_native = SimulationF::rand(rng);
+            let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
+                cs.ns(|| format!("next num for repetition {}", i)),
+                || Ok(next_native),
+            )
+            .unwrap();
+            match op {
+                0 => {
+                    num_native += &next_native;
+                    num.add_in_place(cs.ns(|| format!("num += next {}", i)), &next)
+                        .unwrap();
+                }
+                1 => {
+                    num_native *= &next_native;
+                    num.mul_in_place(cs.ns(|| format!("num *= next {}", i)), &next)
+                        .unwrap();
+                    assert!(num.get_value().unwrap().eq(&num_native));
+                    println!("i: {}", i);
+                    println!("mul:{}", num.get_value().unwrap().eq(&num_native));
+                }
+                2 => {
+                    num_native -= &next_native;
+                    num.sub_in_place(cs.ns(|| format!("num -= next {}", i)), &next)
+                        .unwrap();
+                    assert!(num.get_value().unwrap().eq(&num_native));
+                    println!("i: {}", i);
+                    println!("sub:{}", num.get_value().unwrap().eq(&num_native));
+                }
+                _ => (),
+            };
 
-        assert!(
-            num.get_value().unwrap().eq(&num_native),
-            "randomized arithmetic failed:"
-        );
+            assert!(
+                num.get_value().unwrap().eq(&num_native),
+                "randomized arithmetic failed:"
+            );
+        }
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
     }
-
-    if !cs.is_satisfied() {
-        println!("{:?}", cs.which_is_unsatisfied());
-    }
-    assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT +  2*ConstraintF::size_in_bits()` many `add_in_place` on a random instance.
+/// Tests correctness of `STRESS_TEST_COUNT` many `add_in_place` on a random instance.
 fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num = NonNativeFieldGadget::alloc(cs.ns(|| "initial num"), || Ok(num_native)).unwrap();
-    for i in 0..TEST_COUNT + 2 * ConstraintF::size_in_bits() {
+    for i in 0..STRESS_TEST_COUNT {
         let next_native = SimulationF::rand(rng);
         let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("next num for repetition {}", i)),
@@ -507,13 +556,13 @@ fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT +  2*ConstraintF::size_in_bits()` many `sub_in_place` on a random instance.
+/// Tests correctness of `STRESS_TEST_COUNT` many `sub_in_place` on a random instance.
 fn substraction_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num = NonNativeFieldGadget::alloc(cs.ns(|| "initial num"), || Ok(num_native)).unwrap();
-    for i in 0..TEST_COUNT + 2 * ConstraintF::size_in_bits() {
+    for i in 0..STRESS_TEST_COUNT {
         let next_native = SimulationF::rand(rng);
         let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("next num for repetition {}", i)),
@@ -521,8 +570,13 @@ fn substraction_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R:
         )
         .unwrap();
         num_native -= &next_native;
-        num.sub_in_place(cs.ns(|| format!("num += next {}", i)), &next)
-            .unwrap();
+        let neg_next = next.negate(
+            cs.ns(||format!("nex num negate {}",i))
+        ).unwrap();
+
+        num = num.add(
+            cs.ns(|| format!("num -= next {}", i)), &neg_next
+            ).unwrap();
 
         assert!(num.get_value().unwrap().eq(&num_native));
     }
@@ -533,7 +587,38 @@ fn substraction_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R:
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT` many `mul_in_place` on a random instance.
+fn negation_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+
+    let num_native = SimulationF::rand(rng);
+    let mut num = NonNativeFieldGadget::alloc(cs.ns(|| "initial num"), || Ok(num_native)).unwrap();
+    for i in 0..STRESS_TEST_COUNT {
+        num = num.negate(
+            cs.ns(
+                || format!("negate num {}", i)
+            )
+        ).unwrap();
+        let num_val = num.get_value().unwrap();
+        if i%2 == 0 {
+            assert!(
+                num_val.eq(&(-num_native)),
+                "num should be minus initial value"
+            )
+        } else {
+            assert!(
+                num_val.eq(&num_native),
+                "num should be initial value"
+            )
+        }
+    }
+
+    if !cs.is_satisfied() {
+        println!("{:?}", cs.which_is_unsatisfied());
+    }
+    assert!(cs.is_satisfied());
+}
+
+/// Tests correctness of `STRESS_TEST_COUNT` many `mul_in_place` on a random instance.
 fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -545,7 +630,7 @@ fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
             Ok(num_native)
         })
         .unwrap();
-    for i in 0..TEST_COUNT {
+    for i in 0..STRESS_TEST_COUNT {
         let next_native = SimulationF::rand(rng);
         let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("next num for repetition {}", i)),
@@ -565,7 +650,7 @@ fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT` many `mul_in_place` on a random instance.
+/// Tests correctness of `STRESS_TEST_COUNT` many `mul_in_place` on a random instance.
 fn multiplication_by_constant_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
@@ -577,7 +662,7 @@ fn multiplication_by_constant_stress_test<SimulationF: PrimeField, ConstraintF: 
             Ok(num_native)
         })
         .unwrap();
-    for i in 0..TEST_COUNT {
+    for i in 0..STRESS_TEST_COUNT {
         let next_native = SimulationF::rand(rng);
         num_native *= &next_native;
         num = num.mul_by_constant(cs.ns(|| format!("num *= next {}", i)), &next_native)
@@ -592,7 +677,7 @@ fn multiplication_by_constant_stress_test<SimulationF: PrimeField, ConstraintF: 
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT` many steps of the randomized recursion
+/// Tests correctness of `STRESS_TEST_COUNT` many steps of the randomized recursion
 /// `x <- b*x + a`, starting with a random non-native `x`.
 fn mul_and_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
@@ -605,7 +690,7 @@ fn mul_and_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: 
             Ok(num_native)
         })
         .unwrap();
-    for i in 0..TEST_COUNT {
+    for i in 0..STRESS_TEST_COUNT {
         let next_add_native = SimulationF::rand(rng);
         let next_add = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("next to add num for repetition {}", i)),
@@ -638,7 +723,7 @@ fn mul_and_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: 
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT` many steps of the randomized recursion
+/// Tests correctness of `STRESS_TEST_COUNT` many steps of the randomized recursion
 /// `x <- x*x*b + a`, starting with a random non-native `x`.
 fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
@@ -651,7 +736,7 @@ fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
             Ok(num_native)
         })
         .unwrap();
-    for i in 0..TEST_COUNT {
+    for i in 0..STRESS_TEST_COUNT {
         let next_add_native = SimulationF::rand(rng);
         let next_add = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("next to add num for repetition {}", i)),
@@ -686,7 +771,7 @@ fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT + ConstraintF::size_in_bits()` many steps of the recursion
+/// Tests correctness of `STRESS_TEST_COUNT` many steps of the recursion
 /// `x <- x+x`, starting with a random non-native `x`.
 fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
@@ -697,13 +782,14 @@ fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
             Ok(num_native)
         })
         .unwrap();
-    // Add to at least ConstraintF::size_in_bits() to ensure that we treat the overflowing
-    for i in 0..TEST_COUNT + ConstraintF::size_in_bits() {
+    // Add to at least STRESS_TEST_COUNT to ensure that we treat the overflowing
+    for i in 0..STRESS_TEST_COUNT {
         // double
         num_native = num_native + &num_native;
         num = num.add(cs.ns(|| format!("num + num {}", i)), &num).unwrap();
 
         assert!(num.get_value().unwrap().eq(&num_native), "result incorrect");
+        let _neg_num = num.negate(cs.ns(||format!("negate num {}", i))).unwrap();
     }
 
     if !cs.is_satisfied() {
@@ -712,7 +798,7 @@ fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT` many steps of the recursion
+/// Tests correctness of `STRESS_TEST_COUNT` many steps of the recursion
 /// `x <- x+x`, starting with a random non-native `x`, 
 fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
@@ -723,7 +809,7 @@ fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
             Ok(num_native)
         })
         .unwrap();
-    for i in 0..TEST_COUNT {
+    for i in 0..STRESS_TEST_COUNT {
         // double
         num_native = num_native + &num_native;
         num = num.add(cs.ns(|| format!("num + num {}", i)), &num).unwrap();
@@ -733,7 +819,12 @@ fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
         // square
         let num_square_native = num_native * &num_native;
         let num_square = num.mul(cs.ns(|| format!("num * num {}", i)), &num).unwrap();
-        assert!(num_square.get_value().unwrap().eq(&num_square_native));
+        debug_assert!(
+            num_square.check(),
+            "num_square fails on check()"
+        );
+        let value = num_square.get_value().unwrap();
+        assert!(value.eq(&num_square_native));
     }
 
     if !cs.is_satisfied() {
@@ -742,7 +833,7 @@ fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of `TEST_COUNT` many steps of the recursion
+/// Tests correctness of `STRESS_TEST_COUNT` many steps of the recursion
 /// `x <- (x+x)*(x+x)`, starting with a random non-native `x`.  
 fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
@@ -753,7 +844,7 @@ fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
             Ok(num_native)
         })
         .unwrap();
-    for i in 0..1{
+    for i in 0..STRESS_TEST_COUNT{
         // double
         num_native = num_native + &num_native;
         num = num.add(cs.ns(|| format!("num + num {}", i)), &num).unwrap();
@@ -785,11 +876,11 @@ fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
     assert!(cs.is_satisfied());
 }
 
-/// Tests correctness of inverse on `TEST_COUNT` many random instances.
+/// Tests correctness of inverse on `STRESS_TEST_COUNT` many random instances.
 fn inverse_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
-    for i in 0..TEST_COUNT {
+    for i in 0..STRESS_TEST_COUNT {
         let num_native = SimulationF::rand(rng);
         let num = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
             cs.ns(|| format!("num {}", i)),
@@ -830,7 +921,7 @@ fn even_odd_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
         .get_value()
         .unwrap());
 
-    for i in 0..TEST_COUNT {
+    for i in 0..STRESS_TEST_COUNT {
         let mut iter_cs = cs.ns(|| format!("iter_{}", i));
 
         let random_native = SimulationF::rand(rng);
@@ -1040,17 +1131,15 @@ fn to_bytes_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: 
     }
 }
 
-// Macros for implementing above tests on non-native arithmetics
+/* Macros for implementing above tests on non-native arithmetics
+*/
 macro_rules! nonnative_test_individual {
     ($test_method:ident, $test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
         paste::item! {
             #[test]
             fn [<$test_method _ $test_name:lower>]() {
                 let rng = &mut thread_rng();
-
-                for _ in 0..NUM_REPETITIONS {
-                    $test_method::<$test_simulation_field, $test_constraint_field, _>(rng);
-                }
+                $test_method::<$test_simulation_field, $test_constraint_field, _>(rng);
             }
         }
     };
@@ -1058,6 +1147,8 @@ macro_rules! nonnative_test_individual {
 
 macro_rules! nonnative_test {
     ($test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
+        /* simple arithmetic tests
+        */
         nonnative_test_individual!(
             allocation_test,
             $test_name,
@@ -1066,6 +1157,12 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             addition_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            substraction_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
@@ -1106,6 +1203,9 @@ macro_rules! nonnative_test {
             $test_simulation_field,
             $test_constraint_field
         );
+
+        /* Stress tests
+        */
         nonnative_test_individual!(
             addition_stress_test,
             $test_name,
@@ -1114,6 +1214,12 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             substraction_stress_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            negation_stress_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
@@ -1172,6 +1278,9 @@ macro_rules! nonnative_test {
             $test_simulation_field,
             $test_constraint_field
         );
+
+        /* auxiliary tests
+        */
         nonnative_test_individual!(
             from_bits_test,
             $test_name,
@@ -1201,34 +1310,31 @@ macro_rules! nonnative_test {
 
 // Implementation of the above non-native arithmetic tests for different curves
 #[cfg(feature = "tweedle")]
-nonnative_test!(TweedleFqFr, TweedleFq, TweedleFr);
+nonnative_test!(TweedleFq_over_Fr, TweedleFq, TweedleFr);
 
 #[cfg(feature = "tweedle")]
-nonnative_test!(TweedleFrFq, TweedleFr, TweedleFq);
+nonnative_test!(TweedleFr_over_Fq, TweedleFr, TweedleFq);
 
 #[cfg(feature = "bn_382")]
-nonnative_test!(Bn382FqFr, Bn382Fq, Bn382Fr);
+nonnative_test!(Bn382Fq_over_Fr, Bn382Fq, Bn382Fr);
 
 #[cfg(feature = "bn_382")]
-nonnative_test!(Bn382FrFq, Bn382Fr, Bn382Fq);
+nonnative_test!(Bn382Fr_over_Fq, Bn382Fr, Bn382Fq);
 
 #[cfg(all(feature = "bn_382", feature = "secp256k1"))]
-nonnative_test!(Bn382Frsecp256k1Fq, Bn382Fr, secp256k1Fq);
+nonnative_test!(secp256k1Fq_over_Bn382Fr, secp256k1Fq, Bn382Fr);
 
 #[cfg(all(feature = "bn_382", feature = "secp256k1"))]
-nonnative_test!(Bn382Frsecp256k1Fr, Bn382Fr, secp256k1Fr);
+nonnative_test!(secp256k1Fr_over_Bn382Fr, secp256k1Fr, Bn382Fr);
 
 #[cfg(all(feature = "tweedle", feature = "ed25519"))]
-nonnative_test!(TweedleFred25519Fq, TweedleFr, ed25519Fq);
-
-#[cfg(all(feature = "tweedle", feature = "ed25519"))]
-nonnative_test!(TweedleFred25519Fr, TweedleFr, ed25519Fr);
+nonnative_test!(ed25519Fq_over_TweedleFr, ed25519Fq, TweedleFr);
 
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
-nonnative_test!(Bn382FrTweedleFq, Bn382Fr, TweedleFq);
+nonnative_test!(Bn382Fr_over_TweedleFq, Bn382Fr, TweedleFq);
 
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
-nonnative_test!(TweedleFqBn382Fr, TweedleFq, Bn382Fr);
+nonnative_test!(TweedleFq_over_Bn382Fr, TweedleFq, Bn382Fr);
 
-#[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
-nonnative_test!(TweedleFrMnt4753Fq, TweedleFr, Mnt4753Fq);
+// #[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
+// nonnative_test!(TweedleFr_over_Mnt4753Fq, TweedleFr, Mnt4753Fq);

@@ -73,7 +73,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 {
     /// A function for test purposes. Returns `true` if `&self.num_add` respects 
     /// the capacity bound, and bounds all the limbs correctly.
-    //#[cfg(test)]
     pub(crate) fn check(&self) -> bool {
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
@@ -173,7 +172,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             limbs.push(sum);
         }
 
-        Ok(Self {
+        let result = Self {
             limbs,
             // Since 
             // ``
@@ -185,7 +184,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 + &other.num_of_additions_over_normal_form
                 + &ConstraintF::one(),
             simulation_phantom: PhantomData,
-        })
+        };
+
+        debug_assert!(
+            result.check(),
+            "add_without_prereduce(): result failed on check()"
+        );
+
+        Ok(result)
     }
 
     /// Low-level function for subtract a nonnative field element `other` from `self` modulo `p`. 
@@ -217,10 +223,16 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let surfeit = ceil_log_2!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(5u8));
+        let surfeit = ceil_log_2!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form 
+            + &ConstraintF::from(5u8));
         
         if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
-            return Err(SynthesisError::Other(format!("Security bound exceeded for sub_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)));
+            return Err(
+                SynthesisError::Other(
+                    format!("Security bound exceeded for sub_without_prereduce. Max: {}, Actual: {}", 
+                    ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)
+                )
+            );
         }
 
         // To prove that a limb representation [D[0],D[1],...] corresponds to the difference of 
@@ -271,8 +283,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 - ConstraintF::one();
 
         pad_top_limb_repr.muln(
-             (SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb)
-                as u32,
+            (SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb)
+            as u32
         );
         let pad_top_limb = ((other.num_of_additions_over_normal_form + ConstraintF::one()) 
             * ConstraintF::from_repr(pad_top_limb_repr)) 
@@ -361,6 +373,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 + ConstraintF::one() + ConstraintF::one(),
             simulation_phantom: PhantomData,
         };
+
+        debug_assert!(
+            result.check(),
+            "sub(): result fails on check()"
+        );
 
         Ok(result)
     }
@@ -508,11 +525,18 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         //      num_add(product) =  num_limbs * (num_add(L) + 1) * (num_add(R) + 1) - 1. 
         // ``
-        Ok(NonNativeFieldMulResultGadget {
+        let result = NonNativeFieldMulResultGadget {
             limbs: prod_limbs,
             num_add_over_normal_form: num_add_bound - ConstraintF::one(),
             simulation_phantom: PhantomData,
-        })
+        };
+
+        debug_assert!(
+            result.check(),
+            "mul_without_prereduce(): result failed on check()"
+        );
+
+        Ok(result)
     }
 
     /// For advanced use, multiply and output the intermediate representations (without reduction)
@@ -853,6 +877,28 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         // Step 3: reduction of the product to normal form
         let res_reduced = res.reduce(cs.ns(|| "reduce result"))?;
         Ok(res_reduced)
+    }
+
+    // TODO: This is as the default implementation. I have put it here
+    // as we can implement an improved variant, which does not reduce
+    // twice. 
+    fn mul_equals<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        other: &Self,
+        result: &Self,
+    ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            self.check() && other.check(),
+            "mul_equals(): check() failed on input gadgets " 
+        );
+        let actual_result = self.mul(cs.ns(|| "calc_actual_result"), other)?;
+        debug_assert!(
+            actual_result.check(),
+            "mul_equals(): check() failed on actual_result." 
+        );
+
+        result.enforce_equal(&mut cs.ns(|| "test_equals"), &actual_result)
     }
 
     fn inverse<CS: ConstraintSystemAbstract<ConstraintF>>(

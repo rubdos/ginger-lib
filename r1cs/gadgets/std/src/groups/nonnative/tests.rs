@@ -5,34 +5,23 @@ use crate::groups::{
     test::{group_test_with_incomplete_add, mul_bits_native_test},
 };
 
+#[cfg(feature = "tweedle")]
+use algebra::fields::tweedle::Fr as TweedleFr;
 
-#[cfg(all(feature = "ed25519", feature = "tweedle"))]
+#[cfg(feature = "bn_382")]
+use algebra::fields::bn_382::fr::Fr as BN382Fr;
+
+#[cfg(feature = "ed25519")]
 use algebra::{
     curves::ed25519::Ed25519Parameters,
-    fields::{
-        ed25519::fq::Fq as ed25519Fq,
-        tweedle::Fr as TweedleFr,
-    },
+    fields::ed25519::fq::Fq as ed25519Fq,
 };
 
-#[cfg(all(feature = "secp256k1", feature = "tweedle"))]
+#[cfg(feature = "secp256k1")]
 use algebra::{
     curves::secp256k1::Secp256k1Parameters,
-    fields::{
-        secp256k1::fq::Fq as secp256k1Fq,
-        tweedle::Fr as TweedleFr,
-    },
+    fields::secp256k1::fq::Fq as secp256k1Fq,
 };
-
-#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
-use algebra::{
-    curves::secp256k1::Secp256k1Parameters,
-    fields::{
-        secp256k1::fq::Fq as secp256k1Fq,
-        bn_382::fr::Fr as BN382Fr,
-    },
-};
-
 
 macro_rules! nonnative_test_individual {
     ($test_method:ident, $test_name:ident, $num_samples:expr, $group_params:ty, $test_constraint_field:ty, $test_simulation_field:ty) => {
