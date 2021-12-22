@@ -16,6 +16,8 @@ use r1cs_core::{
 use rand::{thread_rng, Rng, RngCore};
 use std::marker::PhantomData;
 
+use num_bigint::BigUint;
+
 use crate::{
     alloc::AllocGadget,
     bits::boolean::Boolean,
@@ -30,11 +32,32 @@ use crate::{
         },
         FieldGadget,
     },
-    FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget, ceil_log_2
+    FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget, ceil_log_2, ceil_log_2_biguint
 };
+
 
 const TEST_COUNT: usize = 100;
 const STRESS_TEST_COUNT: usize = 200;
+
+#[test]
+fn ceil_log_2_biguint_test() {
+    let rng = &mut thread_rng();
+    for _ in 0..TEST_COUNT {
+        let n = rng.gen_range(0..512);
+        let mut x = BigUint::from(2u32).pow(n as u32);
+        let mut result = ceil_log_2_biguint!(x.clone());
+        assert!(
+            result == n,
+            "ceil_log_2!() outputs wrong log on pure power of two."
+        );
+        x += 1u32;
+        result = ceil_log_2_biguint!(x.clone());
+        assert!(
+            result == n + 1,
+            "ceil_log_2!() outputs wrong log on a power of two, plus one."
+        );
+    }
+}
 
 #[test]
 fn get_params_test() {
