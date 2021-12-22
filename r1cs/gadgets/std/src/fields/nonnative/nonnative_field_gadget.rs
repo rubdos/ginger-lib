@@ -29,6 +29,8 @@ use std::cmp::max;
 use std::marker::PhantomData;
 use std::{borrow::Borrow, vec, vec::Vec};
 
+use num_bigint::BigUint;
+
 #[derive(Debug, Eq, PartialEq)]
 #[must_use]
 pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField> {
@@ -61,7 +63,10 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
     /// ``
     ///     surfeit = len(num_of_additions_over_normal_form + 1).
     /// ``
-    pub num_of_additions_over_normal_form: ConstraintF,
+    // TODO: an alternative choice would be <ConstraintF as PrimeField>BigInt
+    // but this would make computations on it more difficult, as they might 
+    // exceed the max value of BigInt.
+    pub num_of_additions_over_normal_form: BigUint,
     /// Whether the limb representation is the normal form, i.e. has the same
     /// number of bits as the non-native modulus.
     #[doc(hidden)]
