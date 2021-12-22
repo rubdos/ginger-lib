@@ -25,14 +25,15 @@ use crate::{
         nonnative::{
             nonnative_field_gadget::NonNativeFieldGadget,
             nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget,
-            params::get_params
+            params::get_params,
+            reduce::Reducer,
         },
         FieldGadget,
     },
     FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget, ceil_log_2
 };
 
-const TEST_COUNT: usize = 50;
+const TEST_COUNT: usize = 100;
 const STRESS_TEST_COUNT: usize = 200;
 
 #[test]
@@ -147,22 +148,140 @@ fn alloc_random_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCor
     }   
 }
 
+fn enforce_equal_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        // enforce_equal() of a non-native versus itself assumes that  
+        // ``
+        //  bit_per_limb + log(2*num_add + 3) <= CAPACITY - 2.
+        // ``
+        // Since alloc_random returns a non-native with `num_adds = 2^surfeit - 1`, we need
+        // to assure that
+        // ``
+        //      2^{surfeit + 1} + 2 <= 2^{CAPACITY - 2 - bits_per_limb}.
+        // ``
+        // For simplicity, we demand the slightly stricter condition 
+        // ``
+        //      2^{surfeit + 2} <= 2^{CAPACITY - 2 - bits_per_limb}
+        // ``
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
+
+        let surfeit_a = rng.gen_range(0..=surfeit_bound);       
+
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random a" ),
+            rng, 
+            surfeit_a).unwrap();
+        assert!(
+            a.check(), 
+            "random allocated gadget fails on check()"
+        );
+
+        let a_value = a.get_value().unwrap();
+
+        let a_normal_form = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
+            cs.ns(|| "alloc random b" ),
+            || {Ok(a_value)} ).unwrap();
+        assert!(
+            a_normal_form.check(), 
+            "allocated normal form fails on check()"
+        );
+
+        a
+            .enforce_equal(cs.ns(|| "non-normal form == normal form"), &a_normal_form)
+            .unwrap();
+        a
+            .enforce_equal(cs.ns(|| "non-normal form == non-normal form"), &a)
+            .unwrap();
+        a_normal_form
+            .enforce_equal(cs.ns(|| "normal form == non-normal form"), &a)
+            .unwrap();
+        a_normal_form
+            .enforce_equal(cs.ns(|| "normal form == normal form"), &a_normal_form)
+            .unwrap();
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+    }
+}
+
+fn reduce_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        // To sample a reducible non-native we need to assure that
+        // ``
+        //      2^{surfeit + 1} + 2 <= 2^{CAPACITY - 2 - bits_per_limb}.
+        // ``
+        // For simplicity, we demand the slightly stricter condition 
+        // ``
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        // ``
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+
+        let surfeit_a = rng.gen_range(0..=surfeit_bound);      
+
+        let mut a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random a" ),
+            rng, 
+            surfeit_a).unwrap();
+        assert!(
+            a.check(), 
+            "random allocated gadget fails on check()"
+        );
+        let value = a.get_value().unwrap();
+        
+        Reducer::<SimulationF, ConstraintF>::reduce(cs.ns(|| "reduce gadget"), &mut a).unwrap();
+        assert!(
+            a.check(),
+            "reduced gadget fails on check()"
+        );
+
+        assert!(
+            value == a.get_value().unwrap(),
+            "value of non-reduced and reduced gadgets differ."
+        );
+        
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+    }
+}
 
 fn addition_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
-        let a_native = SimulationF::rand(rng);
-        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-            Ok(a_native)
-        })
-        .unwrap();
+        // We sample reducible nonnatives. For simplicity, we demand the slightly 
+        // stricter condition 
+        // ``
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        // ``
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
 
-        let b_native = SimulationF::rand(rng);
-        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
-            Ok(b_native)
-        })
-        .unwrap();
+        let surfeit_a = rng.gen_range(0..=surfeit_bound);
+        let surfeit_b = rng.gen_range(0..=surfeit_bound);        
+
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random a" ),
+            rng, 
+            surfeit_a).unwrap();
+
+        let a_native = a.get_value().unwrap();
+
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random b" ),
+            rng, 
+            surfeit_b).unwrap();
+
+        let b_native = b.get_value().unwrap();
 
         let a_plus_b = a.add(cs.ns(|| "a + b"), &b).unwrap();
         assert!(
@@ -183,20 +302,43 @@ fn addition_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(r
 fn substraction_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
-        let a_native = SimulationF::rand(rng);
-        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-            Ok(a_native)
-        })
-        .unwrap();
+        // We sample reducible nonnatives. For simplicity, we demand the slightly 
+        // stricter condition 
+        // ``
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        // ``
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
 
-        let b_native = SimulationF::rand(rng);
-        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
-            Ok(b_native)
-        })
-        .unwrap();
+        let surfeit_a = rng.gen_range(0..=surfeit_bound);
+        let surfeit_b = rng.gen_range(0..=surfeit_bound);        
 
-        let a_minus_b = a.sub(cs.ns(|| "a + b"), &b).unwrap();
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random a" ),
+            rng, 
+            surfeit_a).unwrap();
+
+        assert!(
+            a.check(), 
+            "random allocated a fails on check()"
+        );
+
+        let a_native = a.get_value().unwrap();
+
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random b" ),
+            rng, 
+            surfeit_b).unwrap();
+
+        assert!(
+            b.check(), 
+            "random allocated b fails on check()"
+        );
+
+        let b_native = b.get_value().unwrap();
+
+        let a_minus_b = a.sub(cs.ns(|| "a - b"), &b).unwrap();
         assert!(
             a_minus_b.check()
         );
@@ -212,20 +354,85 @@ fn substraction_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCor
     }
 }
 
+fn negation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        // We sample reducible nonnatives. For simplicity, we demand the slightly 
+        // stricter condition 
+        // ``
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        // ``
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+
+        let surfeit_a = rng.gen_range(0..=surfeit_bound);       
+
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random a" ),
+            rng, 
+            surfeit_a).unwrap();
+        assert!(
+            a.check(), 
+            "random allocated a fails on check()"
+        );
+
+        let b = a.negate(cs.ns(|| "negate a")).unwrap();
+        assert!(
+            b.check(), 
+            "negated a fails on check()"
+        );
+
+        assert!(
+            b.get_value().unwrap() == -(a.get_value().unwrap()), 
+            "a.negate() failed"
+        );
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+    }
+}
+
 fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let a_native = SimulationF::rand(rng);
-        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-            Ok(a_native)
-        })
-        .unwrap();
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
-        let b_native = SimulationF::rand(rng);
-        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
-            Ok(b_native)
-        })
-        .unwrap();
+        // We sample reducible nonnatives. For simplicity, we demand the slightly 
+        // stricter condition 
+        // ``
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        // ``
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+
+        let surfeit_a = rng.gen_range(0..=surfeit_bound);
+        let surfeit_b = rng.gen_range(0..=surfeit_bound);        
+
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random a" ),
+            rng, 
+            surfeit_a).unwrap();
+
+        assert!(
+            a.check(), 
+            "random allocated a fails on check()"
+        );
+
+        let a_native = a.get_value().unwrap();
+
+        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random b" ),
+            rng, 
+            surfeit_b).unwrap();
+
+        assert!(
+            b.check(), 
+            "random allocated b fails on check()"
+        );
+
+        let b_native = b.get_value().unwrap();
 
         let a_times_b = a.mul(cs.ns(|| "a * b"), &b).unwrap();
 
@@ -250,11 +457,28 @@ fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
 fn multiplication_by_constant_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let a_native = SimulationF::rand(rng);
-        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-            Ok(a_native)
-        })
-        .unwrap();
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        // We sample reducible nonnatives. For simplicity, we demand the slightly 
+        // stricter condition 
+        // ``
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        // ``
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+
+        let surfeit_a = rng.gen_range(0..=surfeit_bound);    
+
+        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+            cs.ns(|| "alloc random a" ),
+            rng, 
+            surfeit_a).unwrap();
+
+        assert!(
+            a.check(), 
+            "random allocated a fails on check()"
+        );
+
+        let a_native = a.get_value().unwrap();
 
         let b_native = SimulationF::rand(rng);
 
@@ -270,48 +494,6 @@ fn multiplication_by_constant_test<SimulationF: PrimeField, ConstraintF: PrimeFi
             a_times_b_actual.into_repr().as_ref(),
             a_times_b_expected.into_repr().as_ref()
         );
-
-        if !cs.is_satisfied() {
-            println!("{:?}", cs.which_is_unsatisfied());
-        }
-        assert!(cs.is_satisfied());
-    }
-}
-
-/// Checks the `mul` of two randomly sampled non-natives against the expected
-/// value as NonNativeFieldGadget in reduced form.
-fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    for _ in 0..TEST_COUNT {
-        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-
-        let a_native = SimulationF::rand(rng);
-        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
-            Ok(a_native)
-        })
-        .unwrap();
-
-        let b_native = SimulationF::rand(rng);
-        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc b"), || {
-            Ok(b_native)
-        })
-        .unwrap();
-
-        let a_times_b = a.mul(cs.ns(|| "a * b"), &b).unwrap();
-
-        let a_times_b_expected = a_native * &b_native;
-        let a_times_b_expected_gadget =
-            NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a * b"), || {
-                Ok(a_times_b_expected)
-            })
-            .unwrap();
-
-        assert!(
-            a_times_b.get_value().unwrap() == a_times_b_expected
-        );
-
-        a_times_b
-            .enforce_equal(cs.ns(|| "expected == actual"), &a_times_b_expected_gadget)
-            .unwrap();
 
         if !cs.is_satisfied() {
             println!("{:?}", cs.which_is_unsatisfied());
@@ -483,73 +665,6 @@ fn distribution_law_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rn
         if !cs.is_satisfied() {
             println!("{:?}", cs.which_is_unsatisfied());
         }
-    }
-}
-
-/// Tests correctness of `add_in_place`, `sub_in_place` and `mul_in_place` on randomly sampled
-/// non-natives.
-fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
-    rng: &mut R,
-) {
-    use rand::prelude::SliceRandom;
-
-    for _ in 0..TEST_COUNT {
-        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-
-        // Sample random operations to perform
-        let mut operations = (0..=2)
-            .flat_map(|op| vec![op; TEST_COUNT])
-            .collect::<Vec<_>>();
-        operations.shuffle(rng);
-
-        let mut num_native = SimulationF::rand(rng);
-        let mut num =
-            NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "initial num"), || {
-                Ok(num_native)
-            })
-            .unwrap();
-        for (i, op) in operations.iter().enumerate() {
-            let next_native = SimulationF::rand(rng);
-            let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
-                cs.ns(|| format!("next num for repetition {}", i)),
-                || Ok(next_native),
-            )
-            .unwrap();
-            match op {
-                0 => {
-                    num_native += &next_native;
-                    num.add_in_place(cs.ns(|| format!("num += next {}", i)), &next)
-                        .unwrap();
-                }
-                1 => {
-                    num_native *= &next_native;
-                    num.mul_in_place(cs.ns(|| format!("num *= next {}", i)), &next)
-                        .unwrap();
-                    assert!(num.get_value().unwrap().eq(&num_native));
-                    println!("i: {}", i);
-                    println!("mul:{}", num.get_value().unwrap().eq(&num_native));
-                }
-                2 => {
-                    num_native -= &next_native;
-                    num.sub_in_place(cs.ns(|| format!("num -= next {}", i)), &next)
-                        .unwrap();
-                    assert!(num.get_value().unwrap().eq(&num_native));
-                    println!("i: {}", i);
-                    println!("sub:{}", num.get_value().unwrap().eq(&num_native));
-                }
-                _ => (),
-            };
-
-            assert!(
-                num.get_value().unwrap().eq(&num_native),
-                "randomized arithmetic failed:"
-            );
-        }
-
-        if !cs.is_satisfied() {
-            println!("{:?}", cs.which_is_unsatisfied());
-        }
-        assert!(cs.is_satisfied());
     }
 }
 
@@ -798,6 +913,73 @@ fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
         println!("{:?}", cs.which_is_unsatisfied());
     }
     assert!(cs.is_satisfied());
+}
+
+/// Tests correctness of `add_in_place`, `sub_in_place` and `mul_in_place` on randomly sampled
+/// non-natives.
+fn randomized_arithmetic_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
+    rng: &mut R,
+) {
+    use rand::prelude::SliceRandom;
+
+    for _ in 0..TEST_COUNT {
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+
+        // Sample random operations to perform
+        let mut operations = (0..=2)
+            .flat_map(|op| vec![op; TEST_COUNT])
+            .collect::<Vec<_>>();
+        operations.shuffle(rng);
+
+        let mut num_native = SimulationF::rand(rng);
+        let mut num =
+            NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "initial num"), || {
+                Ok(num_native)
+            })
+            .unwrap();
+        for (i, op) in operations.iter().enumerate() {
+            let next_native = SimulationF::rand(rng);
+            let next = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
+                cs.ns(|| format!("next num for repetition {}", i)),
+                || Ok(next_native),
+            )
+            .unwrap();
+            match op {
+                0 => {
+                    num_native += &next_native;
+                    num.add_in_place(cs.ns(|| format!("num += next {}", i)), &next)
+                        .unwrap();
+                }
+                1 => {
+                    num_native *= &next_native;
+                    num.mul_in_place(cs.ns(|| format!("num *= next {}", i)), &next)
+                        .unwrap();
+                    assert!(num.get_value().unwrap().eq(&num_native));
+                    println!("i: {}", i);
+                    println!("mul:{}", num.get_value().unwrap().eq(&num_native));
+                }
+                2 => {
+                    num_native -= &next_native;
+                    num.sub_in_place(cs.ns(|| format!("num -= next {}", i)), &next)
+                        .unwrap();
+                    assert!(num.get_value().unwrap().eq(&num_native));
+                    println!("i: {}", i);
+                    println!("sub:{}", num.get_value().unwrap().eq(&num_native));
+                }
+                _ => (),
+            };
+
+            assert!(
+                num.get_value().unwrap().eq(&num_native),
+                "randomized arithmetic failed:"
+            );
+        }
+
+        if !cs.is_satisfied() {
+            println!("{:?}", cs.which_is_unsatisfied());
+        }
+        assert!(cs.is_satisfied());
+    }
 }
 
 /// Tests correctness of `STRESS_TEST_COUNT` many steps of the recursion
@@ -1197,7 +1379,7 @@ macro_rules! nonnative_test_individual {
 
 macro_rules! nonnative_test {
     ($test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
-        /* simple arithmetic tests
+        /* elementary tests
         */
         nonnative_test_individual!(
             allocation_test,
@@ -1207,6 +1389,18 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             alloc_random_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            enforce_equal_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            reduce_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
@@ -1224,6 +1418,12 @@ macro_rules! nonnative_test {
             $test_constraint_field
         );
         nonnative_test_individual!(
+            negation_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
             multiplication_test,
             $test_name,
             $test_simulation_field,
@@ -1236,12 +1436,6 @@ macro_rules! nonnative_test {
             $test_constraint_field
         );
         nonnative_test_individual!(
-            equality_test,
-            $test_name,
-            $test_simulation_field,
-            $test_constraint_field
-        );
-        nonnative_test_individual!(
             edge_cases_test,
             $test_name,
             $test_simulation_field,
@@ -1249,12 +1443,6 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             distribution_law_test,
-            $test_name,
-            $test_simulation_field,
-            $test_constraint_field
-        );
-        nonnative_test_individual!(
-            randomized_arithmetic_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field
@@ -1276,6 +1464,12 @@ macro_rules! nonnative_test {
         );
         nonnative_test_individual!(
             negation_stress_test,
+            $test_name,
+            $test_simulation_field,
+            $test_constraint_field
+        );
+        nonnative_test_individual!(
+            randomized_arithmetic_stress_test,
             $test_name,
             $test_simulation_field,
             $test_constraint_field

@@ -168,11 +168,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             ConstraintF::one().into_repr();
         num_add_plus_one.muln(surfeit as u32);
 
-        assert!(
-            ceil_log_2!(ConstraintF::from_repr(num_add_plus_one)) == surfeit,
-            "ceil_log_2 is different from surfeit."
-        );
-
         let mut limbs = Vec::new();
 
         for i in 0..params.num_limbs {
@@ -198,13 +193,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             limbs.push(limb);
         };
 
-        let result = Self{
+        Ok(Self{
             limbs: limbs,
             num_of_additions_over_normal_form: ConstraintF::from_repr(num_add_plus_one) - ConstraintF::one(),
             simulation_phantom: PhantomData
-        };
-
-        Ok(result)
+        })
     }
 
     /// Low level function for addition of non-natives. In order to guarantee
@@ -347,6 +340,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
                 - ConstraintF::one();
 
         pad_top_limb_repr.muln(
+            //(SimulationF::size_in_bits() % params.bits_per_limb)
             (SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb)
             as u32
         );
@@ -920,7 +914,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         fe: &SimulationF,
     ) -> Result<Self, SynthesisError> {
         
-        // Step 1: reduce `self` and `other` if necessary
+        // Step 1: reduce `self` if necessary. As a workaround
+        // we alloc a separate Nonnative, which never undergoes
+        // a reduction.
+        // TODO: let us improve this.
         let mut self_reduced = self.clone();
         let mut other = NonNativeFieldGadget::from_value(
             cs.ns(|| "hardcode other"),
@@ -931,6 +928,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
             &mut self_reduced,
             &mut other,
         )?;
+
+        assert!(self.check(),
+            "self after pre-reduction failed on check()"
+        );
 
         // Step 2: mul without pre reduce
         let res = self_reduced.mul_by_constant_without_prereduce(
