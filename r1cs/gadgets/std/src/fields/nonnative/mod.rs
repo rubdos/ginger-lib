@@ -28,52 +28,10 @@ pub mod nonnative_field_mul_result_gadget;
 #[cfg(test)]
 mod tests;
 
-/// a macro for computing the ceil(log2(x)) of a field element x
-#[doc(hidden)]
-#[macro_export]
-macro_rules! ceil_log_2 {
-    ($x:expr) => {{
-        // Let `len` be the number of bits, and let `z` be the number 
-        // of leading zeros. Then
-        // ``
-        //             z        len - z
-        //      ------------- -----------
-        //      0    ....   0 1 ** .... *
-        // ``
-        // Hence `ceil_log_2(x) = len - z` if `x` is not a pure power 
-        // of two. Otherwise `ceil_log_2(x) = len - z - 1`.                   
-        use algebra::BigInteger;
-        let num = $x;
-        // big endian bit rep, might have leading zeros.
-        let num_bits = num.into_repr().to_bits();
-        let mut skipped_bits = 0;
-        for b in num_bits.iter() {
-            if *b == false {
-                skipped_bits += 1;
-            } else {
-                break;
-            }
-        }
-
-        let mut is_power_of_2 = true;
-        for b in num_bits.iter().skip(skipped_bits + 1) {
-            if *b == true {
-                is_power_of_2 = false;
-            }
-        }
-
-        if is_power_of_2 {
-            num_bits.len() - skipped_bits - 1 
-        } else {
-            num_bits.len() - skipped_bits 
-        }
-    }};
-}
-
 /// a macro for computing the ceil(log2(x)) of a BigUint x
 #[doc(hidden)]
 #[macro_export]
-macro_rules! ceil_log_2_biguint {
+macro_rules! ceil_log_2 {
     ($x:expr) => {{
         // Let `len` be the number of bits, and let `z` be the number 
         // of leading zeros. Then

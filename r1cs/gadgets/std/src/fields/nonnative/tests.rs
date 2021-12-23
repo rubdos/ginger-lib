@@ -1,5 +1,7 @@
 #![allow(unused_imports)]
 
+use num_bigint::BigUint;
+use num_traits::{One, Pow};
 use serial_test::serial;
 
 use algebra::{
@@ -16,8 +18,6 @@ use r1cs_core::{
 use rand::{thread_rng, Rng, RngCore};
 use std::marker::PhantomData;
 
-use num_bigint::BigUint;
-
 use crate::{
     alloc::AllocGadget,
     bits::boolean::Boolean,
@@ -32,7 +32,7 @@ use crate::{
         },
         FieldGadget,
     },
-    FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget, ceil_log_2, ceil_log_2_biguint
+    FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget, ceil_log_2,
 };
 
 
@@ -44,14 +44,14 @@ fn ceil_log_2_biguint_test() {
     let rng = &mut thread_rng();
     for _ in 0..TEST_COUNT {
         let n = rng.gen_range(0..512);
-        let mut x = BigUint::from(2u32).pow(n as u32);
-        let mut result = ceil_log_2_biguint!(x.clone());
+        let mut x: BigUint = Pow::pow(BigUint::from(2usize), &n);
+        let mut result = ceil_log_2!(x.clone());
         assert!(
             result == n,
             "ceil_log_2!() outputs wrong log on pure power of two."
         );
         x += 1u32;
-        result = ceil_log_2_biguint!(x.clone());
+        result = ceil_log_2!(x);
         assert!(
             result == n + 1,
             "ceil_log_2!() outputs wrong log on a power of two, plus one."
@@ -162,7 +162,7 @@ fn alloc_random_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCor
             rng, 
             surfeit).unwrap();
 
-        println!("actual surfeit: {} ", ceil_log_2!(a.num_of_additions_over_normal_form + ConstraintF::one()));
+        println!("actual surfeit: {} ", ceil_log_2!(&a.num_of_additions_over_normal_form + BigUint::one()));
 
         assert!(
             a.check(),

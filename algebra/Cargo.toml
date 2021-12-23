@@ -26,6 +26,7 @@ build = "build.rs"
 
 [dependencies]
 algebra-derive = { path = "algebra-derive", optional = true }
+num-bigint = { version = "0.4", default-features = false }
 
 bench-utils = { path = "../bench-utils", optional = true }
 byteorder = { version = "1" }

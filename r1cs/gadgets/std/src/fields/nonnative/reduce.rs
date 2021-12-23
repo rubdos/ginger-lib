@@ -169,8 +169,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             elem,
             elem_other,
             |elem, elem_other| {
-                let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
-                let surfeit = ceil_log_2!(sum_add + ConstraintF::from(3u8));
+                let sum_add = &elem.num_of_additions_over_normal_form + &elem_other.num_of_additions_over_normal_form;
+                let surfeit = ceil_log_2!(sum_add + BigUint::from(3usize));
                 surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )
@@ -199,8 +199,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             elem,
             elem_other,
             |elem, elem_other| {
-                let sum_add = elem.num_of_additions_over_normal_form + elem_other.num_of_additions_over_normal_form;
-                let surfeit = ceil_log_2!(sum_add + ConstraintF::from(5u8));
+                let sum_add = &elem.num_of_additions_over_normal_form + &elem_other.num_of_additions_over_normal_form;
+                let surfeit = ceil_log_2!(sum_add + BigUint::from(5usize));
                 surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
             }
         )
@@ -244,11 +244,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             elem,
             elem_other,
             |elem, elem_other| {
-                let num_add_bound = ConstraintF::from(params.num_limbs as u64) 
-                    * (elem.num_of_additions_over_normal_form + ConstraintF::one())
-                    * (elem_other.num_of_additions_over_normal_form + ConstraintF::one());
+                let num_add_bound = BigUint::from(params.num_limbs) 
+                    * (BigUint::one() + &elem.num_of_additions_over_normal_form)
+                    * (BigUint::one() + &elem_other.num_of_additions_over_normal_form);
                 let surfeit_prime = ceil_log_2!(
-                    ConstraintF::from(params.num_limbs as u64) * num_add_bound + ConstraintF::one()
+                    BigUint::from(params.num_limbs) * num_add_bound + BigUint::one()
                 );
     
                 2 * params.bits_per_limb + surfeit_prime <= ConstraintF::Params::CAPACITY as usize - 2

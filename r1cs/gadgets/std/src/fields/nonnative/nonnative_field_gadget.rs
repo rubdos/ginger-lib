@@ -8,6 +8,8 @@
 //! and the
 //!     - EqGadget, which heaviliy uses reduction from reduce.rs
 use algebra::{BigInteger, FpParameters, PrimeField};
+use num_bigint::BigUint;
+use num_traits::{One, Pow, Zero};
 
 use crate::fields::nonnative::NonNativeFieldParams;
 use crate::{
@@ -24,7 +26,6 @@ use crate::{
     Assignment,
 };
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
-use rand::{Rng, RngCore};
 use std::cmp::max;
 use std::marker::PhantomData;
 use std::{borrow::Borrow, vec, vec::Vec};
@@ -61,10 +62,11 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
     /// ``
     ///     surfeit = len(num_of_additions_over_normal_form + 1).
     /// ``
-    // TODO: an alternative choice would be <ConstraintF as PrimeField>BigInt
+    /// 
+    // Note: an alternative choice would be <ConstraintF as PrimeField>BigInt
     // but this would make computations on it more difficult, as they might 
     // exceed the max value of BigInt.
-    pub num_of_additions_over_normal_form: ConstraintF,
+    pub num_of_additions_over_normal_form: BigUint,
     /// Whether the limb representation is the normal form, i.e. has the same
     /// number of bits as the non-native modulus.
     #[doc(hidden)]
@@ -82,13 +84,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         let valid_num_limbs = self.limbs.len() == params.num_limbs;
 
-        let normal_form_bound = ConstraintF::from(2u64).pow(&[params.bits_per_limb as u64]);
-        let normal_form_bound_ms = ConstraintF::from(2u64).pow(
-            &[(SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb) as u64]
+        let normal_form_bound = Pow::pow(BigUint::from(2usize), &params.bits_per_limb);
+        let normal_form_bound_ms = Pow::pow(
+            BigUint::from(2usize),
+            &(SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb)
         );
-        let num_add_plus_one = self.num_of_additions_over_normal_form + ConstraintF::one();
-        let limb_bound = num_add_plus_one * normal_form_bound;
-        let limb_bound_ms = num_add_plus_one * normal_form_bound_ms;
+        let num_add_plus_one = self.num_of_additions_over_normal_form.clone() + BigUint::one();
+        let limb_bound = normal_form_bound * &num_add_plus_one;
+        let limb_bound_ms = normal_form_bound_ms * &num_add_plus_one;
 
         let valid_num_adds = params.bits_per_limb + ceil_log_2!(num_add_plus_one)
              < ConstraintF::size_in_bits() - 1;
@@ -96,6 +99,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // k-ary and of the limb checks.
         let valid_limbs = self.limbs.iter().enumerate().all(|(i,limb)|{
             if let Some(val_limb) = limb.get_value() {
+                let val_limb: BigUint = val_limb.into();
+
                 if i == 0 {
                     val_limb < limb_bound_ms
                 } else {
@@ -154,9 +159,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     pub(crate) fn alloc_random<R, CS>(mut cs: CS, rng: &mut R, surfeit: usize) 
     -> Result<Self, SynthesisError>
     where 
-        R: RngCore,
+        R: rand::RngCore,
         CS: ConstraintSystemAbstract<ConstraintF>,
     {
+        use rand::Rng;
+        
         // We sample random limbs of `limb_size[i] = surfeit + bits_per_limbs[i]`. As
         // ``
         //      limb[i] < 2^{surfeit + bits_per_limb[i]} = 2^surfeit * 2^bits_per_limb[i],
@@ -167,9 +174,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         assert!(params.bits_per_limb + surfeit <= ConstraintF::size_in_bits()-1);
 
         // compute 2^surfeit as bigint
-        let mut num_add_plus_one: <ConstraintF as PrimeField>::BigInt =
-            ConstraintF::one().into_repr();
-        num_add_plus_one.muln(surfeit as u32);
+        let num_add_plus_one = BigUint::one() << surfeit;
 
         let mut limbs = Vec::new();
 
@@ -198,7 +203,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         Ok(Self{
             limbs: limbs,
-            num_of_additions_over_normal_form: ConstraintF::from_repr(num_add_plus_one) - ConstraintF::one(),
+            num_of_additions_over_normal_form: num_add_plus_one - BigUint::one(),
             simulation_phantom: PhantomData
         })
     }
@@ -220,7 +225,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let surfeit = ceil_log_2!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form + &ConstraintF::from(4u8));
+        let surfeit = ceil_log_2!(BigUint::from(4usize) + &self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form);
         
         if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for add_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)));
@@ -240,9 +245,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             //                  + (num_add(R) + 1) * 2^bits_per_limb
             // ``
             // we set `num_add(T) = num_add(L) + num_add(R) + 1`.
-            num_of_additions_over_normal_form: self.num_of_additions_over_normal_form
-                + &other.num_of_additions_over_normal_form
-                + &ConstraintF::one(),
+            num_of_additions_over_normal_form: BigUint::one()
+                + &self.num_of_additions_over_normal_form
+                + &other.num_of_additions_over_normal_form,
             simulation_phantom: PhantomData,
         };
 
@@ -283,8 +288,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         );
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let surfeit = ceil_log_2!(self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form 
-            + &ConstraintF::from(5u8));
+        let surfeit = ceil_log_2!(BigUint::from(5usize) + &self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form);
         
         if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(
@@ -333,23 +337,19 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         //      0 <= shift_constant[i] - R[i] < (num_add(R) + 1) * 2^bits_per_limb[i].
         // ``
-        let mut pad_non_top_limb_repr: <ConstraintF as PrimeField>::BigInt =
-            ConstraintF::one().into_repr();
-        let mut pad_top_limb_repr: <ConstraintF as PrimeField>::BigInt = pad_non_top_limb_repr;
+        let mut pad_non_top_limb_repr =  BigUint::one();
+        let mut pad_top_limb_repr = pad_non_top_limb_repr.clone();
 
-        pad_non_top_limb_repr.muln(params.bits_per_limb as u32);
-        let pad_non_top_limb =  ((other.num_of_additions_over_normal_form + ConstraintF::one()) 
-            * ConstraintF::from_repr(pad_non_top_limb_repr)) 
-                - ConstraintF::one();
+        pad_non_top_limb_repr <<= params.bits_per_limb;
+        let pad_non_top_limb: ConstraintF =  (((BigUint::one() + &other.num_of_additions_over_normal_form) 
+            * BigUint::from(pad_non_top_limb_repr)) 
+                - BigUint::one()).into();
 
-        pad_top_limb_repr.muln(
-            //(SimulationF::size_in_bits() % params.bits_per_limb)
-            (SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb)
-            as u32
-        );
-        let pad_top_limb = ((other.num_of_additions_over_normal_form + ConstraintF::one()) 
-            * ConstraintF::from_repr(pad_top_limb_repr)) 
-                - ConstraintF::one();
+        pad_top_limb_repr <<= SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb;
+        
+        let pad_top_limb: ConstraintF = (((BigUint::one() + &other.num_of_additions_over_normal_form) 
+            * BigUint::from(pad_top_limb_repr)) 
+                - BigUint::one()).into();
 
         // The shift constants, for most significant limb down to the least significant limb.
         // Overall this is the limb representation of
@@ -429,9 +429,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         let result = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
-            num_of_additions_over_normal_form: self.num_of_additions_over_normal_form
-                + other.num_of_additions_over_normal_form
-                + ConstraintF::one() + ConstraintF::one(),
+            num_of_additions_over_normal_form: BigUint::from(2usize)
+                + &self.num_of_additions_over_normal_form
+                + &other.num_of_additions_over_normal_form,
             simulation_phantom: PhantomData,
         };
 
@@ -522,12 +522,12 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         // with `surfeit'` as above.
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = ConstraintF::from(params.num_limbs  as u64) 
-            * (self.num_of_additions_over_normal_form + ConstraintF::one())
-            * (other.num_of_additions_over_normal_form + ConstraintF::one()) ;
+        let num_add_bound = BigUint::from(params.num_limbs) 
+            * (BigUint::one() + &self.num_of_additions_over_normal_form)
+            * (BigUint::one() + &other.num_of_additions_over_normal_form);
 
         let surfeit_prime = ceil_log_2!(
-            ConstraintF::from(params.num_limbs  as u64) * num_add_bound +  ConstraintF::one()
+            BigUint::from(params.num_limbs) * &num_add_bound +  BigUint::one()
         );
 
         if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
@@ -588,7 +588,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         let result = NonNativeFieldMulResultGadget {
             limbs: prod_limbs,
-            num_add_over_normal_form: num_add_bound - ConstraintF::one(),
+            num_add_over_normal_form: &num_add_bound - &BigUint::one(),
             simulation_phantom: PhantomData,
         };
 
@@ -633,10 +633,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // with `surfeit' = len(num_limbs^2 * (num_add(L)+1) + 1)`.
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = ConstraintF::from((params.num_limbs as u64)*(params.num_limbs as u64)) 
-            * (self.num_of_additions_over_normal_form + ConstraintF::one())
-            + ConstraintF::one();
-        let surfeit_prime = ceil_log_2!(num_add_bound);
+        let num_add_bound = BigUint::from(params.num_limbs.pow(2)) 
+            * (BigUint::one() + &self.num_of_additions_over_normal_form)
+            + BigUint::one();
+        let surfeit_prime = ceil_log_2!(num_add_bound.clone());
 
         if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for mul_by_constant_without_prereduce. Max: {}, Actual: {}", 
@@ -695,7 +695,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         Ok(NonNativeFieldMulResultGadget {
             limbs: prod_limbs,
-            num_add_over_normal_form: num_add_bound - ConstraintF::one(),
+            num_add_over_normal_form: num_add_bound - BigUint::one(),
             simulation_phantom: PhantomData,
         })
     }
@@ -741,7 +741,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
-            num_of_additions_over_normal_form: ConstraintF::zero(),
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         })
     }
@@ -1029,7 +1029,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ConstantGadget<Simulation
 
         Self {
             limbs,
-            num_of_additions_over_normal_form: ConstraintF::zero(),
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         }
     }
@@ -1172,8 +1172,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> CondSelectGadget<Constrai
         Ok(Self {
             limbs: limbs_sel,
             num_of_additions_over_normal_form: max(
-                true_value.num_of_additions_over_normal_form,
-                false_value.num_of_additions_over_normal_form,
+                true_value.num_of_additions_over_normal_form.clone(),
+                false_value.num_of_additions_over_normal_form.clone(),
             ),
             simulation_phantom: PhantomData,
         })
@@ -1227,7 +1227,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> TwoBitLookupGadget<Constr
 
         Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
-            num_of_additions_over_normal_form: ConstraintF::zero(),
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         })
     }
@@ -1270,7 +1270,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> TwoBitLookupGadget<Constr
 
         Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
-            num_of_additions_over_normal_form: ConstraintF::zero(),
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         })
     }
@@ -1326,7 +1326,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ThreeBitCondNegLookupGadg
 
         Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs,
-            num_of_additions_over_normal_form: ConstraintF::zero(),
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         })
     }
@@ -1368,8 +1368,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
             )?);
         }
 
-        let num_of_additions_over_normal_form = ConstraintF::zero();
-
         // We constrain all limbs to use at most `bits_per_limb` many bits
         for (i, limb) in limbs.iter().rev().take(params.num_limbs - 1).enumerate() {
             Reducer::<SimulationF, ConstraintF>::limb_to_bits(
@@ -1388,7 +1386,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
 
         Ok(Self {
             limbs,
-            num_of_additions_over_normal_form,
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         })
     }
@@ -1417,11 +1415,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, 
             )?);
         }
 
-        let num_of_additions_over_normal_form = ConstraintF::zero();
-
         Ok(Self {
             limbs,
-            num_of_additions_over_normal_form,
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         })
     }
@@ -1538,7 +1534,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         }
         let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
             limbs: p_gadget_limbs,
-            num_of_additions_over_normal_form: ConstraintF::zero(),
+            num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
         };
 
@@ -1576,7 +1572,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
             ))
         })?;
 
-        let surfeit = ceil_log_2!(delta.num_of_additions_over_normal_form + ConstraintF::one());
+        let surfeit = ceil_log_2!(delta.num_of_additions_over_normal_form + BigUint::one());
         Reducer::<SimulationF, ConstraintF>::limb_to_bits(
             cs.ns(|| "k limb to bits"),
             &k_gadget,
@@ -1657,7 +1653,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Clone
     fn clone(&self) -> Self {
         NonNativeFieldGadget {
             limbs: self.limbs.clone(),
-            num_of_additions_over_normal_form: self.num_of_additions_over_normal_form,
+            num_of_additions_over_normal_form: self.num_of_additions_over_normal_form.clone(),
             simulation_phantom: PhantomData,
         }
     }
