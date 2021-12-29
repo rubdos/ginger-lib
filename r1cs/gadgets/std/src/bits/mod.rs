@@ -18,6 +18,26 @@ pub trait ToBitsGadget<ConstraintF: Field> {
         &self,
         cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError>;
+
+    /// Outputs the little-endian bit representation of `Self`
+    fn to_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        cs: CS,
+    ) -> Result<Vec<Boolean>, SynthesisError> {
+        let mut bits = self.to_bits(cs)?;
+        bits.reverse();
+        Ok(bits)
+    }
+
+    /// Converts `Self` to little-endian bit representation, checking if the bit representation is
+    /// 'valid'. The trivial default implementation may be overridden by implementors for which the
+    /// validity check is meaningful (e.g., field gadgets)
+    fn to_bits_strict_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        cs: CS,
+     ) -> Result<Vec<Boolean>, SynthesisError> {
+        self.to_bits_le(cs)
+    }
 }
 
 pub trait FromBitsGadget<ConstraintF: Field>
@@ -30,6 +50,16 @@ where
         cs: CS,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError>;
+
+    /// Reconstruct a `Self` from its *little endian* bit representation `bits` of bit len not
+    /// higher than CAPACITY (i.e. MODULUS - 1)
+    fn from_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+        cs: CS,
+        bits: &[Boolean],
+    ) -> Result<Self, SynthesisError> {
+        let big_endian_bits: Vec<_> = bits.iter().rev().map(|el| *el).collect();
+        Self::from_bits(cs, &big_endian_bits)
+    }
 }
 
 impl<ConstraintF: Field> ToBitsGadget<ConstraintF> for Boolean {

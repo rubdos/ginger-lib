@@ -579,7 +579,9 @@ pub(crate) mod tests {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn from_bits_fp_gadget_test<ConstraintF: PrimeField>() {
+    // if little_endian is true (resp. false), then the reconstruction of a field element from its
+    // little (resp. big) endian bit representation is tested
+    pub(crate) fn from_bits_fp_gadget_test<ConstraintF: PrimeField>(little_endian: bool) {
         let mut rng = thread_rng();
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
@@ -594,13 +596,25 @@ pub(crate) mod tests {
         };
 
         //Positive case
-        let f_g_bits = Vec::<Boolean>::alloc(cs.ns(|| "alloc f bits"), || {
-            Ok(f.write_bits()[leading_zeros..].to_vec())
-        })
-        .unwrap();
-        let f_g =
+        let f_g_bits = if little_endian {
+            Vec::<Boolean>::alloc(cs.ns(|| "alloc f bits"), || {
+                let mut f_le_bits = f.write_bits()[leading_zeros..].to_vec();
+                f_le_bits.reverse();
+                Ok(f_le_bits)
+            }).unwrap()
+        } else {
+            Vec::<Boolean>::alloc(cs.ns(|| "alloc f bits"), || {
+                Ok(f.write_bits()[leading_zeros..].to_vec())
+            }).unwrap()
+        };
+
+        let f_g = if little_endian {
+            FpGadget::<ConstraintF>::from_bits_le(cs.ns(|| "pack f_g_bits"), f_g_bits.as_slice())
+                .unwrap()
+        } else {
             FpGadget::<ConstraintF>::from_bits(cs.ns(|| "pack f_g_bits"), f_g_bits.as_slice())
-                .unwrap();
+                .unwrap()
+        };
         assert_eq!(f, f_g.get_value().unwrap());
         assert!(cs.is_satisfied());
 
@@ -677,6 +691,19 @@ pub(crate) mod tests {
         let a_read = ConstraintF::read_bits(a_bits).unwrap();
         let a_g_read = FpGadget::<ConstraintF>::from_bits(cs.ns(|| "read a_g"), a_g_bits).unwrap();
 
+        assert_eq!(a_read, a_g_read.get_value().unwrap());
+
+        //test to_bits in little endian form
+        let mut a_bits_le = a.write_bits();
+        a_bits_le.reverse();
+        let a_g_bits_le = a_g.to_bits_le(cs.ns(|| "a_to_bits_le")).unwrap();
+        assert_eq!(
+            a_bits_le,
+            a_g_bits_le.iter().map(|b| b.get_value().unwrap()).collect::<Vec<_>>(),
+        );
+
+        let a_g_bits_le = a_g_bits_le[..a_g_bits_le.len()-1].as_ref();
+        let a_g_read = FpGadget::<ConstraintF>::from_bits_le(cs.ns(|| "read a_g_le"), a_g_bits_le).unwrap();
         assert_eq!(a_read, a_g_read.get_value().unwrap());
 
         //to_bits_with_length_restriction test
