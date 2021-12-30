@@ -3,12 +3,26 @@ use crate::Error;
 pub trait ToBits {
     /// Serialize `self` into a bit vector using a BigEndian bit order representation.
     fn write_bits(&self) -> Vec<bool>;
+
+    /// Serialize `self` into a bit vector using a LittleEndian bit order representation.
+    fn write_bits_le(&self) -> Vec<bool> {
+        let mut serialized_bits = self.write_bits();
+        serialized_bits.reverse();
+        serialized_bits
+    }
 }
 
 pub trait FromBits: Sized {
     /// Reads `self` from `bits`, where `bits` are expected to be
     /// in a BigEndian bit order representation.
     fn read_bits(bits: Vec<bool>) -> Result<Self, Error>;
+
+    /// Reads `self` from `bits`, where `bits` are expected to be
+    /// in a LittleEndian bit order representation.
+    fn read_bits_le(bits: Vec<bool>) -> Result<Self, Error> {
+        let big_endian_bits = bits.iter().rev().map(|el| *el).collect::<Vec<_>>();
+        Self::read_bits(big_endian_bits)
+    }
 }
 
 pub trait ToCompressedBits {

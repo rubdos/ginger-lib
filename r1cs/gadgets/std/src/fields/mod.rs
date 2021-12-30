@@ -598,9 +598,8 @@ pub(crate) mod tests {
         //Positive case
         let f_g_bits = if little_endian {
             Vec::<Boolean>::alloc(cs.ns(|| "alloc f bits"), || {
-                let mut f_le_bits = f.write_bits()[leading_zeros..].to_vec();
-                f_le_bits.reverse();
-                Ok(f_le_bits)
+                let f_bits_le = f.write_bits_le();
+                Ok(f_bits_le[..f_bits_le.len()-leading_zeros].to_vec())
             }).unwrap()
         } else {
             Vec::<Boolean>::alloc(cs.ns(|| "alloc f bits"), || {
@@ -694,8 +693,7 @@ pub(crate) mod tests {
         assert_eq!(a_read, a_g_read.get_value().unwrap());
 
         //test to_bits in little endian form
-        let mut a_bits_le = a.write_bits();
-        a_bits_le.reverse();
+        let a_bits_le = a.write_bits_le();
         let a_g_bits_le = a_g.to_bits_le(cs.ns(|| "a_to_bits_le")).unwrap();
         assert_eq!(
             a_bits_le,

@@ -177,6 +177,13 @@ fn random_serialization_tests<F: Field, R: Rng>(rng: &mut R) {
             serialized.extend_from_slice(a_serialized.as_slice());
             let deserialized = F::read_bits(serialized).unwrap();
             assert_eq!(a, deserialized);
+
+            // test deserialization with leading zeros in little-endian bit representation
+            let serialized = vec![false; 10];
+            let mut a_serialized = a.write_bits_le();
+            a_serialized.extend_from_slice(serialized.as_slice());
+            let deserialized = F::read_bits_le(a_serialized).unwrap();
+            assert_eq!(a, deserialized);
         }
 
         //Byte serialization test
@@ -326,6 +333,11 @@ fn random_field_tests<F: Field>() {
         // Positive test
         let a_serialized = a.write_bits();
         let a_deserialized = F::read_bits(a_serialized.clone()).unwrap();
+        assert_eq!(a, a_deserialized);
+
+        // test little-endian serialization
+        let a_serialized = a.write_bits_le();
+        let a_deserialized = F::read_bits_le(a_serialized).unwrap();
         assert_eq!(a, a_deserialized);
     }
 }
