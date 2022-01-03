@@ -12,8 +12,7 @@ fn test_fq() {
     frobenius_tests::<Fq, Fq, FqGadget>(13);
     equ_verdict_fp_gadget_test::<Fq>();
     even_odd_fp_gadget_test::<Fq>();
-    from_bits_fp_gadget_test::<Fq>(false);
-    from_bits_fp_gadget_test::<Fq>(true);
+    from_bits_fp_gadget_test::<Fq>();
     bit_fp_gadgets_test::<Fq>();
 }
 
@@ -25,7 +24,6 @@ fn test_fr() {
     frobenius_tests::<Fr, Fr, FrGadget>(13);
     equ_verdict_fp_gadget_test::<Fr>();
     even_odd_fp_gadget_test::<Fr>();
-    from_bits_fp_gadget_test::<Fr>(false);
-    from_bits_fp_gadget_test::<Fr>(true);
+    from_bits_fp_gadget_test::<Fr>();
     bit_fp_gadgets_test::<Fr>();
 }

@@ -579,9 +579,15 @@ pub(crate) mod tests {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn from_bits_fp_gadget_test<ConstraintF: PrimeField>() {
+        from_bits_fp_gadget_test_with_endianness::<ConstraintF>(true);
+        from_bits_fp_gadget_test_with_endianness::<ConstraintF>(false);
+    }
+
     // if little_endian is true (resp. false), then the reconstruction of a field element from its
     // little (resp. big) endian bit representation is tested
-    pub(crate) fn from_bits_fp_gadget_test<ConstraintF: PrimeField>(little_endian: bool) {
+    #[inline]
+    fn from_bits_fp_gadget_test_with_endianness<ConstraintF: PrimeField>(little_endian: bool) {
         let mut rng = thread_rng();
         let mut cs = TestConstraintSystem::<ConstraintF>::new();
 
