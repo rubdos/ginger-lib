@@ -19,9 +19,9 @@ pub trait FromBits: Sized {
 
     /// Reads `self` from `bits`, where `bits` are expected to be
     /// in a LittleEndian bit order representation.
-    fn read_bits_le(bits: Vec<bool>) -> Result<Self, Error> {
-        let big_endian_bits = bits.iter().rev().map(|el| *el).collect::<Vec<_>>();
-        Self::read_bits(big_endian_bits)
+    fn read_bits_le(mut bits: Vec<bool>) -> Result<Self, Error> {
+        bits.reverse();
+        Self::read_bits(bits)
     }
 }
 

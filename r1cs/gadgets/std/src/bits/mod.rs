@@ -30,13 +30,14 @@ pub trait ToBitsGadget<ConstraintF: Field> {
     }
 
     /// Converts `Self` to little-endian bit representation, checking if the bit representation is
-    /// 'valid'. The trivial default implementation may be overridden by implementors for which the
-    /// validity check is meaningful (e.g., field gadgets)
+    /// 'valid'
     fn to_bits_strict_le<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
      ) -> Result<Vec<Boolean>, SynthesisError> {
-        self.to_bits_le(cs)
+        let mut bits = self.to_bits_strict(cs)?;
+        bits.reverse();
+        Ok(bits)
     }
 }
 
