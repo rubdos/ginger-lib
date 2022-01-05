@@ -623,7 +623,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         // where 
         // ``
-        //      surfeit(product) = len(num_limbs * (num_add(L)+1).
+        //      surfeit(product) = len(num_limbs * (num_add(L)+1)).
         // ``
         // To allow for a subsequent reduction we need to assure the stricter condition 
         // that 
@@ -633,10 +633,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // with `surfeit' = len(num_limbs^2 * (num_add(L)+1) + 1)`.
 
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = BigUint::from(params.num_limbs.pow(2)) 
-            * (BigUint::one() + &self.num_of_additions_over_normal_form)
-            + BigUint::one();
-        let surfeit_prime = ceil_log_2!(num_add_bound.clone());
+
+        let num_add_bound = BigUint::from(params.num_limbs) 
+        * (BigUint::one() + &self.num_of_additions_over_normal_form);
+
+        let surfeit_prime = ceil_log_2!(
+            BigUint::from(params.num_limbs) * &num_add_bound +  BigUint::one()
+        );
 
         if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for mul_by_constant_without_prereduce. Max: {}, Actual: {}", 

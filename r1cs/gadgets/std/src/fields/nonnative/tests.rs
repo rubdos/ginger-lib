@@ -1602,32 +1602,62 @@ macro_rules! nonnative_test {
  #[cfg(feature = "mnt4_753")]
  use algebra::fields::mnt4753::{Fq as Mnt4753Fq, Fr as Mnt4753Fr};
 
+ #[cfg(feature = "bls12_377")]
+ use algebra::fields::bls12_377::{Fq as Bls12377Fq, Fr as Bls12377Fr};
+
+// tests over tweedle Fr
+
 #[cfg(feature = "tweedle")]
 nonnative_test!(TweedleFq_over_Fr, TweedleFq, TweedleFr);
-
-#[cfg(feature = "tweedle")]
-nonnative_test!(TweedleFr_over_Fq, TweedleFr, TweedleFq);
-
-#[cfg(feature = "bn_382")]
-nonnative_test!(Bn382Fq_over_Fr, Bn382Fq, Bn382Fr);
-
-#[cfg(feature = "bn_382")]
-nonnative_test!(Bn382Fr_over_Fq, Bn382Fr, Bn382Fq);
-
-#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
-nonnative_test!(secp256k1Fq_over_Bn382Fr, secp256k1Fq, Bn382Fr);
-
-#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
-nonnative_test!(secp256k1Fr_over_Bn382Fr, secp256k1Fr, Bn382Fr);
 
 #[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_test!(ed25519Fq_over_TweedleFr, ed25519Fq, TweedleFr);
 
+#[cfg(all(feature = "tweedle", feature = "secp256k1"))]
+nonnative_test!(secp256k1_over_TweedleFr, secp256k1Fq, TweedleFr);
+
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
-nonnative_test!(Bn382Fr_over_TweedleFq, Bn382Fr, TweedleFq);
+nonnative_test!(Bn382Fr_over_TweedleFr, Bn382Fr, TweedleFr);
+
+#[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
+nonnative_test!(Mnt4753Fq_over_TweedleFr, Mnt4753Fq, TweedleFr);
+
+// tests over tweedle Fq
+
+#[cfg(feature = "tweedle")]
+nonnative_test!(TweedleFr_over_Fq, TweedleFr, TweedleFq);
+
+// tests over bls12_377 fr
+
+#[cfg(feature = "bls12_377")]
+nonnative_test!(Bls12377Fq_over_Fr, Bls12377Fq, Bls12377Fr);
+
+#[cfg(all(feature = "secp256k1", feature = "bls12_377"))]
+nonnative_test!(secp256k1Fq_over_Bls12377Fr, secp256k1Fq, Bls12377Fr);
+
+// tests over bn382 fr
+
+#[cfg(feature = "bn_382")]
+nonnative_test!(Bn382Fq_over_Fr, Bn382Fq, Bn382Fr);
 
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
 nonnative_test!(TweedleFq_over_Bn382Fr, TweedleFq, Bn382Fr);
 
-// #[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
-// nonnative_test!(TweedleFr_over_Mnt4753Fq, TweedleFr, Mnt4753Fq);
+#[cfg(all(feature = "bn_382", feature = "secp256k1"))]
+nonnative_test!(secp256k1Fq_over_Bn382Fr, secp256k1Fq, Bn382Fr);
+
+#[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
+nonnative_test!(Mnt4753Fq_over_Bn382Fr, Mnt4753Fq, Bn382Fr);
+
+// tests over bn382 fq
+
+#[cfg(feature = "bn_382")]
+nonnative_test!(Bn382Fr_over_Fq, Bn382Fr, Bn382Fq);
+
+// tests over mnt4_753 Fr
+
+#[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
+nonnative_test!(TweedleFr_over_Mnt4753Fr, TweedleFr, Mnt4753Fr);
+
+#[cfg(all(feature = "bn_382", feature = "mnt4_753"))]
+nonnative_test!(Bn382Fq_over_Mnt4753Fr, Bn382Fq, Mnt4753Fr);
