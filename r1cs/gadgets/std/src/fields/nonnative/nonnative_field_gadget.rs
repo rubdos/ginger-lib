@@ -321,7 +321,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         // In order that this sum does not exceed the CAPACITY, 
         // ``
-        //  D[i] < (num_add(L) + 2) * 2^bits_per_libm[i] + 
+        //  D[i] < (num_add(L) + 2) * 2^bits_per_limb[i] + 
         //              (num_add(R) + 1) * 2^bits_per_limb[i] <= 2^CAPACITY,
         // ``
         // which holds if 
@@ -341,15 +341,17 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let mut pad_top_limb_repr = pad_non_top_limb_repr.clone();
 
         pad_non_top_limb_repr <<= params.bits_per_limb;
-        let pad_non_top_limb: ConstraintF =  (((BigUint::one() + &other.num_of_additions_over_normal_form) 
-            * BigUint::from(pad_non_top_limb_repr)) 
-                - BigUint::one()).into();
+        let pad_non_top_limb: ConstraintF = (
+            (BigUint::one() + &other.num_of_additions_over_normal_form) * BigUint::from(pad_non_top_limb_repr) 
+                - BigUint::one()
+            ).into();
 
         pad_top_limb_repr <<= SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb;
         
-        let pad_top_limb: ConstraintF = (((BigUint::one() + &other.num_of_additions_over_normal_form) 
-            * BigUint::from(pad_top_limb_repr)) 
-                - BigUint::one()).into();
+        let pad_top_limb: ConstraintF = (
+            (BigUint::one() + &other.num_of_additions_over_normal_form) * BigUint::from(pad_top_limb_repr)
+                - BigUint::one()
+            ).into();
 
         // The shift constants, for most significant limb down to the least significant limb.
         // Overall this is the limb representation of
@@ -358,7 +360,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // `` 
         // Note that by our choice of the shift constants, 
         // ``
-        //      shift - L = Sum_{i=0..} (shift_constant[i]- R[i]) * A^i 
+        //      shift - R = Sum_{i=0..} (shift_constant[i]- R[i]) * A^i 
         //          < (num_add(R) + 1) * 2^len(p).
         // ``
         let mut pad_limbs = Vec::new();
@@ -1473,11 +1475,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
     // ``
     //        delta = self - other = k*p
     // ``
-    // using `group_and_check_equality()`. Assumes that 
+    // using `group_and_check_equality()`. Applies pre-reduction whenever the condition 
     // ``
-    //    bits_per_limb + surfeit <= CAPACITY - 2,
+    //    bits_per_limb + surfeit <= CAPACITY - 2
     // ``
-    // where 
+    // does not hold, where 
     // ``
     //    surfeit = log(3 + num_add(L) + num_add(R)).
     // ``
@@ -1485,7 +1487,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
     // ``
     //     C = 3 * S + surfeit + num_limbs(p) + 1
     // ``
-    // constraints, where 
+    // constraints if no pre-reduction is applied, where 
     // ``
     //      S =  2 + Floor[
     //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
@@ -1506,7 +1508,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         // ``
         //       Sum_{i=0}^{num_limbs -1} D[i] * A^i   = k * p,
         // ``
-        // where the `D[i]` are the limbs of the `sub_without_prereduce()` of `L` and `R`,
+        // where the `D[i]` are the limbs of the `sub()` of `L` and `R`,
         // and `A = 2^bits_per_limb`.
         // As the left hand side is bounded by
         // ``
@@ -1514,7 +1516,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         // ``   
         // the factor `k` is length bounded by
         // ``
-        //      len(k) <= len(num_add(D) + 1),
+        //      len(k) <= 1 + log(num_add(D) + 1),
         // ``
         // hence a single field element is good enough.
 
@@ -1541,7 +1543,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
             simulation_phantom: PhantomData,
         };
 
-        // Get delta = self - other, costs no constraints
+        // Get delta = self - other, costs no constraints (if the prereduction
+        // is not called)
         let zero = Self::zero(cs.ns(|| "hardcode zero"))?;
         let mut delta = self.sub(cs.ns(|| "delta = self - other"), other)?;
         delta = Self::conditionally_select(
@@ -1551,17 +1554,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
             &zero,
         )?;
 
-        // Since `delta = k*p`, and 
+        // Since `delta = k*p` and the product length lower bound
         // ``
-        //   len(delta) <= len(p) + len(1 + delta.num_additions_over_normal_form),
-        // `` 
-        // we allocate `k = delta / p` as single constraint field gadget, and length 
-        // restrict it to
+        //      len(k*p) >= len(p) + len(k) - 1,
         // ``
-        //      len(k) <= len(1 + delta.num_additions_over_normal_form) 
-        //              = len(3 + num_add(L) + num_add(R))
+        // the length of `k = delta/p` is bounded by the condition
         // ``
-        // Costs `surfeit = len(3 + num_add(L) + num_add(R))` constraints.
+        //      len(p) + len(k) - 1 <= len(p) + log(1 + num_add(D)), 
+        // ``
+        // or in short
+        // ``
+        //       len(k) <= 1 + log(1 + delta.num_additions_over_normal_form).
+        // ``
+        // Costs `1 + log(3 + num_add(L) + num_add(R))` constraints, in case no 
+        // pre-reduction is performed.
         let k_gadget = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc k"), || {
             let mut delta_limbs_values = Vec::<ConstraintF>::new();
             for limb in delta.limbs.iter() {
@@ -1579,7 +1585,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         Reducer::<SimulationF, ConstraintF>::limb_to_bits(
             cs.ns(|| "k limb to bits"),
             &k_gadget,
-            surfeit,
+            surfeit + 1,
         )?;
 
         // Compute k * p limbwise. Each limb is bounded by
