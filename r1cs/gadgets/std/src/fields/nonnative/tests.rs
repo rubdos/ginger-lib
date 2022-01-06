@@ -1656,8 +1656,8 @@ nonnative_test!(Bn382Fr_over_Fq, Bn382Fr, Bn382Fq);
 
 // tests over mnt4_753 Fr
 
-#[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
-nonnative_test!(TweedleFr_over_Mnt4753Fr, TweedleFr, Mnt4753Fr);
+//#[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
+//nonnative_test!(TweedleFr_over_Mnt4753Fr, TweedleFr, Mnt4753Fr);
 
-#[cfg(all(feature = "bn_382", feature = "mnt4_753"))]
-nonnative_test!(Bn382Fq_over_Mnt4753Fr, Bn382Fq, Mnt4753Fr);
+//#[cfg(all(feature = "bn_382", feature = "mnt4_753"))]
+//nonnative_test!(Bn382Fq_over_Mnt4753Fr, Bn382Fq, Mnt4753Fr);
