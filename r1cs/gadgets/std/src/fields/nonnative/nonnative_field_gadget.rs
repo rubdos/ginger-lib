@@ -9,7 +9,7 @@
 //!     - EqGadget, which heaviliy uses reduction from reduce.rs
 use algebra::{BigInteger, FpParameters, PrimeField};
 use num_bigint::BigUint;
-use num_traits::{One, Pow, Zero};
+use num_traits::{One, Zero};
 
 use crate::fields::nonnative::NonNativeFieldParams;
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
     fields::nonnative::{
         nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget,
         params::get_params,
-        reduce::{bigint_to_constraint_field, limbs_to_bigint, Reducer},
+        reduce::Reducer,
     },
     fields::FieldGadget,
     ceil_log_2,
@@ -73,7 +73,56 @@ pub struct NonNativeFieldGadget<SimulationF: PrimeField, ConstraintF: PrimeField
     pub simulation_phantom: PhantomData<SimulationF>,
 }
 
-/// Low-level functions that do not make use of normalization.
+
+
+/// Converts an unsigned big integer `bigint` into an element from the constraint field F_p by
+/// computing (bigint mod p).
+pub fn bigint_to_constraint_field<ConstraintF: PrimeField>(bigint: &BigUint) -> ConstraintF {
+    let mut val = ConstraintF::zero();
+    let mut cur = ConstraintF::one();
+    let bytes = bigint.to_bytes_be();
+
+    let basefield_256 = ConstraintF::from_repr(<ConstraintF as PrimeField>::BigInt::from(256));
+
+    for byte in bytes.iter().rev() {
+        let bytes_basefield = ConstraintF::from(*byte as u128);
+        val += cur * bytes_basefield;
+
+        cur *= &basefield_256;
+    }
+
+    val
+}
+
+/// Recombines the large integer value from a vector of (not necessarily normalized) limbs.
+pub fn limbs_to_bigint<ConstraintF: PrimeField>(
+    bits_per_limb: usize,
+    limbs: &[ConstraintF],
+) -> BigUint {
+    let mut val = BigUint::zero();
+    let mut big_cur = BigUint::one();
+    let two = BigUint::from(2u32);
+    for limb in limbs.iter().rev() {
+        let mut limb_repr = limb.into_repr().to_bits();
+        limb_repr.reverse(); //We need them in little endian
+        let mut small_cur = big_cur.clone();
+        for limb_bit in limb_repr.iter() {
+            if *limb_bit {
+                val += &small_cur;
+            }
+            small_cur *= 2u32;
+        }
+        big_cur *= two.pow(bits_per_limb as u32);
+    }
+
+    val
+}
+
+/*******************************************************************************
+ * 
+ *  Low-level functions that do not make use of normalization
+ * 
+ * *****************************************************************************/
 impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     NonNativeFieldGadget<SimulationF, ConstraintF>
 {
@@ -84,10 +133,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         let valid_num_limbs = self.limbs.len() == params.num_limbs;
 
-        let normal_form_bound = Pow::pow(BigUint::from(2usize), &params.bits_per_limb);
-        let normal_form_bound_ms = Pow::pow(
-            BigUint::from(2usize),
-            &(SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb)
+        let normal_form_bound = BigUint::from(2usize).pow(params.bits_per_limb as u32);
+        let normal_form_bound_ms = BigUint::from(2usize).pow(
+            (SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb) as u32
         );
         let num_add_plus_one = self.num_of_additions_over_normal_form.clone() + BigUint::one();
         let limb_bound = normal_form_bound * &num_add_plus_one;
@@ -113,48 +161,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         valid_num_limbs && valid_num_adds && valid_limbs
     }
-    
-    /// Obtain the non-native value from a vector of not necessarily normalized
-    /// limb elements.
-    // TODO: Can we use the functions limbs_to_bigint and bigint_to_constraint_field? 
-    // Logic seems duplicated
-    pub fn limbs_to_value(limbs: Vec<ConstraintF>) -> SimulationF {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
-        let mut base_repr: <SimulationF as PrimeField>::BigInt = SimulationF::one().into_repr();
-
-        // Compute base = 2^{params.bits_per_limb} in SimulationF.
-        // Note that in cases where non-natives are just single limb sized, 2^{(params.bits_per_limb)}
-        // exceeds the modulus of SimulationF. Thus we compute as follows.
-        base_repr.muln((params.bits_per_limb - 1) as u32);
-        let mut base = SimulationF::from_repr(base_repr);
-        base = base + &base;
-
-        let mut result = SimulationF::zero();
-        let mut power = SimulationF::one();
-
-        for limb in limbs.iter().rev() {
-            let mut val = SimulationF::zero();
-            let mut cur = SimulationF::one();
-
-            // Take all bits of the field element limb into account, even the ones
-            // that exceed the bits_per_limb.
-            for bit in limb.into_repr().to_bits().iter().rev() {
-                if *bit {
-                    val += &cur;
-                }
-                cur.double_in_place();
-            }
-
-            result += &(val * power);
-            power *= &base;
-        }
-
-        result
-    }
-
-    // A function for allocating a random non-native with oversized limbs, having 
-    // a surfeit s.t. `surfeit + bits_per_limbs <= ConstraintF::size_in_bits() - 1`.
+    /// A function for test puroposes. Allocates a random non-native with oversized 
+    /// limbs, having a surfeit s.t. 
+    /// `surfeit + bits_per_limbs <= ConstraintF::size_in_bits() - 1`.
     #[cfg(test)]
     pub(crate) fn alloc_random<R, CS>(mut cs: CS, rng: &mut R, surfeit: usize) 
     -> Result<Self, SynthesisError>
@@ -207,6 +217,140 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             simulation_phantom: PhantomData
         })
     }
+
+    /* 
+        conversion functions on vectors of limbs
+    */
+    
+    /// Obtain the non-native value from a vector of not necessarily normalized
+    /// limb elements.
+    // TODO: Can we use the functions limbs_to_bigint and bigint_to_constraint_field? 
+    // Logic seems duplicated
+    pub fn limbs_to_value(limbs: Vec<ConstraintF>) -> SimulationF {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+
+        let mut base_repr: <SimulationF as PrimeField>::BigInt = SimulationF::one().into_repr();
+
+        // Compute base = 2^{params.bits_per_limb} in SimulationF.
+        // Note that in cases where non-natives are just single limb sized, 2^{(params.bits_per_limb)}
+        // exceeds the modulus of SimulationF. Thus we compute as follows.
+        base_repr.muln((params.bits_per_limb - 1) as u32);
+        let mut base = SimulationF::from_repr(base_repr);
+        base = base + &base;
+
+        let mut result = SimulationF::zero();
+        let mut power = SimulationF::one();
+
+        for limb in limbs.iter().rev() {
+            let mut val = SimulationF::zero();
+            let mut cur = SimulationF::one();
+
+            // Take all bits of the field element limb into account, even the ones
+            // that exceed the bits_per_limb.
+            for bit in limb.into_repr().to_bits().iter().rev() {
+                if *bit {
+                    val += &cur;
+                }
+                cur.double_in_place();
+            }
+
+            result += &(val * power);
+            power *= &base;
+        }
+
+        result
+    }
+    /// Convert a `SimulationF` element into limbs having normal form.
+    /// This is an internal function that would be reused by a number of other functions
+    pub(crate) fn get_limbs_representations(
+        elem: &SimulationF,
+    ) -> Result<Vec<ConstraintF>, SynthesisError> {
+        Self::get_limbs_representations_from_big_integer(&elem.into_repr())
+    }
+
+    /// Obtain the limbs directly from a big int
+    pub(crate) fn get_limbs_representations_from_big_integer_with_params(
+        params: NonNativeFieldParams,
+        elem: &SimulationF::BigInt,
+    ) -> Result<Vec<ConstraintF>, SynthesisError> {
+        // push the lower limbs first
+        let mut limbs: Vec<ConstraintF> = Vec::new();
+        let mut cur = *elem;
+        for _ in 0..params.num_limbs {
+            let cur_bits = cur.to_bits(); // `to_bits` is big endian
+            let cur_mod_r = <ConstraintF as PrimeField>::BigInt::from_bits(
+                &cur_bits[cur_bits.len() - params.bits_per_limb..],
+            ); // therefore, the lowest `bits_per_non_top_limb` bits is what we want.
+            limbs.push(ConstraintF::from_repr(cur_mod_r));
+            cur.divn(params.bits_per_limb as u32);
+        }
+
+        // then we reserve, so that the limbs are ``big limb first''
+        limbs.reverse();
+
+        Ok(limbs)
+    }
+
+    /// Obtain the limbs directly from a big int
+    pub(crate) fn get_limbs_representations_from_big_integer(
+        elem: &SimulationF::BigInt,
+    ) -> Result<Vec<ConstraintF>, SynthesisError> {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        Self::get_limbs_representations_from_big_integer_with_params(params, elem)
+    }
+
+    // Packs a big endian slice of Boolean gadgets (which does not exceed the length 
+    // of a normal form) into a NonNativeFieldGadget
+    pub fn from_bits_with_params<CS: ConstraintSystemAbstract<ConstraintF>>(
+        mut cs: CS,
+        bits: &[Boolean],
+        params: NonNativeFieldParams,
+    ) -> Result<Self, SynthesisError> {
+        let len_normal_form = params.num_limbs * params.bits_per_limb;
+        assert!(bits.len() <= len_normal_form);
+
+        // Pad big endian representation to length of normal form
+        let mut per_nonnative_bits = vec![Boolean::Constant(false); len_normal_form - bits.len()];
+        per_nonnative_bits.extend_from_slice(bits);
+
+        // Pack each chunk of `bits_per_limb` many Booleans into a limb,
+        // big endian ordered.
+        let limbs = per_nonnative_bits
+            .chunks_exact(params.bits_per_limb)
+            .enumerate()
+            .map(|(i, chunk)| {
+                // from_bits() assumes big endian vector of bits
+                let limb = FpGadget::<ConstraintF>::from_bits(
+                    cs.ns(|| format!("packing bits to limb {}", i)),
+                    &chunk.to_vec(),
+                )?;
+
+                Ok(limb)
+            })
+            .collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
+
+        Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
+            limbs,
+            num_of_additions_over_normal_form: BigUint::zero(),
+            simulation_phantom: PhantomData,
+        })
+    }
+
+    /// checks if a NonNativeFieldGadget is odd, i.e. that its mod `p` reduced 
+    /// representation has the least significant bit set to `1`. 
+    #[inline]
+    pub fn is_odd<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Boolean, SynthesisError> {
+        let bits = self.to_bits_strict(cs.ns(|| "to bits strict"))?;
+        Ok(bits[bits.len() - 1])
+    }
+
+
+    /* 
+        arithemtic functions without pre-reduction steps
+    */
 
     /// Low level function for addition of non-natives. In order to guarantee
     /// a reducible output, this function assumes that  
@@ -445,45 +589,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         Ok(result)
     }
 
-    /// Convert a `SimulationF` element into limbs having normal form.
-    /// This is an internal function that would be reused by a number of other functions
-    pub fn get_limbs_representations(
-        elem: &SimulationF,
-    ) -> Result<Vec<ConstraintF>, SynthesisError> {
-        Self::get_limbs_representations_from_big_integer(&elem.into_repr())
-    }
-
-    /// Obtain the limbs directly from a big int
-    pub fn get_limbs_representations_from_big_integer_with_params(
-        params: NonNativeFieldParams,
-        elem: &<SimulationF as PrimeField>::BigInt,
-    ) -> Result<Vec<ConstraintF>, SynthesisError> {
-        // push the lower limbs first
-        let mut limbs: Vec<ConstraintF> = Vec::new();
-        let mut cur = *elem;
-        for _ in 0..params.num_limbs {
-            let cur_bits = cur.to_bits(); // `to_bits` is big endian
-            let cur_mod_r = <ConstraintF as PrimeField>::BigInt::from_bits(
-                &cur_bits[cur_bits.len() - params.bits_per_limb..],
-            ); // therefore, the lowest `bits_per_non_top_limb` bits is what we want.
-            limbs.push(ConstraintF::from_repr(cur_mod_r));
-            cur.divn(params.bits_per_limb as u32);
-        }
-
-        // then we reserve, so that the limbs are ``big limb first''
-        limbs.reverse();
-
-        Ok(limbs)
-    }
-
-    /// Obtain the limbs directly from a big int
-    pub fn get_limbs_representations_from_big_integer(
-        elem: &<SimulationF as PrimeField>::BigInt,
-    ) -> Result<Vec<ConstraintF>, SynthesisError> {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        Self::get_limbs_representations_from_big_integer_with_params(params, elem)
-    }
-
     /// For advanced use, multiply and output the intermediate representations (without reduction)
     /// This intermediate representations can be added with each other, and they can later be
     /// reduced back to the `NonNativeFieldGadget`.
@@ -705,58 +810,201 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         })
     }
 
-    #[inline]
-    pub fn is_odd<CS: ConstraintSystemAbstract<ConstraintF>>(
+    /// Enforces two non-native gadgets, not necessarily in normal form, to be equal mod the 
+    /// non-native modulus `p`. Assumes that 
+    /// ``
+    ///    bits_per_limb + surfeit <= CAPACITY - 2,
+    /// ``
+    /// where 
+    /// ``
+    ///    surfeit = 1 + log(3 + num_add(L) + num_add(R)).
+    /// ``
+    // Costs 
+    // ``
+    //     C = 3 * S + surfeit + num_limbs(p) + 1,
+    // ``
+    // where 
+    // ``
+    //      S =  2 + Floor[
+    //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
+    //          ].   
+    // ``
+    pub(crate) fn conditional_enforce_equal_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
-    ) -> Result<Boolean, SynthesisError> {
-        let bits = self.to_bits_strict(cs.ns(|| "to bits strict"))?;
-        Ok(bits[bits.len() - 1])
-    }
+        other: &Self,
+        should_enforce: &Boolean,
+    ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            self.check() && other.check(),
+            "conditional_enforce_equal_without_prereduce(): check() failed on input gadgets" 
+        );
+        
+        // The sub_without_prereduce() applied below assumes that 
+        // ``
+        //     bits_per_limb + log(num_add(L) + num_add(R) + 5) <= CAPACITY - 2,
+        // `` 
+        // which is weaker than 
+        // ``
+        //     bits_per_limb + 1 + log(num_add(L) + num_add(R) + 3) <= CAPACITY - 2,
+        // `` 
+        // as demanded by the group_and_check_equality().
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let surfeit = 1 + ceil_log_2!(&self.num_of_additions_over_normal_form 
+            + &other.num_of_additions_over_normal_form
+            + BigUint::from(3usize)
+        );
+        if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
+            return Err(
+                SynthesisError::Other(
+                    format!("Security bound exceeded for conditional_enforce_equality_without_prereduce. Max: {}, Actual: {}", 
+                    ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)
+                )
+            );
+        }
 
-    // Packs a big endian bit sequence (which does not exceed the length of a normal form)
-    // into a NonNativeFieldGadget
-    pub fn from_bits_with_params<CS: ConstraintSystemAbstract<ConstraintF>>(
-        mut cs: CS,
-        bits: &[Boolean],
-        params: NonNativeFieldParams,
-    ) -> Result<Self, SynthesisError> {
-        let len_normal_form = params.num_limbs * params.bits_per_limb;
-        assert!(bits.len() <= len_normal_form);
+        // Equality mod p is proven by the integer equation
+        // ``
+        //       Sum_{i=0}^{num_limbs -1} D[i] * A^i   = k * p,
+        // ``
+        // where the `D[i]` are the limbs of the sub_without_prereduce of `L` and `R`,
+        // and `A = 2^bits_per_limb`.
+        // As the left hand side is bounded by
+        // ``
+        //      Sum_{i=0}^{num_limbs -1} D[i] * A^i < (num_add(D) + 1) * 2^len(p),
+        // ``   
+        // the factor `k` is length bounded by
+        // ``
+        //      len(k) <= 1 + log(num_add(D) + 1),
+        // ``
+        // hence a single field element is good enough.
+        
+        // Get p
+        let p_representations =
+            NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations_from_big_integer(
+                &<SimulationF as PrimeField>::Params::MODULUS,
+            )?;
+        // TODO: check if the recomputation of MODULUS is the best way we can do.
+        let p_bigint = limbs_to_bigint(params.bits_per_limb, &p_representations);
 
-        // Pad big endian representation to length of normal form
-        let mut per_nonnative_bits = vec![Boolean::Constant(false); len_normal_form - bits.len()];
-        per_nonnative_bits.extend_from_slice(bits);
-
-        // Pack each chunk of `bits_per_limb` many Booleans into a limb,
-        // big endian ordered.
-        let limbs = per_nonnative_bits
-            .chunks_exact(params.bits_per_limb)
-            .enumerate()
-            .map(|(i, chunk)| {
-                // from_bits() assumes big endian vector of bits
-                let limb = FpGadget::<ConstraintF>::from_bits(
-                    cs.ns(|| format!("packing bits to limb {}", i)),
-                    &chunk.to_vec(),
-                )?;
-
-                Ok(limb)
-            })
-            .collect::<Result<Vec<FpGadget<ConstraintF>>, SynthesisError>>()?;
-
-        Ok(NonNativeFieldGadget::<SimulationF, ConstraintF> {
-            limbs,
+        let mut p_gadget_limbs = Vec::new();
+        for (i, limb) in p_representations.iter().enumerate() {
+            p_gadget_limbs.push(FpGadget::<ConstraintF>::from_value(
+                cs.ns(|| format!("hardcode limb {}", i)),
+                limb,
+            ));
+        }
+        let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
+            limbs: p_gadget_limbs,
             num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
-        })
+        };
+
+        // Compute `delta = self - other`, costs no constraints. 
+        let zero = Self::zero(cs.ns(|| "hardcode zero"))?;
+        let mut delta = self.sub_without_prereduce(cs.ns(|| "delta = self - other"), other)?;
+        
+        debug_assert!(
+            1 + ceil_log_2!(BigUint::one() + &delta.num_of_additions_over_normal_form) == surfeit 
+        );
+        
+        delta = Self::conditionally_select(
+            cs.ns(|| "select delta or zero"),
+            should_enforce,
+            &delta,
+            &zero,
+        )?;
+
+        // We have
+        // ``
+        //      k = D / p <= (1 + num_add(D)) * 2^len(p) / p 
+        //                <= (1 + num_add(D)) * 2,
+        // ``
+        // where `1 + num_add(D)` is assured to be smaller than `p` by the 
+        // sub_without_prereduce(). Hence `k` can be allocated as a single 
+        // field element, the bit length of which is bounded by the condition
+        // ``
+        //      len(k) <= 1 + log(1 + num_add(D)).
+        // ``
+        // Costs `surfeit = 1 + log(3 + num_add(L) + num_add(R))` constraints.
+        let k_gadget = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc k"), || {
+            let mut delta_limbs_values = Vec::<ConstraintF>::new();
+            for limb in delta.limbs.iter() {
+                delta_limbs_values.push(limb.get_value().get()?);
+            }
+
+            let delta_bigint = limbs_to_bigint(params.bits_per_limb, &delta_limbs_values);
+
+            Ok(bigint_to_constraint_field::<ConstraintF>(
+                &(delta_bigint / p_bigint),
+            ))
+        })?;
+
+        //let surfeit = 1 + ceil_log_2!(delta.num_of_additions_over_normal_form + BigUint::one());
+        Reducer::<SimulationF, ConstraintF>::limb_to_bits(
+            cs.ns(|| "k limb to bits"),
+            &k_gadget,
+            surfeit,
+        )?;
+
+        // Compute k * p limbwise. Each limb is bounded by
+        // ``
+        //      limb[i] < 2^surfeit * 2^bits_per_limb,
+        // ``
+        // and similarly for the most significant limb.
+        // Costs `num_limbs` many constraints.
+        let mut kp_gadget_limbs = Vec::new();
+        for (i, limb) in p_gadget.limbs.iter().enumerate() {
+            let mul = limb.mul(cs.ns(|| format!("limb_{} * k_gadget", i)), &k_gadget)?;
+            kp_gadget_limbs.push(mul);
+        }
+
+        // Enforce `delta = k*p` as big integers. Note that the surfeit of `k*p` is 
+        // `1 + log(1 + num_adds(D))`, which is larger than the surfeit of `delta`.
+        // Costs
+        // ``
+        //  (S-1) * (1 + limb_size + 2 - shift_per_limb) + 1 =
+        //      (S-1) * (3 + surfeit) + 1
+        // ``             
+        // constraints, where
+        // `` 
+        // S - 1 = Floor[
+        //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / bits_per_limb
+        //      ] 
+        //      =  1 + Floor[
+        //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
+        //      ],
+        // ``
+        // and `surfeit = len(3 + num_add(L) + num_add(R))`.
+        // Succeeds iff 
+        // ``
+        //      bits_per_limb + surfeit  <= ConstraintF::CAPACITY - 2.
+        // `` 
+        Reducer::<SimulationF, ConstraintF>::group_and_check_equality(
+            cs.ns(|| "group and check equality"),
+            surfeit,
+            params.bits_per_limb,
+            params.bits_per_limb,
+            &delta.limbs,
+            &kp_gadget_limbs,
+        )
+    }
+
+    pub(crate) fn enforce_equal_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        cs: CS,
+        other: &Self,
+    ) -> Result<(), SynthesisError> {
+        self.conditional_enforce_equal_without_prereduce(cs, other, &Boolean::constant(true))
     }
 }
 
 
-/*
-*    Implementation of `FieldGadget` 
-*/
-
+/*******************************************************************************
+ * 
+ *  The high-level functions for arithmetic mod p: Implementation of FieldGadget
+ * 
+ * *****************************************************************************/
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
@@ -821,7 +1069,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
 
     /// Subtract a nonnative field element `other` from `self` modulo `p`. Outputs 
     /// non-normal form.
-    // NOTE: Costs no constraints and only slightly increases the additions over normal form.
+    // NOTE: Costs no constraints, if pre-reduction is not applied, and only slightly 
+    // increases the additions over normal form.
     fn sub<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -1012,6 +1261,111 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
     fn cost_of_inv() -> usize {
         unimplemented!()
     }
+}
+
+
+/*******************************************************************************
+ * 
+ *  Various other gadgets for NonNativeFieldGadgets
+ * 
+ * *****************************************************************************/
+
+impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, ConstraintF>
+for NonNativeFieldGadget<SimulationF, ConstraintF>
+{
+    /// Allocates a non-native field element and enforces normal form, which consumes at most 
+    /// `bits_per_limb` many bits per limb, and and altogether at most (non-native) modulus 
+    /// many bits.
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
+        mut cs: CS,
+        f: F,
+    ) -> Result<Self, SynthesisError>
+    where
+        F: FnOnce() -> Result<T, SynthesisError>,
+        T: Borrow<SimulationF>,
+    {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let zero = SimulationF::zero();
+
+        let elem = match f() {
+            Ok(t) => *(t.borrow()),
+            Err(_) => zero,
+        };
+        let elem_representations = Self::get_limbs_representations(&elem)?;
+        let mut limbs = Vec::new();
+
+        for (i, limb) in elem_representations.iter().enumerate() {
+            limbs.push(FpGadget::<ConstraintF>::alloc(
+                cs.ns(|| format!("alloc limb {}", i)),
+                || Ok(limb),
+            )?);
+        }
+
+        // We constrain all limbs to use at most `bits_per_limb` many bits
+        for (i, limb) in limbs.iter().rev().take(params.num_limbs - 1).enumerate() {
+            Reducer::<SimulationF, ConstraintF>::limb_to_bits(
+                cs.ns(|| format!("limb {} to bits", i)),
+                limb,
+                params.bits_per_limb,
+            )?;
+        }
+        // The most significant limb is treated differently, to enforce that
+        // over all at most modulus many bits are used.
+        Reducer::<SimulationF, ConstraintF>::limb_to_bits(
+            cs.ns(|| "initial limb to bits"),
+            &limbs[0],
+            SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb,
+        )?;
+
+        Ok(Self {
+            limbs,
+            num_of_additions_over_normal_form: BigUint::zero(),
+            simulation_phantom: PhantomData,
+        })
+    }
+
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
+        mut cs: CS,
+        f: F,
+    ) -> Result<Self, SynthesisError>
+    where
+        F: FnOnce() -> Result<T, SynthesisError>,
+        T: Borrow<SimulationF>,
+    {
+        let zero = SimulationF::zero();
+
+        let elem = match f() {
+            Ok(t) => *(t.borrow()),
+            Err(_) => zero,
+        };
+        let elem_representations = Self::get_limbs_representations(&elem)?;
+        let mut limbs = Vec::new();
+
+        for (i, limb) in elem_representations.iter().enumerate() {
+            limbs.push(FpGadget::<ConstraintF>::alloc_input(
+                cs.ns(|| format!("alloc input limb {}", i)),
+                || Ok(limb),
+            )?);
+        }
+
+        Ok(Self {
+            limbs,
+            num_of_additions_over_normal_form: BigUint::zero(),
+            simulation_phantom: PhantomData,
+        })
+    }
+}
+
+impl<SimulationF: PrimeField, ConstraintF: PrimeField> Clone
+ for NonNativeFieldGadget<SimulationF, ConstraintF>
+{
+ fn clone(&self) -> Self {
+     NonNativeFieldGadget {
+         limbs: self.limbs.clone(),
+         num_of_additions_over_normal_form: self.num_of_additions_over_normal_form.clone(),
+         simulation_phantom: PhantomData,
+     }
+ }
 }
 
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> ConstantGadget<SimulationF, ConstraintF>
@@ -1343,91 +1697,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ThreeBitCondNegLookupGadg
     }
 }
 
-impl<SimulationF: PrimeField, ConstraintF: PrimeField> AllocGadget<SimulationF, ConstraintF>
-    for NonNativeFieldGadget<SimulationF, ConstraintF>
-{
-    /// Allocates a non-native field element and enforces normal form, which consumes at most `bits_per_limb` many bits per limb, and
-    /// and altogether at most (non-native) modulus many bits.
-    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
-        mut cs: CS,
-        f: F,
-    ) -> Result<Self, SynthesisError>
-    where
-        F: FnOnce() -> Result<T, SynthesisError>,
-        T: Borrow<SimulationF>,
-    {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let zero = SimulationF::zero();
-
-        let elem = match f() {
-            Ok(t) => *(t.borrow()),
-            Err(_) => zero,
-        };
-        let elem_representations = Self::get_limbs_representations(&elem)?;
-        let mut limbs = Vec::new();
-
-        for (i, limb) in elem_representations.iter().enumerate() {
-            limbs.push(FpGadget::<ConstraintF>::alloc(
-                cs.ns(|| format!("alloc limb {}", i)),
-                || Ok(limb),
-            )?);
-        }
-
-        // We constrain all limbs to use at most `bits_per_limb` many bits
-        for (i, limb) in limbs.iter().rev().take(params.num_limbs - 1).enumerate() {
-            Reducer::<SimulationF, ConstraintF>::limb_to_bits(
-                cs.ns(|| format!("limb {} to bits", i)),
-                limb,
-                params.bits_per_limb,
-            )?;
-        }
-        // The most significant limb is treated differently, to enforce that
-        // over all at most modulus many bits are used.
-        Reducer::<SimulationF, ConstraintF>::limb_to_bits(
-            cs.ns(|| "initial limb to bits"),
-            &limbs[0],
-            SimulationF::size_in_bits() - (params.num_limbs - 1) * params.bits_per_limb,
-        )?;
-
-        Ok(Self {
-            limbs,
-            num_of_additions_over_normal_form: BigUint::zero(),
-            simulation_phantom: PhantomData,
-        })
-    }
-
-    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
-        mut cs: CS,
-        f: F,
-    ) -> Result<Self, SynthesisError>
-    where
-        F: FnOnce() -> Result<T, SynthesisError>,
-        T: Borrow<SimulationF>,
-    {
-        let zero = SimulationF::zero();
-
-        let elem = match f() {
-            Ok(t) => *(t.borrow()),
-            Err(_) => zero,
-        };
-        let elem_representations = Self::get_limbs_representations(&elem)?;
-        let mut limbs = Vec::new();
-
-        for (i, limb) in elem_representations.iter().enumerate() {
-            limbs.push(FpGadget::<ConstraintF>::alloc_input(
-                cs.ns(|| format!("alloc input limb {}", i)),
-                || Ok(limb),
-            )?);
-        }
-
-        Ok(Self {
-            limbs,
-            num_of_additions_over_normal_form: BigUint::zero(),
-            simulation_phantom: PhantomData,
-        })
-    }
-}
-
 impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToConstraintFieldGadget<ConstraintF>
     for NonNativeFieldGadget<SimulationF, ConstraintF>
 {
@@ -1471,28 +1740,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
     }
 
     // Enforces two non-native gadgets, not necessarily in normal form, to be equal mod the 
-    // non-native modulus `p`. This done by enforcing the integer identity 
-    // ``
-    //        delta = self - other = k*p
-    // ``
-    // using `group_and_check_equality()`. Applies pre-reduction whenever the condition 
-    // ``
-    //    bits_per_limb + surfeit <= CAPACITY - 2
-    // ``
-    // does not hold, where 
-    // ``
-    //    surfeit = log(3 + num_add(L) + num_add(R)).
-    // ``
-    // Costs 
-    // ``
-    //     C = 3 * S + surfeit + num_limbs(p) + 1
-    // ``
-    // constraints if no pre-reduction is applied, where 
-    // ``
-    //      S =  2 + Floor[
-    //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
-    //          ].   
-    // ``
+    // non-native modulus `p`. 
     fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -1503,130 +1751,21 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
             self.check() && other.check(),
             "conditional_enforce_equal(): check() failed on input gadgets" 
         );
+        // pre-reduction step
+        let mut elem_self = self.clone();
+        let mut elem_other = other.clone();
+        Reducer::pre_enforce_equal_reduce(
+            cs.ns(|| "pre sub reduce"),
+            &mut elem_self,
+            &mut elem_other,
+        )?;
         
-        // Equality mod p is proven by the integer equation
-        // ``
-        //       Sum_{i=0}^{num_limbs -1} D[i] * A^i   = k * p,
-        // ``
-        // where the `D[i]` are the limbs of the `sub()` of `L` and `R`,
-        // and `A = 2^bits_per_limb`.
-        // As the left hand side is bounded by
-        // ``
-        //      Sum_{i=0}^{num_limbs -1} D[i] * A^i < (num_add(D) + 1) * 2^len(p),
-        // ``   
-        // the factor `k` is length bounded by
-        // ``
-        //      len(k) <= 1 + log(num_add(D) + 1),
-        // ``
-        // hence a single field element is good enough.
-
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-
-        // Get p
-        let p_representations =
-            NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations_from_big_integer(
-                &<SimulationF as PrimeField>::Params::MODULUS,
-            )?;
-        // TODO: check if the recomputation of MODULUS is the best way we can do.
-        let p_bigint = limbs_to_bigint(params.bits_per_limb, &p_representations);
-
-        let mut p_gadget_limbs = Vec::new();
-        for (i, limb) in p_representations.iter().enumerate() {
-            p_gadget_limbs.push(FpGadget::<ConstraintF>::from_value(
-                cs.ns(|| format!("hardcode limb {}", i)),
-                limb,
-            ));
-        }
-        let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
-            limbs: p_gadget_limbs,
-            num_of_additions_over_normal_form: BigUint::zero(),
-            simulation_phantom: PhantomData,
-        };
-
-        // Get delta = self - other, costs no constraints (if the prereduction
-        // is not called)
-        let zero = Self::zero(cs.ns(|| "hardcode zero"))?;
-        let mut delta = self.sub(cs.ns(|| "delta = self - other"), other)?;
-        delta = Self::conditionally_select(
-            cs.ns(|| "select delta or zero"),
-            should_enforce,
-            &delta,
-            &zero,
+        elem_self.conditional_enforce_equal_without_prereduce(cs.ns(|| "elem_self == elem_other"), 
+            &elem_other,
+            &should_enforce
         )?;
 
-        // Since `delta = k*p` and the product length lower bound
-        // ``
-        //      len(k*p) >= len(p) + len(k) - 1,
-        // ``
-        // the length of `k = delta/p` is bounded by the condition
-        // ``
-        //      len(p) + len(k) - 1 <= len(p) + log(1 + num_add(D)), 
-        // ``
-        // or in short
-        // ``
-        //       len(k) <= 1 + log(1 + delta.num_additions_over_normal_form).
-        // ``
-        // Costs `1 + log(3 + num_add(L) + num_add(R))` constraints, in case no 
-        // pre-reduction is performed.
-        let k_gadget = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc k"), || {
-            let mut delta_limbs_values = Vec::<ConstraintF>::new();
-            for limb in delta.limbs.iter() {
-                delta_limbs_values.push(limb.get_value().get()?);
-            }
-
-            let delta_bigint = limbs_to_bigint(params.bits_per_limb, &delta_limbs_values);
-
-            Ok(bigint_to_constraint_field::<ConstraintF>(
-                &(delta_bigint / p_bigint),
-            ))
-        })?;
-
-        let surfeit = ceil_log_2!(delta.num_of_additions_over_normal_form + BigUint::one());
-        Reducer::<SimulationF, ConstraintF>::limb_to_bits(
-            cs.ns(|| "k limb to bits"),
-            &k_gadget,
-            surfeit + 1,
-        )?;
-
-        // Compute k * p limbwise. Each limb is bounded by
-        // ``
-        //      limb[i] < 2^surfeit * 2^bits_per_limb,
-        // ``
-        // and similarly for the most significant limb.
-        // Costs `num_limbs` many constraints.
-        let mut kp_gadget_limbs = Vec::new();
-        for (i, limb) in p_gadget.limbs.iter().enumerate() {
-            let mul = limb.mul(cs.ns(|| format!("limb_{} * k_gadget", i)), &k_gadget)?;
-            kp_gadget_limbs.push(mul);
-        }
-
-        // Enforce `delta = k*p` as big integers. Costs
-        // ``
-        //  (S-1) * (1 + limb_size + 2 - shift_per_limb) + 1 =
-        //      (S-1) * (3 + surfeit) + 1
-        // ``             
-        // constraints, where
-        // `` 
-        // S - 1 = Floor[
-        //          (ConstraintF::CAPACITY - 2 - (bits_per_limb + surfeit)) / bits_per_limb
-        //      ] 
-        //      =  1 + Floor[
-        //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
-        //      ],
-        // ``
-        // and `surfeit = len(3 + num_add(L) + num_add(R))`.
-        // Succeeds iff 
-        // ``
-        //      bits_per_limb + surfeit  <= ConstraintF::CAPACITY - 2.
-        // `` 
-        Reducer::<SimulationF, ConstraintF>::group_and_check_equality(
-            cs.ns(|| "group and check equality"),
-            surfeit,
-            params.bits_per_limb,
-            params.bits_per_limb,
-            &delta.limbs,
-            &kp_gadget_limbs,
-        )
+        Ok(())
     }
 
     fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -1646,24 +1785,5 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> EqGadget<ConstraintF>
         .inverse(cs.ns(|| "invert cond select result"))?;
 
         Ok(())
-    }
-}
-
-/*
- * Implementation of a few traits
- */
-
-// TODO: the default implementation for mul_equals() calls mul() and 
-// then enforce_equal(). Both do reduction. Let us improve here.
-
-impl<SimulationF: PrimeField, ConstraintF: PrimeField> Clone
-    for NonNativeFieldGadget<SimulationF, ConstraintF>
-{
-    fn clone(&self) -> Self {
-        NonNativeFieldGadget {
-            limbs: self.limbs.clone(),
-            num_of_additions_over_normal_form: self.num_of_additions_over_normal_form.clone(),
-            simulation_phantom: PhantomData,
-        }
     }
 }

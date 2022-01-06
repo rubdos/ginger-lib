@@ -7,7 +7,13 @@ use algebra::{
 use crate::{
     fields::{
         fp::FpGadget,
-        nonnative::{nonnative_field_gadget::NonNativeFieldGadget, params::get_params},
+        nonnative::{
+            nonnative_field_gadget::{
+                NonNativeFieldGadget,
+                bigint_to_constraint_field, limbs_to_bigint
+            }, 
+            params::get_params, 
+        },
     },
     ceil_log_2,
     prelude::*,
@@ -20,49 +26,6 @@ use num_integer::Integer;
 use num_traits::{One, Zero};
 
 use crate::fields::FieldGadget;
-
-/// Recombines the large integer value from a vector of (not necessarily normalized) limbs.
-pub fn limbs_to_bigint<ConstraintF: PrimeField>(
-    bits_per_limb: usize,
-    limbs: &[ConstraintF],
-) -> BigUint {
-    let mut val = BigUint::zero();
-    let mut big_cur = BigUint::one();
-    let two = BigUint::from(2u32);
-    for limb in limbs.iter().rev() {
-        let mut limb_repr = limb.into_repr().to_bits();
-        limb_repr.reverse(); //We need them in little endian
-        let mut small_cur = big_cur.clone();
-        for limb_bit in limb_repr.iter() {
-            if *limb_bit {
-                val += &small_cur;
-            }
-            small_cur *= 2u32;
-        }
-        big_cur *= two.pow(bits_per_limb as u32);
-    }
-
-    val
-}
-
-/// Converts an unsigned big integer `bigint` into an element from the constraint field F_p by
-/// computing (bigint mod p).
-pub fn bigint_to_constraint_field<ConstraintF: PrimeField>(bigint: &BigUint) -> ConstraintF {
-    let mut val = ConstraintF::zero();
-    let mut cur = ConstraintF::one();
-    let bytes = bigint.to_bytes_be();
-
-    let basefield_256 = ConstraintF::from_repr(<ConstraintF as PrimeField>::BigInt::from(256));
-
-    for byte in bytes.iter().rev() {
-        let bytes_basefield = ConstraintF::from(*byte as u128);
-        val += cur * bytes_basefield;
-
-        cur *= &basefield_256;
-    }
-
-    val
-}
 
 /// The collections of methods for reducing the presentations of NonNativeFieldGadgets
 pub struct Reducer<SimulationF: PrimeField, ConstraintF: PrimeField> {
@@ -115,8 +78,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         })?;
 
         // We do not need to panic if the aforementioned assumption is not met,
-        // as enforce_equal will do.
-        elem.enforce_equal(cs.ns(|| "elem == new_elem"), &new_elem)?;
+        // as enforce_equal_without_prereduce() will do.
+        elem.enforce_equal_without_prereduce(cs.ns(|| "elem == new_elem"), &new_elem)?;
         *elem = new_elem;
         Ok(())
     }
@@ -256,6 +219,39 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         )?;
 
         Ok(())
+    }
+
+     /// Optional reduction which assures that the resulting operands produce do not exceed
+     /// the capacity bound for a enforce_equal_without_prereduce(). 
+     pub(crate) fn pre_enforce_equal_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+        cs: CS,
+        elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+        elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+    ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            elem.check() && elem_other.check(),
+            "pre_sub_reduce(): check() failed on input gadgets"
+        );
+
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        // The enforce_equal_without_prereduce() assumes that
+        // ``
+        //    bits_per_limb + surfeit <= CAPACITY - 2,
+        // ``
+        // where 
+        // ``
+        //    surfeit = 1 + log(3 + num_add(L) + num_add(R)).
+        // ``
+        Self::reduce_until_cond_is_satisfied(
+            cs,
+            elem,
+            elem_other,
+            |elem, elem_other| {
+                let sum_add = &elem.num_of_additions_over_normal_form + &elem_other.num_of_additions_over_normal_form;
+                let surfeit = 1 + ceil_log_2!(sum_add + BigUint::from(3usize));
+                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
+            }
+        )
     }
 
     /// The core piece for comparing two big integers in non-normal form. 

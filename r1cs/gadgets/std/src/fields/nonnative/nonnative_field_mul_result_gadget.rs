@@ -2,9 +2,12 @@ use crate::{
     fields::{
         fp::FpGadget,
         nonnative::{
-            nonnative_field_gadget::NonNativeFieldGadget,
+            nonnative_field_gadget::{
+                NonNativeFieldGadget,
+                bigint_to_constraint_field, limbs_to_bigint
+            },
             params::get_params,
-            reduce::{bigint_to_constraint_field, limbs_to_bigint, Reducer},
+            reduce::Reducer,
         },
     },
     ceil_log_2,
