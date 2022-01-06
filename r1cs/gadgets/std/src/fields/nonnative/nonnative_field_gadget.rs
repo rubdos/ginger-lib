@@ -355,7 +355,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// Low level function for addition of non-natives. In order to guarantee
     /// a reducible output, this function assumes that  
     /// ``
-    ///     bits_per_limb + len(num_add(L) + num_add(R) + 4) <= CAPACITY - 2,
+    ///     bits_per_limb + len(num_add(L) + num_add(R) + 4) <= CAPACITY - 3,
     /// `` 
     /// and panics if not.
     fn add_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -371,7 +371,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         let surfeit = ceil_log_2!(BigUint::from(4usize) + &self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form);
         
-        if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
+        if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 3 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for add_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)));
         }
 
@@ -407,9 +407,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// Outputs non-normal form which allows a secure reduction.
     /// Assumes that 
     /// ``
-    ///     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 2,
+    ///     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 3,
     /// `` 
-    /// to assure a secure sub together with an optional reduce.
+    /// to assure a secure and reducible sub result.
     // Costs no constraints.
     // Note on the security assumption:  To output a difference which does not exceed the 
     // capacity bound, we need to demand that
@@ -419,7 +419,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     // where `num_add(D) = num_add(L) + num_add(R) + 2`, see below. To allow a subsequent reduction 
     // we need to assure the stricter condition
     // ``
-    //     bits_per_limb + len(num_add(D) + 3) <= CAPACITY - 2.
+    //     bits_per_limb + len(num_add(D) + 3) <= CAPACITY - 3.
     // `` 
     fn sub_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
@@ -434,7 +434,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         let surfeit = ceil_log_2!(BigUint::from(5usize) + &self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form);
         
-        if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 2 {
+        if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 3 {
             return Err(
                 SynthesisError::Other(
                     format!("Security bound exceeded for sub_without_prereduce. Max: {}, Actual: {}", 
@@ -907,7 +907,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         debug_assert!(
             1 + ceil_log_2!(BigUint::one() + &delta.num_of_additions_over_normal_form) == surfeit 
         );
-        
+
         delta = Self::conditionally_select(
             cs.ns(|| "select delta or zero"),
             should_enforce,

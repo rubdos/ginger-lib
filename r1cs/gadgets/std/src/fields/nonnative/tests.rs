@@ -36,7 +36,7 @@ use crate::{
 };
 
 
-const TEST_COUNT: usize = 100;
+const TEST_COUNT: usize = 200;
 const STRESS_TEST_COUNT: usize = 200;
 
 #[test]
@@ -178,16 +178,16 @@ fn enforce_equal_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCo
 
         // enforce_equal() of a non-native versus itself assumes that  
         // ``
-        //  bit_per_limb + log(2*num_add + 3) <= CAPACITY - 2.
+        //      bit_per_limb + log(2*num_add + 3) <= CAPACITY - 2.
         // ``
         // Since alloc_random returns a non-native with `num_adds = 2^surfeit - 1`, we need
         // to assure that
         // ``
-        //      2^{surfeit + 1} + 2 <= 2^{CAPACITY - 2 - bits_per_limb}.
+        //      2^surfeit + 2 <= 2^{CAPACITY - 3 - bits_per_limb}.
         // ``
         // For simplicity, we demand the slightly stricter condition 
         // ``
-        //      2^{surfeit + 2} <= 2^{CAPACITY - 2 - bits_per_limb}
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 3 - bits_per_limb}
         // ``
         let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
 
@@ -239,13 +239,13 @@ fn reduce_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng
 
         // To sample a reducible non-native we need to assure that
         // ``
-        //      2^{surfeit + 1} + 2 <= 2^{CAPACITY - 2 - bits_per_limb}.
+        //     log(2^surfeit + 2) <= CAPACITY - 3 - bits_per_limb.
         // ``
-        // For simplicity, we demand the slightly stricter condition 
+        // For simplicity, we demand the stricter condition 
         // ``
-        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 3 - bits_per_limb}
         // ``
-        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
 
         let surfeit_a = rng.gen_range(0..=surfeit_bound);      
 
@@ -285,9 +285,9 @@ fn addition_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(r
         // We sample reducible nonnatives. For simplicity, we demand the slightly 
         // stricter condition 
         // ``
-        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 3 - bits_per_limb}
         // ``
-        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
 
         let surfeit_a = rng.gen_range(0..=surfeit_bound);
         let surfeit_b = rng.gen_range(0..=surfeit_bound);        
@@ -330,9 +330,9 @@ fn substraction_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCor
         // We sample reducible nonnatives. For simplicity, we demand the slightly 
         // stricter condition 
         // ``
-        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 3 - bits_per_limb}
         // ``
-        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
 
         let surfeit_a = rng.gen_range(0..=surfeit_bound);
         let surfeit_b = rng.gen_range(0..=surfeit_bound);        
@@ -385,9 +385,9 @@ fn negation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(r
         // We sample reducible nonnatives. For simplicity, we demand the slightly 
         // stricter condition 
         // ``
-        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 3 - bits_per_limb}
         // ``
-        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
 
         let surfeit_a = rng.gen_range(0..=surfeit_bound);       
 
@@ -426,9 +426,9 @@ fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
         // We sample reducible nonnatives. For simplicity, we demand the slightly 
         // stricter condition 
         // ``
-        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 3 - bits_per_limb}
         // ``
-        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
 
         let surfeit_a = rng.gen_range(0..=surfeit_bound);
         let surfeit_b = rng.gen_range(0..=surfeit_bound);        
@@ -485,9 +485,9 @@ fn multiplication_by_constant_test<SimulationF: PrimeField, ConstraintF: PrimeFi
         // We sample reducible nonnatives. For simplicity, we demand the slightly 
         // stricter condition 
         // ``
-        //      2^{surfeit + 1} <= 2^{CAPACITY - 2 - bits_per_limb}
+        //      2^{surfeit + 1} <= 2^{CAPACITY - 3 - bits_per_limb}
         // ``
-        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb;
+        let surfeit_bound = ConstraintF::Params::CAPACITY as usize - 4 - params.bits_per_limb;
 
         let surfeit_a = rng.gen_range(0..=surfeit_bound);    
 

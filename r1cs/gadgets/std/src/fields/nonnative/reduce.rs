@@ -54,7 +54,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// Reduction to normal form, which again has no excess in its limbs.
     /// Assumes that 
     /// ``
-    ///     bits_per_limb + log(num_add(elem) + 3) <= CAPACITY - 2.
+    ///     bits_per_limb + 1 + log(num_add(elem) + 3) <= CAPACITY - 2.
     /// ``
     // Costs`
     //    ``
@@ -125,7 +125,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // where `num_add(sum) = num_add(L) + num_add(R) + 1`. To allow a subsequent reduction 
         // we need to assure the stricter condition
         // ``
-        //     bits_per_limb + log(num_add(sum) + 3) <= CAPACITY - 2.
+        //     bits_per_limb + log(num_add(sum) + 3) <= CAPACITY - 3.
         // `` 
         Self::reduce_until_cond_is_satisfied(
             cs,
@@ -134,7 +134,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             |elem, elem_other| {
                 let sum_add = &elem.num_of_additions_over_normal_form + &elem_other.num_of_additions_over_normal_form;
                 let surfeit = ceil_log_2!(sum_add + BigUint::from(3usize));
-                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
+                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 3
             }
         )
     }
@@ -153,7 +153,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
         // The sub_without_prereduce() assumes that 
         // ``
-        //     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 2,
+        //     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 3,
         // `` 
         // to assure a secure substraction together with an optional reduce.
 
@@ -164,7 +164,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             |elem, elem_other| {
                 let sum_add = &elem.num_of_additions_over_normal_form + &elem_other.num_of_additions_over_normal_form;
                 let surfeit = ceil_log_2!(sum_add + BigUint::from(5usize));
-                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 2
+                surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 3
             }
         )
     }
