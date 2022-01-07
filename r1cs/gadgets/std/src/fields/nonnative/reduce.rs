@@ -156,7 +156,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         //     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 3,
         // `` 
         // to assure a secure substraction together with an optional reduce.
-
         Self::reduce_until_cond_is_satisfied(
             cs,
             elem,

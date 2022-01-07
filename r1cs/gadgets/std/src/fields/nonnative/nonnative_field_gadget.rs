@@ -372,7 +372,11 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let surfeit = ceil_log_2!(BigUint::from(4usize) + &self.num_of_additions_over_normal_form + &other.num_of_additions_over_normal_form);
         
         if params.bits_per_limb + surfeit > ConstraintF::Params::CAPACITY as usize - 3 {
-            return Err(SynthesisError::Other(format!("Security bound exceeded for add_without_prereduce. Max: {}, Actual: {}", ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)));
+            return Err(SynthesisError::Other(
+                format!("Security bound exceeded for add_without_prereduce. Max: {}, Actual: {}", 
+                ConstraintF::Params::CAPACITY as usize - 3, 
+                params.bits_per_limb + surfeit))
+            );
         }
 
         let mut limbs = Vec::new();
@@ -438,7 +442,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             return Err(
                 SynthesisError::Other(
                     format!("Security bound exceeded for sub_without_prereduce. Max: {}, Actual: {}", 
-                    ConstraintF::Params::CAPACITY as usize - 2, params.bits_per_limb + surfeit)
+                    ConstraintF::Params::CAPACITY as usize - 3, params.bits_per_limb + surfeit)
                 )
             );
         }
