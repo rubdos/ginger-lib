@@ -191,7 +191,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         // where 
         // ``
-        //      surfeit(product) = len(num_limbs * (num_add(L)+1) * (num_add(R) + 1).
+        //      surfeit(product) = log(num_limbs * (num_add(L)+1) * (num_add(R) + 1)).
         // ``
         // To allow for a subsequent reduction we need to assure the stricter condition 
         // that 
@@ -200,18 +200,18 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         // where
         // ``
-        //      surfeit' = len(num_limbs^2 * (num_add(L)+1) * (num_add(R) + 1) + 1).
+        //      surfeit' =log(num_limbs * (1 + (num_add(L) + 1) * (num_add(R) + 1))).
         // ``
         Self::reduce_until_cond_is_satisfied(
             cs.ns(|| "pre mul reduce"),
             elem,
             elem_other,
             |elem, elem_other| {
-                let num_add_bound = BigUint::from(params.num_limbs) 
-                    * (BigUint::one() + &elem.num_of_additions_over_normal_form)
-                    * (BigUint::one() + &elem_other.num_of_additions_over_normal_form);
+                let term = (BigUint::one() + &elem.num_of_additions_over_normal_form)
+                    * (BigUint::one() + &elem_other.num_of_additions_over_normal_form)
+                    + BigUint::one();
                 let surfeit_prime = ceil_log_2!(
-                    BigUint::from(params.num_limbs) * num_add_bound + BigUint::one()
+                    BigUint::from(params.num_limbs) * term
                 );
     
                 2 * params.bits_per_limb + surfeit_prime <= ConstraintF::Params::CAPACITY as usize - 2

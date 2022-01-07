@@ -684,20 +684,20 @@ fn elementary_test_mul_without_prereduce<SimulationF: PrimeField, ConstraintF: P
         // ``
         // Edge cases of mul_without_prereduce() are characterized by
         // ``
-        //    num_limbs^2 * (num_add(L) + 1) * (num_add(R) + 1)  + 1  
+        //    num_limbs * (1 + (num_add(L) + 1) * (num_add(R) + 1))  
         //                          <= 2^{CAPACITY - 2 - 2*bits_per_limb},
         // ``
         // or
         // ``
-        //    num_limbs^2 * 2^{surfeit_a + surfeit_b}  + 1  
+        //    num_limbs * (1  + 2^{surfeit_a + surfeit_b})
         //                          <= 2^{CAPACITY - 2 - 2*bits_per_limb},
         // ``
         let surfeit_bound = (
-            (BigUint::from(2u32).pow(
+            BigUint::from(2u32).pow(
                 (ConstraintF::Params::CAPACITY as usize - 2 - 2*params.bits_per_limb) as u32
-                ) - BigUint::one()
-            ) 
-            / BigUint::from((params.num_limbs * params.num_limbs) as u32)
+                )
+            / BigUint::from(params.num_limbs  as u32)
+            - BigUint::one()
         ).bits() as usize - 1;
         
         let surfeit_a = rng.gen_range(0..=surfeit_bound);

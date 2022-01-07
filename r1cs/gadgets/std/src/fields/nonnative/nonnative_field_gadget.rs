@@ -598,8 +598,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// ``
     /// where
     /// ``
-    ///      surfeit' = log(num_limbs * (num_adds(prod) + 1) + 1) =
-    ///             = log(num_limbs^2* (num_add(L) + 1) * (num_add(R) + 1)  + 1)
+    ///      surfeit' = log(num_limbs + num_adds(prod) + 1) =
+    ///             = log(num_limbs + num_limbs * (num_add(L) + 1) * (num_add(R) + 1)) 
+    ///             = log(num_limbs * (1 + (num_add(L) + 1) * (num_add(R) + 1))) =
     /// ``
     //  Costs `num_limbs^2` constraints.
     pub fn mul_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -627,14 +628,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         //     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
         // ``
-        // with `surfeit'` as above.
+        // with `surfeit' = log(num_limbs * (num_add(L) + 1) * (num_add(R) + 1) + num_limbs)`.
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-        let num_add_bound = BigUint::from(params.num_limbs) 
+        let num_add_bound =  BigUint::from(params.num_limbs) 
             * (BigUint::one() + &self.num_of_additions_over_normal_form)
             * (BigUint::one() + &other.num_of_additions_over_normal_form);
 
         let surfeit_prime = ceil_log_2!(
-            BigUint::from(params.num_limbs) * &num_add_bound +  BigUint::one()
+            &num_add_bound + BigUint::from(params.num_limbs) 
         );
 
         if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
@@ -730,22 +731,20 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         // where 
         // ``
-        //      surfeit(product) = len(num_limbs * (num_add(L)+1)).
+        //      surfeit(product) = log(num_limbs * (num_add(L)+1)).
         // ``
         // To allow for a subsequent reduction we need to assure the stricter condition 
         // that 
         // ``
         //     2 * bits_per_limb + surfeit' <= CAPACITY - 2,
         // ``
-        // with `surfeit' = len(num_limbs^2 * (num_add(L)+1) + 1)`.
-
+        // with `surfeit' = log(num_limbs * (num_add(L) + 1)  + num_limbs)`.
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
-
-        let num_add_bound = BigUint::from(params.num_limbs) 
-        * (BigUint::one() + &self.num_of_additions_over_normal_form);
+        let num_add_bound =  BigUint::from(params.num_limbs) 
+            * (BigUint::one() + &self.num_of_additions_over_normal_form);
 
         let surfeit_prime = ceil_log_2!(
-            BigUint::from(params.num_limbs) * &num_add_bound +  BigUint::one()
+            &num_add_bound + BigUint::from(params.num_limbs) 
         );
 
         if 2 * params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 2 {
