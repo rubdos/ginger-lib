@@ -22,8 +22,25 @@ pub(crate) const fn find_parameters(
 ) -> (usize, usize, usize) {
     // A `single mul_without_prereduce()` with a subsequent `reduce()` costs
     // ``
-    //     C =  2 *(len(p) + num_limbs^2) + surfeit' 
-    //          +  (num_groups - 1) * (3 + bits_per_limb + surfeit') + 1
+    // DDT: num_limbs^2 constraints due to the multiplication x = a * b
+    // DDT: len(p) + surfeit constraints for enforcing k such that x = k * p + r 
+    // DDT: len(p) constraints for enforcing r
+    // DDT: Zero constraints  (len(p)^2 linear combinations) for computing the product k * r
+    // DDT: (bits_per_group - num_limbs_in_a_group*bits_per_limb) boolean constraints due to carries for each group except the last one.
+    // DDT: We should have that 
+    //      max_group_value = (2^(2*bits_per_limb + surfeit) - 1)*(1 +  2^bits_per_limb + ... + 2^((num_limbs_in_a_group-1)*bits_per_limbs))
+    //                      < 2^(2*bits_per_limb + surfeit) * ( 2^(num_limbs_in_a_group * bits_per_limb ) - 1) / ( 2^bits_per_limb - 1)
+    //      It follows that 
+    //          bits_per_group = len(max_group_value) = 2 * bits_per_limb + surfeit + num_limbs_in_a_group * bits_per_limb - bits_per_limb + 1
+    //      where the final "+1" is ude to the fact that (x-1)/(y-1) < 2*x/y.
+    //      So we should need bits_per_limb + surfeit + 1 boolean constraints needed for enforcing the carries.
+    //      There can be a linear combination which links the value of the carry to its bits decomposition.
+    // DDT: So, in my opinion, the right number of constraints is:
+    //      C = num_limbs^2 + 2*len(p) + surfeit + (num_groups - 1)*(bits_per_limb + surfeit + 1)
+    // DDT: I don't understand the final "+1" in the estimate to what is related.
+    // OLD ESTIMATE:      
+    // C =  2 *(len(p) + num_limbs^2) + surfeit' 
+    // +  (num_groups - 1) * (3 + bits_per_limb + surfeit') + 1
     // ``
     // constraints, where 
     // ``
@@ -31,16 +48,26 @@ pub(crate) const fn find_parameters(
     //              = len(num_limbs^2 * (num_add(L)+1) * (num_add(R) + 1)),
     //      num_groups = Ceil[ 2*num_limbs / S],
     // ``
+    // DDT: I think that "surfeit" should be = len(num_limbs * (num_add(L)+1) * (num_add(R) + 1)).
+    //      In fact, we know a priori that limb(L) < (2^bits_per_limb-1)*(num_add(L)+1) and the same for R.
+    //      Then clearly limb(product) <= num_limbs*(2^bits_per_limb-1)^2*(num_add(L)+1)(num_add(R)+1)
+    //      So the surfeit, i.e. the number of extra bits of the product exceeding 2*bits_per_limb should be
+    //      len(num_limbs * (num_add(L)+1) * (num_add(R) + 1)).
     // and
     // ``
     //    S - 1 = Floor[
     //          (ConstraintF::CAPACITY - 2 - surfeit') / bits_per_limb
     //          ] - 2.
     // ``
+    // DDT: S (= num_limbs_in_a_group in my notation) shuld be the maximum value that bits_per_groups does not exceed CAPACITY.
+    //      So, since  bits_per_group = surfeit + (num_limbs_in_a_group) * bits_per_limb  + bits_per_limb + 1
+    //      We can define S = floor( (CAPACITY - surfeit - bits_per_limb - 1) / bits_per_limb)
+    //                      = floor( (CAPACITY - surfeit - 1) / bits_per_limb) - 1
     // Assumes that
     // ``
     //     2 * bits_per_limb + surfeit' <= CAPACITY - 2.
     // ``
+    // DDT: before changing the code, I want to be sure that Ulrich agrees with the modifications in the inline comments.
     let mut first = true;
     let mut min_cost = 0usize;
     let mut min_cost_limb_size = 0usize;
