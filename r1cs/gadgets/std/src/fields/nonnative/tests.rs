@@ -36,7 +36,7 @@ use crate::{
 };
 
 
-const TEST_COUNT: usize = 200;
+const TEST_COUNT: usize = 500;
 const STRESS_TEST_COUNT: usize = 200;
 
 #[test]
@@ -82,19 +82,19 @@ fn get_params_test() {
     ];
     let test_vector_out = vec![
         // Base Field 255 bit
-        (6usize, 43usize, 751usize),
-        (6, 43, 753), 
-        (7, 55, 1223),
-        (14, 54, 2689),
-        (28, 74, 8580),
-        (57, 72, 20710),
+        (6usize, 43usize, 745usize),
+        (6, 43, 747), 
+        (7, 55, 1211),
+        (14, 54, 2653),
+        (28, 74, 8445),
+        (55, 75, 19886),
         // Base Field 382 bit
+        (4, 64, 655),
         (4, 64, 657),
-        (4, 64, 659),
-        (6, 64, 1047),
-        (9, 84, 2264),
-        (24, 86, 7060),
-        (36, 114, 15992),
+        (6, 64, 1041),
+        (9, 84, 2249),
+        (24, 86, 6985),
+        (36, 114, 15817),
     ];
 
     let mut out = vec![];
