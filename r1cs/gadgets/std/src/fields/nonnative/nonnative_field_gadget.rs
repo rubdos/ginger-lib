@@ -355,10 +355,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// Low level function for addition of non-natives. In order to guarantee
     /// a reducible output, this function assumes that  
     /// ``
-    ///     bits_per_limb + len(num_add(L) + num_add(R) + 4) <= CAPACITY - 3,
+    ///     bits_per_limb + log(num_add(L) + num_add(R) + 4) <= CAPACITY - 3,
     /// `` 
     /// and panics if not.
-    fn add_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub(crate) fn add_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -407,7 +407,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// Outputs non-normal form which allows a secure reduction.
     /// Assumes that 
     /// ``
-    ///     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 3,
+    ///     bits_per_limb + log(num_add(L) + num_add(R) + 5) <= CAPACITY - 3,
     /// `` 
     /// to assure a secure and reducible sub result.
     // Costs no constraints.
@@ -419,9 +419,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     // where `num_add(D) = num_add(L) + num_add(R) + 2`, see below. To allow a subsequent reduction 
     // we need to assure the stricter condition
     // ``
-    //     bits_per_limb + len(num_add(D) + 3) <= CAPACITY - 3.
+    //     bits_per_limb + log(num_add(D) + 3) <= CAPACITY - 3.
     // `` 
-    fn sub_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub(crate) fn sub_without_prereduce<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
