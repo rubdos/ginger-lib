@@ -617,8 +617,8 @@ fn elementary_test_substraction<SimulationF: PrimeField, ConstraintF: PrimeField
 
         let b_native = b.get_value().unwrap();
 
-        let a_minus_b = a.sub_without_prereduce(cs.ns(|| "a - b"), &b).unwrap();
-        let b_minus_a = b.sub_without_prereduce(cs.ns(|| "b - a"), &a).unwrap();
+        let a_minus_b = a.sub(cs.ns(|| "a - b"), &b).unwrap();
+        let b_minus_a = b.sub(cs.ns(|| "b - a"), &a).unwrap();
     
         assert!(
             a_minus_b.check()
@@ -1821,7 +1821,7 @@ macro_rules! nonnative_test {
         //     $test_simulation_field,
         //     $test_constraint_field
         // );
-        
+
         /* elementary tests
         */
         elementary_test!(
