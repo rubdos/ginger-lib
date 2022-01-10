@@ -27,7 +27,7 @@ use crate::{
         nonnative::{
             nonnative_field_gadget::NonNativeFieldGadget,
             nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget,
-            params::get_params,
+            params::{SURFEIT, get_params, find_parameters},
             reduce::Reducer,
         },
         FieldGadget,
@@ -115,14 +115,33 @@ fn get_params_test() {
     );
 }
 
-
-
-
 /*************************************************************************************************
  * 
  * elementary arithemtic tests
  * 
  * ***********************************************************************************************/
+ fn constraint_count_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
+    let (_, _, constraints) = find_parameters(ConstraintF::size_in_bits(), SimulationF::size_in_bits());
+
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
+    let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+        cs.ns(|| "alloc random a" ),
+        rng, 
+        SURFEIT as usize).unwrap();
+    let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
+        cs.ns(|| "alloc random b" ),
+        rng, 
+        SURFEIT as usize).unwrap();
+    let _a_times_b = a.mul_without_prereduce(cs.ns(|| "a * b"), &b).unwrap().reduce(cs.ns(|| "reduce a * b")).unwrap();
+    
+    assert!(
+        cs.num_constraints() == constraints,
+        "constraints do not match. Expected: {}, Counted: {}",
+        constraints,
+        cs.num_constraints()
+    );
+}
+
 fn elementary_test_allocation<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
@@ -1792,6 +1811,16 @@ macro_rules! stress_test {
 
 macro_rules! nonnative_test {
     ($test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
+        // Commented out as the estimated number of constraints from `find_paramaters`
+        // slightly differ from the measured ones.
+        //
+        // elementary_test!(
+        //     constraint_count_test,
+        //     $test_name,
+        //     $test_simulation_field,
+        //     $test_constraint_field
+        // );
+        
         /* elementary tests
         */
         elementary_test!(
