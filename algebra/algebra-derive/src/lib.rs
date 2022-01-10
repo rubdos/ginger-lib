@@ -12,7 +12,6 @@
     clippy::assertions_on_constants
 )]
 
-
 use proc_macro2::TokenStream;
 use syn::{parse_macro_input, Data, DeriveInput, Index, Type};
 
