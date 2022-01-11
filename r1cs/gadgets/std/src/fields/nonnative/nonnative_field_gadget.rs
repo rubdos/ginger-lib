@@ -1111,8 +1111,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
     // ``
     // constraints, where 
     // ``
-    //      surfeit' =  log(num_limbs * (num_adds(prod) + 1) + 1)
-    //              = log(num_limbs^2 * (num_add(L)+1) * (num_add(R) + 1)),
+    //      surfeit' =  log(num_limbs + 2 * (num_adds(prod) + 1))
+    //              = log(num_limbs +  2 * num_limbs * (num_add(L)+1) * (num_add(R) + 1)),
     //      num_groups = Ceil[num_limbs / S],
     // ``
     // and
