@@ -1,11 +1,23 @@
-use crate::bits::{boolean::Boolean, uint8::UInt8};
-use algebra::Field;
+use crate::bits::boolean::Boolean;
+use algebra::{Field, PrimeField};
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
+use crate::alloc::{AllocGadget, ConstantGadget};
+use crate::eq::{EqGadget, MultiEq};
+use crate::select::CondSelectGadget;
+use std::fmt::Debug;
+use std::ops::{Shl, Shr};
 
 pub mod boolean;
-pub mod uint32;
-pub mod uint64;
-pub mod uint8;
+//pub mod uint32;
+//pub mod uint64;
+
+#[macro_use]
+pub mod macros;
+impl_uint_gadget!(U8, 8, u8, uint8);
+impl_uint_gadget!(UInt64, 64, u64, uint64);
+impl_uint_gadget!(UInt32, 32, u32, uint32);
+
+pub type UInt8 = uint8::U8;
 
 pub trait ToBitsGadget<ConstraintF: Field> {
     fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -61,6 +73,164 @@ where
         let big_endian_bits: Vec<_> = bits.iter().rev().map(|el| *el).collect();
         Self::from_bits(cs, &big_endian_bits)
     }
+}
+
+// this trait allows to move out rotl and rotr from UIntGadget, in turn allowing to avoid specifying
+// for the compiler a field ConstraintF every time these methods are called, which requires a
+// verbose syntax (e.g., UIntGadget::<ConstraintF>::rotl(&gadget_variable, i)
+pub trait RotateUInt {
+    /// Rotate left `self` by `by` bits.
+    fn rotl(&self, by: usize) -> Self;
+
+    /// Rotate right `self` by `by` bits.
+    fn rotr(&self, by: usize) -> Self;
+}
+
+pub trait UIntGadget<ConstraintF: PrimeField, N: Sized>:
+Sized
++ Clone
++ Debug
++ Eq
++ PartialEq
++ EqGadget<ConstraintF>
++ ToBitsGadget<ConstraintF>
++ FromBitsGadget<ConstraintF>
++ ToBytesGadget<ConstraintF>
++ CondSelectGadget<ConstraintF>
++ AllocGadget<N, ConstraintF>
++ ConstantGadget<N, ConstraintF>
++ Shr<usize>
++ Shl<usize>
++ RotateUInt
+{
+    /// XOR `self` with `other`
+    fn xor<CS>(&self, cs: CS, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
+    /// OR `self` with `other`
+    fn or<CS>(&self, cs: CS, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
+    /// AND `self` with `other`
+    fn and<CS>(&self, cs: CS, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
+    /// Bitwise NOT of `self`
+    fn not<CS>(&self, cs: CS) -> Self
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
+
+
+    /// Perform modular addition of several `Self` objects.
+    fn addmany<CS, M>(cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>;
+
+    /// Perform modular addition of `self` and `other`. The default implementation just invokes
+    /// `addmany`, it may be overridden in case addition of 2 values may be performed more
+    /// efficiently than addition of n >= 3 values
+    fn add<CS, M>(&self, cs: M, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
+    {
+        Self::addmany(cs, &[self.clone(), other.clone()])
+    }
+
+    /// Add `self` to `other` if `cond` is True, otherwise do nothing.
+    fn conditionally_add<CS, M>(
+        &self,
+        mut cs: M,
+        cond: &Boolean,
+        other: &Self
+    ) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
+    {
+        let sum = self.add(cs.ns(|| "compute sum"), other)?;
+        Self::conditionally_select(cs.ns(|| "conditionally select values"), cond, &sum, self)
+    }
+
+
+    /// Perform addition of several `Self` objects, checking that no overflows occur.
+    fn addmany_nocarry<CS, M>(cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>;
+
+
+    /// Perform addition of `self` and `other`, checking that no overflows occur.
+    /// The default implementation just invokes `addmany`, it may be overridden in case addition
+    /// of 2 values may be performed more efficiently than addition of n >= 3 values
+    fn add_nocarry<CS, M>(&self, cs: M, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
+    {
+        Self::addmany_nocarry(cs, &[self.clone(), other.clone()])
+    }
+
+    /// Add `self` to `other` if `cond` is True, checking that no overflows occur, otherwise do nothing.
+    fn conditionally_add_nocarry<CS, M>(
+        &self,
+        mut cs: M,
+        cond: &Boolean,
+        other: &Self
+    ) -> Result<Self, SynthesisError>
+        where
+        CS: ConstraintSystemAbstract<ConstraintF>,
+        M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
+    {
+        let sum = self.add_nocarry(cs.ns(|| "compute sum"), other)?;
+        Self::conditionally_select(cs.ns(|| "conditionally select values"), cond, &sum, self)
+    }
+
+    /// Perform modular multiplication of several `Self` objects.
+    fn mulmany<CS>(cs: CS, operands: &[Self]) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
+    /// Perform modular multiplication of `self` and `other`
+    fn mul<CS>(&self, cs: CS, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF> {
+        Self::mulmany(cs, &[self.clone(), other.clone()])
+    }
+
+    /// Multiply `self` to `other` if `cond` is true, do nothing otherwise
+    fn conditionally_mul<CS>(&self, mut cs: CS, cond: &Boolean, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF> {
+        let product = self.mul(cs.ns(|| "mul values"), other)?;
+        Self::conditionally_select(cs.ns(|| "cond select mul result"), cond, &product, self)
+    }
+
+    /// Perform multiplication of several `Self` objects, checking that no overflows occur
+    fn mulmany_nocarry<CS>(cs: CS, operands: &[Self]) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
+    /// Multiply `self` to `other`, checking that no overflows occur
+    fn mul_nocarry<CS>(&self, cs: CS, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF> {
+        Self::mulmany_nocarry(cs, &[self.clone(), other.clone()])
+    }
+
+    /// Multiply `self` to `other` if `cond` is true, do nothing otherwise
+    fn conditionally_mul_nocarry<CS>(&self, mut cs: CS, cond: &Boolean, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF> {
+        let product = self.mul_nocarry(cs.ns(|| "mul values"), other)?;
+        Self::conditionally_select(cs.ns(|| "cond select mul result"), cond, &product, self)
+    }
+
 }
 
 impl<ConstraintF: Field> ToBitsGadget<ConstraintF> for Boolean {

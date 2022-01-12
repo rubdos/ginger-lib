@@ -128,27 +128,6 @@ impl<T: EqGadget<ConstraintF>, ConstraintF: Field> EqGadget<ConstraintF> for [T]
         }
         Ok(())
     }
-
-    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
-        &self,
-        mut cs: CS,
-        other: &Self,
-        should_enforce: &Boolean,
-    ) -> Result<(), SynthesisError> {
-        assert_eq!(self.len(), other.len());
-        let some_are_different = self.is_neq(cs.ns(|| "is_neq"), other)?;
-        if some_are_different.get_value().is_some() && should_enforce.get_value().is_some() {
-            assert!(some_are_different.get_value().unwrap());
-            Ok(())
-        } else {
-            some_are_different.conditional_enforce_equal(
-                cs.ns(|| "conditional_enforce_equal"),
-                should_enforce,
-                should_enforce,
-            )?;
-            Ok(())
-        }
-    }
 }
 
 /// A struct for collecting identities of linear combinations of Booleans to serve
