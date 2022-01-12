@@ -1106,8 +1106,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
     /// Multiplication of two non-natives, reduced back to normal form. 
     // If no prereduction step is performed, costs
     // ``
-    //     C =  2 *(len(p) + 
-    ^2) + surfeit' 
+    //     C =  2 *(len(p) + num_limbs^2) + surfeit' 
     //          +  (num_groups - 1) * (3 + bits_per_limb + surfeit') + 1
     // ``
     // constraints, where 
