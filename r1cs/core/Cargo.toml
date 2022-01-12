@@ -1,6 +1,6 @@
 [package]
 name = "r1cs-core"
-version = "0.3.0"
+version = "0.3.1"
 authors = [
     "Sean Bowe",
     "Alessandro Chiesa",
@@ -21,5 +21,8 @@ include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 license = "MIT/Apache-2.0"
 
 [dependencies]
-algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "development" }
-smallvec = { version = "1.6.1" }
+algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "refactor_constraint_system" }
+smallvec = { version = "=1.7.0" }
+radix_trie = { version = "=0.2.1" }
+rand = { version = "=0.8.4" }
+

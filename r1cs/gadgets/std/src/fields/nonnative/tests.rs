@@ -9,27 +9,29 @@ use crate::{
         },
         FieldGadget,
     },
-    test_constraint_system::TestConstraintSystem,
     FromBitsGadget, FromGadget, ToBitsGadget, ToBytesGadget,
 };
 use algebra::{
     fields::{
         bn_382::{Fq as Bn382Fq, Fr as Bn382Fr},
-        secp256k1::Fq as secp256k1Fq,
+        ed25519::{fq::Fq as ed25519Fq, fr::Fr as ed25519Fr},
+        secp256k1::{Fq as secp256k1Fq, Fr as secp256k1Fr},
         tweedle::{Fq as TweedleFq, Fr as TweedleFr},
         FpParameters, PrimeField,
     },
     BigInteger,
 };
 
-use r1cs_core::ConstraintSystem;
+use r1cs_core::{
+    ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
+};
 use rand::{thread_rng, Rng, RngCore};
 
 const NUM_REPETITIONS: usize = 10;
 const TEST_COUNT: usize = 10;
 
 fn allocation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
     let a_native = SimulationF::rand(rng);
     let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
         Ok(a_native)
@@ -50,7 +52,7 @@ fn allocation_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>
 }
 
 fn addition_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let a_native = SimulationF::rand(rng);
     let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
@@ -77,7 +79,7 @@ fn addition_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(r
 }
 
 fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
     let a_native = SimulationF::rand(rng);
     let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
         Ok(a_native)
@@ -112,7 +114,7 @@ fn multiplication_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
 /// Checks the `mul` of two randomly sampled non-natives against the expected
 /// value as NonNativeFieldGadget in reduced form.
 fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let a_native = SimulationF::rand(rng);
     let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc a"), || {
@@ -148,7 +150,7 @@ fn equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(r
 /// Tests all combinations of `add` and `mul` of a randomly sampled non-native
 /// with the neutral elements of non-native field arithmetics.
 fn edge_cases_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let zero_native = SimulationF::zero();
     let zero =
@@ -242,7 +244,7 @@ fn edge_cases_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>
 fn distribution_law_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
     let a_native = SimulationF::rand(rng);
     let b_native = SimulationF::rand(rng);
     let c_native = SimulationF::rand(rng);
@@ -314,7 +316,7 @@ fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
 ) {
     use rand::prelude::SliceRandom;
 
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     // Sample random operations to perform
     let mut operations = (0..=2)
@@ -368,7 +370,7 @@ fn randomized_arithmetic_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
 
 /// Tests correctness of `TEST_COUNT` many `add_in_place` on a random instance.
 fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num = NonNativeFieldGadget::alloc(cs.ns(|| "initial num"), || Ok(num_native)).unwrap();
@@ -396,7 +398,7 @@ fn addition_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
 fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num =
@@ -429,7 +431,7 @@ fn multiplication_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
 fn mul_and_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num =
@@ -475,7 +477,7 @@ fn mul_and_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: 
 fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(
     rng: &mut R,
 ) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num =
@@ -521,7 +523,7 @@ fn square_mul_add_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, 
 /// Tests correctness of `TEST_COUNT + ConstraintF::size_in_bits()` many steps of the recursion
 /// `x <- (x+x)*(x+x)`, starting with a random non-native `x`.
 fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num =
@@ -547,7 +549,7 @@ fn double_stress_test_1<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
 /// Tests correctness of `TEST_COUNT` many steps of the recursion
 /// `x <- (x+x)*(x+x)`, starting with a random non-native `x`.
 fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num =
@@ -577,7 +579,7 @@ fn double_stress_test_2<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
 /// Tests correctness of `TEST_COUNT` many steps of the recursion
 /// `x <- (x+x)*(x+x)`, starting with a random non-native `x`.  
 fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let mut num_native = SimulationF::rand(rng);
     let mut num =
@@ -617,7 +619,7 @@ fn double_stress_test_3<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng
 
 /// Tests correctness of inverse on `TEST_COUNT` many random instances.
 fn inverse_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     for i in 0..TEST_COUNT {
         let num_native = SimulationF::rand(rng);
@@ -644,7 +646,7 @@ fn inverse_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngC
 }
 
 fn even_odd_stress_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let one = NonNativeFieldGadget::<SimulationF, ConstraintF>::one(cs.ns(|| "one")).unwrap();
     let two = one.double(cs.ns(|| "two")).unwrap();
@@ -687,7 +689,7 @@ fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng:
     let num_bits_modulus = SimulationF::size_in_bits();
 
     let test_case = |val: SimulationF, val_bits: Vec<bool>, rng: &mut R| {
-        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         let bits =
             Vec::<Boolean>::alloc(cs.ns(|| "alloc val bits"), || Ok(val_bits.as_slice())).unwrap();
@@ -755,7 +757,7 @@ fn from_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng:
 
 fn from_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
-        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
         let f = SimulationF::rand(rng);
 
@@ -785,7 +787,7 @@ fn from_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut
 
 fn to_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
-        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
         let f = SimulationF::rand(rng);
         let f_bits = f.write_bits();
 
@@ -813,7 +815,7 @@ fn to_bits_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &
 fn to_bytes_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: &mut R) {
     use algebra::CanonicalSerialize;
 
-    let mut cs = TestConstraintSystem::<ConstraintF>::new();
+    let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
 
     let target_test_elem = SimulationF::from(123456u128);
     let target_test_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(
@@ -844,7 +846,7 @@ fn to_bytes_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: Rng>(rng: 
     assert!(cs.is_satisfied());
 
     for _ in 0..TEST_COUNT {
-        let mut cs = TestConstraintSystem::<ConstraintF>::new();
+        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
         let f = SimulationF::rand(rng);
         let mut f_bytes = Vec::with_capacity(f.serialized_size());
         CanonicalSerialize::serialize(&f, &mut f_bytes).unwrap();
@@ -1017,10 +1019,16 @@ nonnative_test!(TweedleFrFq, TweedleFr, TweedleFq);
 nonnative_test!(Bn382FqFr, Bn382Fq, Bn382Fr);
 nonnative_test!(Bn382FrFq, Bn382Fr, Bn382Fq);
 nonnative_test!(Bn382Frsecp256k1Fq, Bn382Fr, secp256k1Fq);
-nonnative_test!(Bn382Fqsecp256k1Fq, Bn382Fq, secp256k1Fq);
+nonnative_test!(Bn382Frsecp256k1Fr, Bn382Fr, secp256k1Fr);
+//TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
+#[cfg(feature = "density-optimized")]
+nonnative_test!(TweedleFred25519Fq, TweedleFr, ed25519Fq);
+//TODO: Doesn't work if "density-optimized" feature is not enabled. Discover why.
+#[cfg(feature = "density-optimized")]
+nonnative_test!(TweedleFred25519Fr, TweedleFr, ed25519Fr);
 nonnative_test!(Bn382FrTweedleFq, Bn382Fr, TweedleFq);
 // TODO: This test, along with some others, seems to cause troubles
-//       with the enforce_in_field gadget. Fix it.
+//       with the enforce_in_field gadget. It doesn't work either in density-optimized or constraint-optimized mode. Fix it.
 /*nonnative_test!(
     TweedleFqBn382Fr,
     TweedleFq,
