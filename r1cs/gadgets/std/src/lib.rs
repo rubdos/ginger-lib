@@ -64,6 +64,7 @@ pub mod instantiated;
 pub use instantiated::*;
 
 pub mod alloc;
+pub mod cmp;
 pub mod eq;
 pub mod select;
 pub mod to_field_gadget_vec;

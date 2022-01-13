@@ -715,7 +715,7 @@ impl Boolean {
         assert!(bits_iter.next().is_none());
 
         Ok(current_run)
-    }    
+    }
 }
 
 impl PartialEq for Boolean {
