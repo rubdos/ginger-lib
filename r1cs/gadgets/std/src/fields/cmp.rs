@@ -21,8 +21,9 @@ impl<F: PrimeField> FpGadget<F> {
         ordering: Ordering,
         should_also_check_equality: bool,
     ) -> Result<(), SynthesisError> {
-        let (left, right) = self.process_cmp_inputs(cs.ns(|| "process cmp inputs"), other, ordering, should_also_check_equality)?;
-        left.enforce_smaller_than(cs.ns(|| "enforce smaller"), &right)
+        let is_cmp = self.is_cmp(cs.ns(|| "cmp outcome"), other, ordering, should_also_check_equality)?;
+
+        is_cmp.enforce_equal(cs.ns(|| "enforce cmp"), &Boolean::constant(true))
     }
 
     /// This function enforces the ordering between `self` and `other`. The
@@ -38,8 +39,8 @@ impl<F: PrimeField> FpGadget<F> {
         ordering: Ordering,
         should_also_check_equality: bool,
     ) -> Result<(), SynthesisError> {
-        let (left, right) = self.process_cmp_inputs(cs.ns(|| "process cmp inputs"), other, ordering, should_also_check_equality)?;
-        left.enforce_smaller_than_unchecked(cs.ns(|| "enforce smaller"), &right)
+        let is_cmp = self.is_cmp_unchecked(cs.ns(|| "is cmp unchecked"), other, ordering, should_also_check_equality)?;
+        is_cmp.enforce_equal(cs.ns(|| "enforce cmp"), &Boolean::constant(true))
     }
 
     /// This function checks the ordering between `self` and `other`. It outputs
@@ -55,8 +56,9 @@ impl<F: PrimeField> FpGadget<F> {
         ordering: Ordering,
         should_also_check_equality: bool,
     ) -> Result<Boolean, SynthesisError> {
-        let (left, right) = self.process_cmp_inputs(cs.ns(|| "process cmp inputs"), other, ordering, should_also_check_equality)?;
-        left.is_smaller_than(cs.ns(|| "is smaller"), &right)
+        self.enforce_smaller_or_equal_than_mod_minus_one_div_two(cs.ns(|| "self smaller or equal mod"))?;
+        other.enforce_smaller_or_equal_than_mod_minus_one_div_two(cs.ns(|| "other smaller or equal mod"))?;
+        self.is_cmp_unchecked(cs.ns(|| "is cmp unchecked"), other, ordering, should_also_check_equality)
     }
 
     /// This function checks the ordering between `self` and `other`. It outputs
@@ -73,30 +75,23 @@ impl<F: PrimeField> FpGadget<F> {
         ordering: Ordering,
         should_also_check_equality: bool,
     ) -> Result<Boolean, SynthesisError> {
-        let (left, right) = self.process_cmp_inputs(cs.ns(|| "process cmp inputs"), other, ordering, should_also_check_equality)?;
-        left.is_smaller_than_unchecked(cs.ns(|| "is smaller"), &right)
-    }
-
-    fn process_cmp_inputs<CS: ConstraintSystem<F>>(
-        &self,
-        mut cs: CS,
-        other: &Self,
-        ordering: Ordering,
-        should_also_check_equality: bool,
-    ) -> Result<(Self, Self), SynthesisError> {
-        let (left, right) = match ordering {
-            Ordering::Less => (self, other),
-            Ordering::Greater => (other, self),
-            Ordering::Equal => return Err(SynthesisError::Unsatisfiable),
-        };
-        let one = FpGadget::<F>::from_value(cs.ns(|| "from value"), &F::one());
-        let right_for_check = if should_also_check_equality {
-            right.add(cs.ns(|| "add"),&one)?
-        } else {
-            right.clone()
+        // The ordering with equality is verified by exploiting the following identities:
+        // - x <= y iff !(y < x)
+        // - x >= y iff !(x < y)
+        let (left, right) = match (ordering, should_also_check_equality) {
+            (Ordering::Less, false) | (Ordering::Greater, true) => (self, other),
+            (Ordering::Greater, false) | (Ordering::Less, true) => (other, self),
+            (Ordering::Equal, _) => return self.is_eq(cs.ns(|| "is eq"), other),
         };
 
-        Ok((left.clone(), right_for_check))
+        let is_smaller = left.is_smaller_than_unchecked(cs.ns(|| "is smaller"), right)?;
+
+        if should_also_check_equality {
+            return Ok(is_smaller.not())
+        }
+
+        Ok(is_smaller)
+
     }
 
     /// Helper function to enforce that `self <= (p-1)/2`.
@@ -189,93 +184,188 @@ mod test {
 
     use r1cs_core::ConstraintSystem;
     use crate::{algebra::{UniformRand, PrimeField, 
-        fields::bls12_381::Fr,
+        fields::bls12_381::Fr, Field,
     }, fields::fp::FpGadget, test_constraint_system::TestConstraintSystem};
-    use crate::alloc::AllocGadget;
+    use crate::alloc::{AllocGadget, ConstantGadget};
+
+    fn rand_in_range<R: Rng>(rng: &mut R) -> Fr {
+        let pminusonedivtwo: Fr = Fr::modulus_minus_one_div_two().into();
+        let mut r;
+        loop {
+            r = Fr::rand(rng);
+            if r <= pminusonedivtwo {
+                break;
+            }
+        }
+        r
+    }
+
+    macro_rules! test_cmp_function {
+        ($cmp_func: tt) => {
+            let mut rng = &mut thread_rng();
+            for i in 0..10 {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let b = rand_in_range(&mut rng);
+                let b_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
+
+                match a.cmp(&b) {
+                    Ordering::Less => {
+                        a_var.$cmp_func(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce less equal"), &b_var, Ordering::Less, true).unwrap();
+                    }
+                    Ordering::Greater => {
+                        a_var.$cmp_func(cs.ns(|| "enforce greater"), &b_var, Ordering::Greater, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce greater equal"), &b_var, Ordering::Greater, true).unwrap();
+                    }
+                    _ => {}
+                }
+
+                if i == 0 {
+                    println!("number of constraints: {}", cs.num_constraints());
+                }
+                if !cs.is_satisfied(){
+                    println!("{:?}", cs.which_is_unsatisfied());
+                }
+                assert!(cs.is_satisfied());
+            }
+            println!("Finished with satisfaction tests");
+
+            for _i in 0..10 {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let b = rand_in_range(&mut rng);
+                let b_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
+
+                match b.cmp(&a) {
+                    Ordering::Less => {
+                        a_var.$cmp_func(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce less equal"),&b_var, Ordering::Less, true).unwrap();
+                    }
+                    Ordering::Greater => {
+                        a_var.$cmp_func(cs.ns(|| "enforce greater"),&b_var, Ordering::Greater, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce greater equal"),&b_var, Ordering::Greater, true).unwrap();
+                    }
+                    _ => {}
+                }
+                assert!(!cs.is_satisfied());
+            }
+
+            for _i in 0..10 {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                a_var.$cmp_func(cs.ns(|| "enforce less"),&a_var, Ordering::Less, false).unwrap();
+
+                assert!(!cs.is_satisfied());
+            }
+
+            for _i in 0..10 {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                a_var.$cmp_func(cs.ns(|| "enforce less"),&a_var, Ordering::Less, true).unwrap();
+                if !cs.is_satisfied(){
+                    println!("{:?}", cs.which_is_unsatisfied());
+                }
+                assert!(cs.is_satisfied());
+            }
+
+            // test corner case when operands are extreme values of range [0, (p-1)/2] of
+            // admissible values
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let max_val: Fr = Fr::modulus_minus_one_div_two().into();
+            let max_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_max"), || Ok(max_val)).unwrap();
+            let zero_var = FpGadget::<Fr>::from_value(cs.ns(|| "alloc zero"), &Fr::zero());
+            zero_var.$cmp_func(cs.ns(|| "enforce 0 <= (p-1) div 2"), &max_var, Ordering::Less, true).unwrap();
+
+            assert!(cs.is_satisfied());
+
+            // test when one of the operands is beyond (p-1)/2
+            let out_range_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_out_range"), || Ok(max_val.double())).unwrap();
+            zero_var.$cmp_func(cs.ns(|| "enforce 0 <= p-1"), &out_range_var, Ordering::Less, true).unwrap();
+            assert!(!cs.is_satisfied());
+        }
+    }
 
     #[test]
     fn test_cmp() {
-        let mut rng = &mut thread_rng();
-        fn rand_in_range<R: Rng>(rng: &mut R) -> Fr {
-            let pminusonedivtwo: Fr = Fr::modulus_minus_one_div_two().into();
-            let mut r;
-            loop {
-                r = Fr::rand(rng);
-                if r <= pminusonedivtwo {
-                    break;
+        test_cmp_function!(enforce_cmp);
+    }
+
+    #[test]
+    fn test_cmp_unchecked() {
+        test_cmp_function!(enforce_cmp_unchecked);
+    }
+
+    macro_rules! test_smaller_than_func {
+        ($is_smaller_func: tt, $enforce_smaller_func: tt) => {
+            let mut rng = &mut thread_rng();
+            for _ in 0..10 {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let b = rand_in_range(&mut rng);
+                let b_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
+
+                let is_smaller = a_var.$is_smaller_func(cs.ns(|| "is smaller"), &b_var).unwrap();
+
+                a_var.$enforce_smaller_func(cs.ns(|| "enforce smaller"), &b_var).unwrap();
+
+                match a.cmp(&b) {
+                    Ordering::Less | Ordering::Equal => {
+                        assert!(is_smaller.get_value().unwrap());
+                        assert!(cs.is_satisfied());
+                    }
+                    Ordering::Greater => {
+                        assert!(!is_smaller.get_value().unwrap());
+                        assert!(!cs.is_satisfied())
+                    }
                 }
             }
-            r
-        }
-        for i in 0..10 {
+
+            for _ in 0..10 {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let is_smaller = a_var.$is_smaller_func(cs.ns(|| "is smaller"),&a_var).unwrap();
+                // check that a.is_smaller(a) == false
+                assert!(!is_smaller.get_value().unwrap());
+                a_var.$enforce_smaller_func(cs.ns(|| "enforce is smaller"), &a_var).unwrap();
+                assert!(!cs.is_satisfied());
+            }
+
+            // test corner case when operands are extreme values of range [0, (p-1)/2] of
+            // admissible values
             let mut cs = TestConstraintSystem::<Fr>::new();
-
-            let a = rand_in_range(&mut rng);
-            let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-            let b = rand_in_range(&mut rng);
-            let b_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
-
-            match a.cmp(&b) {
-                Ordering::Less => {
-                    a_var.enforce_cmp(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false).unwrap();
-                    a_var.enforce_cmp(cs.ns(|| "enforce less equal"), &b_var, Ordering::Less, true).unwrap();
-                }
-                Ordering::Greater => {
-                    a_var.enforce_cmp(cs.ns(|| "enforce greater"), &b_var, Ordering::Greater, false).unwrap();
-                    a_var.enforce_cmp(cs.ns(|| "enforce greater equal"), &b_var, Ordering::Greater, true).unwrap();
-                }
-                _ => {}
-            }
-
-            if i == 0 {
-                println!("number of constraints: {}", cs.num_constraints());
-            }
-            if !cs.is_satisfied(){
-                println!("{:?}", cs.which_is_unsatisfied());
-            }
+            let max_val: Fr = Fr::modulus_minus_one_div_two().into();
+            let max_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_max"), || Ok(max_val)).unwrap();
+            let zero_var = FpGadget::<Fr>::from_value(cs.ns(|| "alloc zero"), &Fr::zero());
+            let is_smaller = zero_var.$is_smaller_func(cs.ns(|| "0 is smaller than (p-1) div 2"), &max_var).unwrap();
+            assert!(is_smaller.get_value().unwrap());
+            zero_var.$enforce_smaller_func(cs.ns(|| "enforce 0 <= (p-1) div 2"), &max_var).unwrap();
             assert!(cs.is_satisfied());
-        }
-        println!("Finished with satisfaction tests");
 
-        for _i in 0..10 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
-            let a = rand_in_range(&mut rng);
-            let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-            let b = rand_in_range(&mut rng);
-            let b_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
-
-            match b.cmp(&a) {
-                Ordering::Less => {
-                    a_var.enforce_cmp(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false).unwrap();
-                    a_var.enforce_cmp(cs.ns(|| "enforce less equal"),&b_var, Ordering::Less, true).unwrap();
-                }
-                Ordering::Greater => {
-                    a_var.enforce_cmp(cs.ns(|| "enforce greater"),&b_var, Ordering::Greater, false).unwrap();
-                    a_var.enforce_cmp(cs.ns(|| "enforce greater equal"),&b_var, Ordering::Greater, true).unwrap();
-                }
-                _ => {}
-            }
+            // test when one of the operands is beyond (p-1)/2
+            let out_range_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_out_range"), || Ok(max_val.double())).unwrap();
+            zero_var.$enforce_smaller_func(cs.ns(|| "enforce 0 <= p-1"), &out_range_var).unwrap();
             assert!(!cs.is_satisfied());
-        }
-
-        for _i in 0..10 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
-            let a = rand_in_range(&mut rng);
-            let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-            a_var.enforce_cmp(cs.ns(|| "enforce less"),&a_var, Ordering::Less, false).unwrap();
-
-            assert!(!cs.is_satisfied());
-        }
-
-        for _i in 0..10 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
-            let a = rand_in_range(&mut rng);
-            let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-            a_var.enforce_cmp(cs.ns(|| "enforce less"),&a_var, Ordering::Less, true).unwrap();
-            if !cs.is_satisfied(){
-                println!("{:?}", cs.which_is_unsatisfied());
-            }
-            assert!(cs.is_satisfied());
         }
     }
+
+    #[test]
+    fn test_smaller_than() {
+        test_smaller_than_func!(is_smaller_than, enforce_smaller_than);
+    }
+
+    #[test]
+    fn test_smaller_than_unchecked() {
+        test_smaller_than_func!(is_smaller_than_unchecked, enforce_smaller_than_unchecked);
+    }
+
+
 }
