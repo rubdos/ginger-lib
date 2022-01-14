@@ -1,12 +1,77 @@
 use std::cmp::Ordering;
 use algebra::PrimeField;
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
-use crate::{boolean::Boolean, bits::ToBitsGadget, eq::EqGadget};
+use crate::{boolean::Boolean, bits::{ToBitsGadget, FromBitsGadget}, eq::EqGadget, select::CondSelectGadget};
 use crate::cmp::ComparisonGadget;
 use crate::fields::{fp::FpGadget, FieldGadget};
 
 // implement functions for FpGadget that are useful to implement the ComparisonGadget
 impl<F: PrimeField> FpGadget<F> {
+
+    /// Helper function that allows to compare 2 slices of 2 bits, outputting 2 Booleans:
+    /// the former (resp. the latter) one is true iff the big-endian integer represented by the
+    /// first slice is smaller (resp. is equal) than the big-endian integer represented by the second slice
+    fn compare_msbs<CS:ConstraintSystemAbstract<F>>(mut cs: CS, first: &[Boolean], second: &[Boolean])
+        -> Result<(Boolean, Boolean), SynthesisError> {
+        assert_eq!(first.len(), 2);
+        assert_eq!(second.len(), 2);
+
+        let a = first[0];
+        let b = first[1];
+        let c = second[0];
+        let d = second[1];
+
+        // is_less corresponds to the Boolean function: !a*(c+!b*d)+(!b*c*d),
+        // which is true iff first < second, where + is Boolean OR and * is Boolean AND
+        let bd = Boolean::and(cs.ns(|| "!bd"), &b.not(), &d)?;
+        let first_tmp = Boolean::or(cs.ns(|| "!a + !bd"), &a.not(), &bd)?;
+        let second_tmp = Boolean::and(cs.ns(|| "!a!bd"), &a.not(), &bd)?;
+        let is_less = Boolean::conditionally_select(cs.ns(|| "is less"), &c, &first_tmp, &second_tmp)?;
+
+        // is_eq corresponds to the Boolean function: !((a xor c) + (b xor d)),
+        // which is true iff first == second
+        let first_tmp = Boolean::xor(cs.ns(|| "a xor c"), &a, &c)?;
+        let second_tmp = Boolean::xor(cs.ns(|| "b xor d"), &b, &d)?;
+        let is_eq = Boolean::or(cs.ns(|| "is eq"), &first_tmp, &second_tmp)?.not();
+
+        Ok((is_less, is_eq))
+    }
+
+    /// Output a Boolean that is true iff `self` < `other`. Here `self` and `other`
+    /// can be arbitrary field elements, they are not constrained to be at most (p-1)/2
+    pub fn is_smaller_than_unrestricted<CS:ConstraintSystemAbstract<F>>(
+        &self,
+        mut cs: CS,
+        other: &Self,
+    ) -> Result<Boolean, SynthesisError> {
+        let self_bits = self.to_bits_strict(cs.ns(|| "first op to bits"))?;
+        let other_bits = other.to_bits_strict(cs.ns(|| "second op to bits"))?;
+        // extract the least significant MODULUS_BITS-2 bits and convert them to a field element,
+        // which is necessarily lower than (p-1)/2
+        let fp_for_self_lsbs = FpGadget::<F>::from_bits(cs.ns(|| "pack second op MSBs"), &self_bits[2..])?;
+        let fp_for_other_lsbs = FpGadget::<F>::from_bits(cs.ns(|| "pack second op LSBs"), &other_bits[2..])?;
+
+        // since the field elements are lower than (p-1)/2, we can compare it with the efficient approach
+        let is_less_lsbs = fp_for_self_lsbs.is_smaller_than_unchecked(cs.ns(|| "compare LSBs"), &fp_for_other_lsbs)?;
+
+
+        // obtain two Booleans: the former (resp. the latter) one is true iff the integer
+        // represented by the 2 MSBs of self is smaller (resp. is equal) than the integer
+        // represented by the 2 MSBs of other
+        let (is_less_msbs, is_eq_msbs) = Self::compare_msbs(cs.ns(|| "compare MSBs"), &self_bits[..2], &other_bits[..2])?;
+
+        // Equivalent to is_less_msbs OR is_eq_msbs AND is_less_msbs, given that is_less_msbs and
+        // is_eq_msbs cannot be true at the same time
+        Boolean::conditionally_select(cs, &is_eq_msbs, &is_less_lsbs, &is_less_msbs)
+    }
+
+    /// Enforce than `self` < `other`. Here `self` and `other` they are arbitrary field elements,
+    /// they are not constrained to be at most (p-1)/2
+    pub fn enforce_smaller_than_unrestricted<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS, other: &Self) -> Result<(), SynthesisError> {
+        let is_smaller = self.is_smaller_than_unrestricted(cs.ns(|| "is smaller unchecked"), other)?;
+        is_smaller.enforce_equal(cs.ns(|| "enforce smaller than"), &Boolean::constant(true))
+    }
+
 
     /// Helper function to enforce that `self <= (p-1)/2`.
     pub fn enforce_smaller_or_equal_than_mod_minus_one_div_two<CS: ConstraintSystemAbstract<F>>(
@@ -97,7 +162,7 @@ impl<F: PrimeField> FpGadget<F> {
         let is_smaller = left.is_smaller_than_unchecked(cs.ns(|| "is smaller"), right)?;
 
         if should_also_check_equality {
-            return Boolean::xor(cs.ns(|| "negating cmp outcome"), &is_smaller, &Boolean::constant(true))
+            return Ok(is_smaller.not());
         }
 
         Ok(is_smaller)
@@ -128,20 +193,21 @@ mod test {
     }, fields::fp::FpGadget};
     use crate::{alloc::{AllocGadget, ConstantGadget}, cmp::ComparisonGadget};
 
+    fn rand_in_range<R: Rng>(rng: &mut R) -> Fr {
+        let pminusonedivtwo: Fr = Fr::modulus_minus_one_div_two().into();
+        let mut r;
+        loop {
+            r = Fr::rand(rng);
+            if r <= pminusonedivtwo {
+                break;
+            }
+        }
+        r
+    }
+
     macro_rules! test_cmp_function {
         ($cmp_func: tt) => {
             let mut rng = &mut thread_rng();
-            fn rand_in_range<R: Rng>(rng: &mut R) -> Fr {
-                let pminusonedivtwo: Fr = Fr::modulus_minus_one_div_two().into();
-                let mut r;
-                loop {
-                    r = Fr::rand(rng);
-                    if r <= pminusonedivtwo {
-                        break;
-                    }
-                }
-                r
-            }
             for i in 0..10 {
                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
@@ -238,5 +304,147 @@ mod test {
     #[test]
     fn test_cmp_unchecked() {
         test_cmp_function!(enforce_cmp_unchecked);
+    }
+
+    macro_rules! test_smaller_than_func {
+        ($is_smaller_func: tt, $enforce_smaller_func: tt) => {
+            let mut rng = &mut thread_rng();
+            for _ in 0..10 {
+                let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let b = rand_in_range(&mut rng);
+                let b_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
+
+                let is_smaller = a_var.$is_smaller_func(cs.ns(|| "is smaller"), &b_var).unwrap();
+
+                a_var.$enforce_smaller_func(cs.ns(|| "enforce smaller"), &b_var).unwrap();
+
+                match a.cmp(&b) {
+                    Ordering::Less  => {
+                        assert!(is_smaller.get_value().unwrap());
+                        assert!(cs.is_satisfied());
+                    }
+                    Ordering::Greater | Ordering::Equal => {
+                        assert!(!is_smaller.get_value().unwrap());
+                        assert!(!cs.is_satisfied())
+                    }
+                }
+            }
+
+            for _ in 0..10 {
+                let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                let a = rand_in_range(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let is_smaller = a_var.$is_smaller_func(cs.ns(|| "is smaller"),&a_var).unwrap();
+                // check that a.is_smaller(a) == false
+                assert!(!is_smaller.get_value().unwrap());
+                a_var.$enforce_smaller_func(cs.ns(|| "enforce is smaller"), &a_var).unwrap();
+                assert!(!cs.is_satisfied());
+            }
+
+            // test corner case when operands are extreme values of range [0, (p-1)/2] of
+            // admissible values
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+            let max_val: Fr = Fr::modulus_minus_one_div_two().into();
+            let max_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_max"), || Ok(max_val)).unwrap();
+            let zero_var = FpGadget::<Fr>::from_value(cs.ns(|| "alloc zero"), &Fr::zero());
+            let is_smaller = zero_var.$is_smaller_func(cs.ns(|| "0 is smaller than (p-1) div 2"), &max_var).unwrap();
+            assert!(is_smaller.get_value().unwrap());
+            zero_var.$enforce_smaller_func(cs.ns(|| "enforce 0 <= (p-1) div 2"), &max_var).unwrap();
+            assert!(cs.is_satisfied());
+
+            // test when one of the operands is beyond (p-1)/2
+            let out_range_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_out_range"), || Ok(max_val.double())).unwrap();
+            zero_var.$enforce_smaller_func(cs.ns(|| "enforce 0 <= p-1"), &out_range_var).unwrap();
+            assert!(!cs.is_satisfied());
+        }
+    }
+
+    #[test]
+    fn test_smaller_than() {
+        test_smaller_than_func!(is_smaller_than, enforce_smaller_than);
+    }
+
+    #[test]
+    fn test_smaller_than_unchecked() {
+        test_smaller_than_func!(is_smaller_than_unchecked, enforce_smaller_than_unchecked);
+    }
+
+    macro_rules! test_smaller_than_unrestricted {
+        ($rand_func: tt) => {
+            let mut rng = &mut thread_rng();
+
+            for _ in 0..10 {
+                let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+
+                let a = $rand_func(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let b = $rand_func(&mut rng);
+                let b_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_b"), || Ok(b)).unwrap();
+                let is_smaller = a_var.is_smaller_than_unrestricted(cs.ns(|| "is smaller"), &b_var).unwrap();
+                a_var.enforce_smaller_than_unrestricted(cs.ns(|| "enforce is smaller"), &b_var).unwrap();
+
+                match a.cmp(&b) {
+                    Ordering::Less => {
+                        assert!(is_smaller.get_value().unwrap());
+                        assert!(cs.is_satisfied());
+                    }
+                    Ordering::Greater | Ordering::Equal => {
+                        assert!(!is_smaller.get_value().unwrap());
+                        assert!(!cs.is_satisfied())
+                    }
+                }
+            }
+
+            for _ in 0..10 {
+                let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                let a = $rand_func(&mut rng);
+                let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
+                let is_smaller = a_var.is_smaller_than_unrestricted(cs.ns(|| "is smaller"),&a_var).unwrap();
+                // check that a.is_smaller(a) == false
+                assert!(!is_smaller.get_value().unwrap());
+                a_var.enforce_smaller_than_unrestricted(cs.ns(|| "enforce is smaller"), &a_var).unwrap();
+                assert!(!cs.is_satisfied());
+            }
+
+            // test corner case where the operands are extreme values of range [0, p-1] of
+            // admissible values
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+            let max_val: Fr = Fr::modulus_minus_one_div_two().into();
+            let max_val = max_val.double();
+            let max_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_max"), || Ok(max_val)).unwrap();
+            let zero_var = FpGadget::<Fr>::from_value(cs.ns(|| "alloc zero"), &Fr::zero());
+            let is_smaller = zero_var.is_smaller_than_unrestricted(cs.ns(|| "0 is smaller than p-1"), &max_var).unwrap();
+            assert!(is_smaller.get_value().unwrap());
+            zero_var.enforce_smaller_than_unrestricted(cs.ns(|| "enforce 0 <= (p-1) div 2"), &max_var).unwrap();
+            assert!(cs.is_satisfied());
+        }
+    }
+
+    #[test]
+    fn test_smaller_than_unrestricted() {
+        fn rand_higher<R: Rng>(rng: &mut R) -> Fr {
+            let pminusonedivtwo: Fr = Fr::modulus_minus_one_div_two().into();
+            let mut r;
+            loop {
+                r = Fr::rand(rng);
+                if r > pminusonedivtwo {
+                    break;
+                }
+            }
+            r
+        }
+
+        fn field_uniform_rand<R: Rng>(rng: &mut R) -> Fr {
+            Fr::rand(rng)
+        }
+        // test with random field elements >(p-1)/2
+        test_smaller_than_unrestricted!(rand_higher);
+        // test with random field elements <=(p-1)/2
+        test_smaller_than_unrestricted!(rand_in_range);
+        // test with arbitrary field elements
+        test_smaller_than_unrestricted!(field_uniform_rand);
     }
 }
