@@ -317,11 +317,11 @@ mod test {
                 a_var.$enforce_smaller_func(cs.ns(|| "enforce smaller"), &b_var).unwrap();
 
                 match a.cmp(&b) {
-                    Ordering::Less | Ordering::Equal => {
+                    Ordering::Less => {
                         assert!(is_smaller.get_value().unwrap());
                         assert!(cs.is_satisfied());
                     }
-                    Ordering::Greater => {
+                    Ordering::Greater | Ordering::Equal => {
                         assert!(!is_smaller.get_value().unwrap());
                         assert!(!cs.is_satisfied())
                     }
