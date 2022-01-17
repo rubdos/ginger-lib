@@ -631,6 +631,56 @@ impl Boolean {
         }
     }
 
+    /// Enforce that at least one operand is true, given that bits.len() is less than the size of
+    /// the field
+    pub fn enforce_or<ConstraintF, CS>(mut cs: CS, bits: &[Self]) -> Result<(), SynthesisError>
+        where
+            ConstraintF: PrimeField,
+            CS: ConstraintSystemAbstract<ConstraintF>,
+    {
+        // this is done with a single constraint as follows:
+        // - Compute a linear combination sum_lc which is the sum of all the bits
+        // - enforce that the sum != 0 with a single constraint: sum*v = 1, where v can only be
+        // chosen as the inverse of sum (which exists iff sum != 0)
+        let mut sum_lc = LinearCombination::zero();
+        let mut sum_of_bits = Some(ConstraintF::zero());
+        let mut all_constants = true;
+        for bit in bits {
+            sum_lc = sum_lc + &bit.lc(CS::one(), ConstraintF::one());
+
+            all_constants &= bit.is_constant();
+
+            sum_of_bits = match bit.get_value() {
+                Some(bitval) => sum_of_bits.as_mut().map(|sum| {
+                    if bitval {
+                        *sum += ConstraintF::one();
+                    };
+                    *sum
+                }),
+                None => None,
+            }
+        }
+
+        if all_constants {
+            if sum_of_bits.unwrap().is_zero() {
+               return Err(SynthesisError::Unsatisfiable);
+            }
+            return Ok(());
+        }
+
+        let inv = sum_of_bits.map(|sum|
+        match sum.inverse() {
+            Some(val) => val,
+            None => ConstraintF::one(), // if sum == 0, then inverse can be any value, the constraint should never be verified
+        });
+
+        let inv_var = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc inv"), || inv.ok_or(SynthesisError::AssignmentMissing))?;
+
+        cs.enforce(|| "enforce self != other", |_| sum_lc, |lc| &inv_var.get_variable() + lc, |_| (ConstraintF::one(), CS::one()).into());
+
+        Ok(())
+    }
+
     /// Asserts that this bit_gadget representation is "in
     /// the field" when interpreted in big endian.
     pub fn enforce_in_field<ConstraintF, CS, F: PrimeField>(

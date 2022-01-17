@@ -191,6 +191,48 @@ Sized
         Self::conditionally_select(cs.ns(|| "conditionally select values"), cond, &sum, self)
     }
 
+    /// Perform modular subtraction of `other` from `self`
+    fn sub<CS, M>(&self, cs: M, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>;
+
+    /// Perform modular subtraction of `other` from `self` if `cond` is True, otherwise do nothing
+    fn conditionally_sub<CS, M>(
+        &self,
+        mut cs: M,
+        cond: &Boolean,
+        other: &Self
+    ) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
+    {
+        let diff = self.sub(cs.ns(|| "sub"), other)?;
+        Self::conditionally_select(cs.ns(|| "conditionally select result"), cond, &diff, self)
+    }
+
+    /// Subtract `other` from `self`, checking that no borrows occur (i.e., that self - other >= 0)
+    fn sub_noborrow<CS, M>(&self, cs: M, other: &Self) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>;
+
+    /// Subtract `other` from `self` if `cond` is True, checking that no borrows occur, otherwise do nothing
+    fn conditionally_sub_noborrow<CS, M>(
+        &self,
+        mut cs: M,
+        cond: &Boolean,
+        other: &Self
+    ) -> Result<Self, SynthesisError>
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>,
+            M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
+    {
+        let diff = self.sub_noborrow(cs.ns(|| "sub"), other)?;
+        Self::conditionally_select(cs.ns(|| "conditionally select result"), cond, &diff, self)
+    }
+
     /// Perform modular multiplication of several `Self` objects.
     fn mulmany<CS>(cs: CS, operands: &[Self]) -> Result<Self, SynthesisError>
         where
