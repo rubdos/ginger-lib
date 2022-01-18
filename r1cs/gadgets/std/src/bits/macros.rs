@@ -271,7 +271,6 @@ macro_rules! impl_uint_gadget {
                 T: Borrow<$native_type>
                 {
                     let mut value = None;
-                    //ToDo: verify if ConstraintF must be a PrimeField
                     let field_element = FpGadget::<ConstraintF>::alloc_input(cs.ns(|| "alloc_input as field element"), || {
                         let val = value_gen().map(|val| *val.borrow())?;
                         value = Some(val);
@@ -575,7 +574,7 @@ macro_rules! impl_uint_gadget {
                     M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
                 {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::MODULUS_BITS - 1) as usize;
+                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
                     // in this case it is not possible to enforce the correctness of the addition
                     // of at least 2 elements for the field ConstraintF
                     assert!(field_bits > $bit_size);
@@ -594,6 +593,19 @@ macro_rules! impl_uint_gadget {
                         let max_num_operands = 1usize << max_overflow_bits;
                         handle_numoperands_opmany!(addmany, cs, operands, max_num_operands);
                     }
+
+                    /*
+                    Result is computed as follows:
+                    Without loss of generality, consider 2 operands a, b, with their little-endian
+                    bit representations, and n = $bit_size.
+                    The addition is computed as ADD(a,b)=2^0a_0 + 2^1a_1 + ... + 2^(n-1)a_{n-1} +
+                    2^0b_0 + 2^1b_1 + ... + 2^(n-1)b_{n-1} in the ConstraintF field.
+                    Then, m = $bit_size + overflow_bits Booleans res_0,...,res_{m-1} are allocated as
+                    witness, and it is enforced that ADD(a,b) == 2^0res_0 + 2^1res_1 + ... + 2^(m-1)res_{m-1}.
+                    Then, the Booleans res_0,...,res_{n-1} represent the result modulo 2^n (assuming
+                    that no field overflow occurs in computing ADD(a,b),
+                    which is checked with the initial assertions), which is returned.
+                     */
 
 
                     // result_value is the sum of all operands in the ConstraintF field,
@@ -675,7 +687,7 @@ macro_rules! impl_uint_gadget {
                     CS: ConstraintSystemAbstract<ConstraintF>,
                     M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>> {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::MODULUS_BITS - 1) as usize;
+                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
                     // in this case it is not possible to enforce the correctness of the addition
                     // of at least 2 elements for the field ConstraintF
                     assert!(field_bits > $bit_size);
@@ -694,6 +706,19 @@ macro_rules! impl_uint_gadget {
                         let max_num_operands = 1usize << max_overflow_bits;
                         handle_numoperands_opmany!(addmany_nocarry, cs, operands, max_num_operands);
                     }
+
+                    /*
+                    Result is computed as follows.
+                    Without loss of generality, consider 2 operands a, b, with their little-endian
+                    bit representations, and n = $bit_size.
+                    The addition is computed as ADD(a,b)=2^0a_0 + 2^1a_1 + ... + 2^(n-1)a_{n-1} +
+                    2^0b_0 + 2^1b_1 + ... + 2^(n-1)b_{n-1} in the ConstraintF field.
+                    Then, n Booleans res_0,...,res_{n-1} are allocated as witness, and it is
+                    enforced that ADD(a,b) == 2^0res_0 + 2^1res_1 + ... + 2^(n-1)res_{n-1}.
+                    Such constraint is verified iff ADD(a,b) can be represented with at most n bits,
+                    that is iff the addition does not overflow (assuming that ADD(a,b) does not
+                    overflow in the field, which is checked with the initial assertions)
+                    */
 
                     let mut result_value: Option<$native_type> = Some(0);
                     // this flag allows to verify if the addition of operands overflows, which allows
@@ -752,7 +777,7 @@ macro_rules! impl_uint_gadget {
                 fn mulmany<CS>(mut cs: CS, operands: &[Self]) -> Result<Self, SynthesisError>
                 where CS: ConstraintSystemAbstract<ConstraintF> {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::MODULUS_BITS - 1) as usize;
+                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
                     assert!(num_operands >= 2);
                     assert!(field_bits >= 2*$bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
 
@@ -760,6 +785,22 @@ macro_rules! impl_uint_gadget {
                         let max_num_operands = field_bits/$bit_size;
                         handle_numoperands_opmany!(mulmany, cs, operands, max_num_operands);
                     }
+
+
+                    /*
+                    Result is computed as follows.
+                    Without loss of generality, consider 3 operands a, b, c and n = $bit_size.
+                    The operands are converted to field gadgets fa, fb, fc employing their big-endian
+                    bit representations.
+                    Then, the product of all this elements over the field is computed with
+                    num_operands-1 (i.e., 2 in this case) constraints:
+                    - a*b=tmp
+                    - tmp*c=res
+                    Field gadget res is then converted to its big-endian bit representation, and only
+                    the n least significant bits are returned as the result, which thus corresponds
+                    to the a*b*c mod 2^n (assuming that no field overflow occurs in computing a*b*c,
+                    which is checked with the initial assertions)
+                    */
 
                     // corner case: check if all operands are constants before allocating any variable
                     let mut all_constants = true;
@@ -804,7 +845,7 @@ macro_rules! impl_uint_gadget {
                 fn mulmany_nocarry<CS>(mut cs: CS, operands: &[Self]) -> Result<Self, SynthesisError>
                 where CS: ConstraintSystemAbstract<ConstraintF> {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::MODULUS_BITS - 1) as usize;
+                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
                     assert!(num_operands >= 2);
                     assert!(field_bits >= 2*$bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
 
@@ -812,6 +853,22 @@ macro_rules! impl_uint_gadget {
                         let max_num_operands = field_bits/$bit_size;
                         handle_numoperands_opmany!(mulmany_nocarry, cs, operands, max_num_operands);
                     }
+
+                    /*
+                    Result is computed as follows.
+                    Without loss of generality, consider 3 operands a, b, c and n = $bit_size.
+                    The operands are converted to field gadgets fa, fb, fc employing their big-endian
+                    bit representations.
+                    Then, the product of all this elements over the field is computed with
+                    num_operands-1 (i.e., 2 in this case) constraints:
+                    - a*b=tmp
+                    - tmp*c=res
+                    Field gadget res is then converted to a big-endian bit representation employing
+                    only n bits. If this conversion succeeds, then it means that a*b*c does not
+                    overflow 2^n (assuming that no field overflow occurs in computing a*b*c, which
+                    is checked by the initial assertions), and such n bits represent the final
+                    product
+                    */
 
                     // corner case: check if all operands are constants before allocating any variable
                     let mut all_constants = true;
@@ -864,18 +921,25 @@ macro_rules! impl_uint_gadget {
                 {
                     // this assertion checks that the field is big enough: that is, the field must
                     // be able to represent integers up to 2^($bit_size+1)
-                    assert!(ConstraintF::Params::MODULUS_BITS - 1 > $bit_size);
+                    assert!(ConstraintF::Params::CAPACITY > $bit_size);
 
-                    // Overall idea: allocate $bit_size+1 bits representing a field element diff
-                    // and enforce that diff == self - other + 2^$bit_size.
-                    // The addition of 2^$bit_size is useful in case other >= self to avoid
-                    // field underflows, which would require to allocate as many bits as the field
-                    // modulus. Only the first $bit_size bits are returned as the result of the
-                    // subtraction, hence the addition of 2^$bit_size has no impact on the final
-                    // result
+                    /* Result is computed as follows.
+                    Consider 2 operands a,b with their little-endian bit representations,
+                    and n=$bit_size.
+                    The subtraction is computed as SUB(a,b)=2^0a_0 + 2^1a_1 + ... + 2^(n-1)a_{n-1} -
+                    2^0b_0 - 2^1b_1 - ... - 2^(n-1)b_{n-1} in the ConstraintF field.
+                    Then, allocate n+1 bits res_0,...,res_{n} and enforce that
+                    SUB(a,b) + 2^n == 2^0res_0 + 2^1res_1 + ... + 2^nres_n.
+                    The addition of 2^n is useful in case other >= self to avoid
+                    field underflows, which would require to allocate as many bits as the field
+                    modulus. Only the first n bits are returned as the result of the
+                    subtraction (since the result must be computed modulo 2^n), hence the addition
+                    of 2^n has no impact on the final result
+                    */
 
                     // max_value is a field element equal to 2^$bit_size
                     let max_value = ConstraintF::from($native_type::MAX) + ConstraintF::one();
+                    // lc will be constructed as SUB(self,other)+2^$bit_size
                     let mut lc = (max_value, CS::one()).into();
                     let mut coeff = ConstraintF::one();
                     let mut all_constants = true;
@@ -888,6 +952,8 @@ macro_rules! impl_uint_gadget {
                         coeff.double_in_place();
                     }
 
+                    // diff = self - other mod 2^$bit_size,
+                    // while diff_in_field = self - other + 2^$bit_size over the ConstraintF field
                     let (diff, diff_in_field) = match (self.value, other.value) {
                         (Some(val1), Some(val2)) => {
                            let (diff, _) = val1.overflowing_sub(val2); // don't care if there is an underflow
@@ -902,12 +968,14 @@ macro_rules! impl_uint_gadget {
                         return Ok($type_name::from_value(cs.ns(|| "alloc constant result"), &diff.unwrap()));
                     }
 
+                    // convert diff_in_field to little-endian bit representation
                     let diff_bits = match diff_in_field {
                         Some(diff) => diff.write_bits().iter().rev().map(|b| Some(*b)).collect::<Vec<_>>(),
                         None => vec![None; $bit_size+1],
                     };
 
                     let mut result_bits = Vec::with_capacity($bit_size);
+                    // result_lc is constructed as 2^0diff_bits[0]+2^1diff_bits[1]+...+2^($bit_size)diff_bits[$bit_size]
                     let mut result_lc = LinearCombination::zero();
                     let mut coeff = ConstraintF::one();
                     for i in 0..$bit_size+1 {
@@ -918,6 +986,8 @@ macro_rules! impl_uint_gadget {
                         coeff.double_in_place();
 
                         if i < $bit_size {
+                            // only $bit_size bit are useful for the result,
+                            // as the result must be modulo 2^$bit_size
                             result_bits.push(diff_bit);
                         }
                     }
@@ -939,8 +1009,21 @@ macro_rules! impl_uint_gadget {
                     // this assertion checks that the field is big enough: subtraction of any 2
                     // values in $native_type must be a field element that cannot be represented as
                     // $native_type
-                    assert!(ConstraintF::Params::MODULUS_BITS - 1 > $bit_size);
+                    assert!(ConstraintF::Params::CAPACITY > $bit_size);
 
+                    /* Result is computed as follows.
+                    Consider 2 operands a,b with their little-endian bit representations,
+                    and n=$bit_size.
+                    The subtraction is computed as SUB(a,b)=2^0a_0 + 2^1a_1 + ... + 2^(n-1)a_{n-1} -
+                    2^0b_0 - 2^1b_1 - ... - 2^(n-1)b_{n-1} in the ConstraintF field.
+                    Then, allocate n bits res_0,...,res_{n-1} and enforce that
+                    SUB(a,b) == 2^0res_0 + 2^1res_1 + ... + 2^(n-1)res_{n-1}.
+                    Such constraint is satisfied iff SUB(a,b) can be represented with n bits,
+                    that is iff no field underflow occurs in the computation of SUB(a,b), which holds
+                    iff a - b does not underflow
+                     */
+
+                    // lc is constructed as SUB(self, other)
                     let mut lc = LinearCombination::zero();
                     let mut coeff = ConstraintF::one();
                     let mut all_constants = true;
@@ -964,7 +1047,6 @@ macro_rules! impl_uint_gadget {
 
                     if all_constants && diff.is_some() {
                         if is_underflowing {
-                            // in this case self < other
                             return Err(SynthesisError::Unsatisfiable)
                         } else {
                             return Ok($type_name::from_value(cs.ns(|| "alloc constant result"), &diff.unwrap()))
@@ -994,48 +1076,70 @@ macro_rules! impl_uint_gadget {
                     // this assertion checks that the field is big enough: subtraction of any 2
                     // values in $native_type must be a field element that cannot be represented as
                     // $native_type
-                    assert!(ConstraintF::Params::MODULUS_BITS - 1 > $bit_size);
+                    assert!(ConstraintF::Params::CAPACITY > $bit_size);
+
+
+                    /* Result is computed as follows.
+                    Consider 2 operands a,b with their little-endian bit representations,
+                    and n=$bit_size.
+                    Compute n bits diff_0,...,diff_{n-1} which represents a - b mod 2^n employing
+                    sub function, and then compute the term
+                    DELTA(a,b,diff) = 2^0a_0 + 2^1a_1 + ... + 2^(n-1)a_{n-1} -
+                    2^0b_0 - 2^1b_1 - ... - 2^(n-1)b_{n-1} - 2^0diff_0 - 2^1diff_1 - ...
+                    - 2^(n-1)diff_{n-1} in the ConstraintF field.
+                    Since diff is a field element equal to a-b mod 2^n, then it holds that
+                    DELTA(a,b,diff) == 0 iff a >= b.
+                    To compute the result, allocate a Boolean res and a field element v,
+                    and enforces these 2 constraints:
+                    - (1-res)*DELTA(a,b,diff) = 0
+                    - v*DELTA(a,b,diff) == res
+                    The first constraint ensures that res=1 when DELTA(a,b,diff)!=0, which holds iff
+                    a < b; the second constraint ensures that res=0 when DELTA(a,b,diff)=0, which holds
+                    iff a >= b. Note that to satisfy the second constraint when res=1, the prover
+                    must set v to the multiplicative inverse of DELTA(a,b,diff), which necessarily
+                    exists when res=1 as DELTA(a,b,diff) != 0
+                     */
+
+                    let diff_var = {
+                        // add a scope for multi_eq as constraints are enforced when variable is
+                        // dropped
+                        let mut multi_eq = MultiEq::new(&mut cs);
+                        self.sub(multi_eq.ns(|| "a - b mod 2^n"), other)?
+                    };
 
                     let mut delta_lc = LinearCombination::zero();
                     let mut coeff = ConstraintF::one();
                     let mut all_constants = true;
-                    for (self_bit, other_bit) in self.bits.iter().zip(other.bits.iter()) {
+                    for ((self_bit, other_bit), diff_bit) in self.bits.iter().zip(other.bits.iter()).zip(diff_var.bits.iter()) {
                         delta_lc = delta_lc + &self_bit.lc(CS::one(), coeff);
                         delta_lc = delta_lc - &other_bit.lc(CS::one(), coeff);
+                        delta_lc = delta_lc - &diff_bit.lc(CS::one(), coeff);
 
                         all_constants &= self_bit.is_constant() && other_bit.is_constant();
 
                         coeff.double_in_place();
                     }
 
-                    let mut is_underflowing = None;
-                    // delta = self - other - diff in the field, where diff = self - other over the uint type
-                    let mut delta = None;
-                    let diff = match (self.get_value(), other.get_value()) {
+                    let (diff_val, is_underflowing, delta) = match (self.get_value(), other.get_value()) {
                         (Some(value1), Some(value2)) => {
                             let (diff, underflow) = value1.overflowing_sub(value2);
-                            is_underflowing = Some(underflow);
-                            // compute self - other - diff over the field
+                            // compute delta = self - other - diff in the field,
+                            // where diff = self - other mod 2^$bit_size
                             let self_in_field = ConstraintF::from(value1);
                             let other_in_field = ConstraintF::from(value2);
                             let diff_in_field = ConstraintF::from(diff);
-                            delta = Some(self_in_field - other_in_field - diff_in_field);
-                            Some(diff)
+                            let delta = self_in_field - other_in_field - diff_in_field;
+                            (Some(diff), Some(underflow), Some(delta))
                         },
-                        _ => None,
+                        _ => (None, None, None),
                     };
 
-                    if all_constants && diff.is_some() {
+                    if all_constants && diff_val.is_some() {
                         return Ok(Boolean::constant(is_underflowing.unwrap()))
                     }
 
-                    let diff_var = Self::alloc(cs.ns(|| "alloc diff"), || diff.ok_or(SynthesisError::AssignmentMissing))?;
-                    let mut coeff = ConstraintF::one();
-                    for diff_bit in diff_var.bits.iter() {
-                        delta_lc = delta_lc - &diff_bit.lc(CS::one(), coeff);
-                        coeff.double_in_place();
-                    }
-                    // ToDo: It should not be necessary to allocate it as a Boolean gadget
+                    // ToDo: It should not be necessary to allocate it as a Boolean gadget,
+                    // can be done when a Boolean::from(FieldGadget) will be implemented
                     let is_smaller = Boolean::alloc(cs.ns(|| "alloc result"), || is_underflowing.ok_or(SynthesisError::AssignmentMissing))?;
 
                     let inv = delta.map(|delta| {
@@ -1640,7 +1744,7 @@ macro_rules! impl_uint_gadget {
 
                 #[test]
                 fn test_mulmany() {
-                    const MAX_NUM_OPERANDS: usize = (<Fr as PrimeField>::Params::MODULUS_BITS-1) as usize/$bit_size ;
+                    const MAX_NUM_OPERANDS: usize = (<Fr as PrimeField>::Params::CAPACITY) as usize/$bit_size ;
                     const NUM_OPERANDS: usize = MAX_NUM_OPERANDS*2+5;
                     // we want to test a case when the operands must be split in multiple chunks
                     assert!(NUM_OPERANDS > MAX_NUM_OPERANDS);
@@ -1853,7 +1957,7 @@ macro_rules! impl_uint_gadget {
 
                 #[test]
                 fn test_mulmany_nocarry() {
-                    const MAX_NUM_OPERANDS: usize = (<Fr as PrimeField>::Params::MODULUS_BITS-1) as usize/$bit_size ;
+                    const MAX_NUM_OPERANDS: usize = (<Fr as PrimeField>::Params::CAPACITY) as usize/$bit_size ;
                     const NUM_OPERANDS: usize = MAX_NUM_OPERANDS*2+5;
                     // we want to test a case when the operands must be split in multiple chunks
                     assert!(NUM_OPERANDS > MAX_NUM_OPERANDS);
