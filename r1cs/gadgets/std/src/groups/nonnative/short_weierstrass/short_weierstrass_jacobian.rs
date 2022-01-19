@@ -22,7 +22,7 @@ use crate::{
     },
     prelude::EqGadget,
     select::{CondSelectGadget, TwoBitLookupGadget},
-    uint8::UInt8,
+    UInt8,
     Assignment, ToBitsGadget, ToBytesGadget,
 };
 use std::{

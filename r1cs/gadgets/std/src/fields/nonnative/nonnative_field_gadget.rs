@@ -1657,14 +1657,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBytesGadget<ConstraintF
         // convert to little endian, split into chunks of 8 bits,
         // and define a `UInt8` from them.
         bits.reverse();
-        bits.chunks(8).for_each(|bits_per_byte| {
+        for (i, bits_per_byte) in bits.chunks(8).enumerate() {
             let mut bits_per_byte: Vec<Boolean> = bits_per_byte.to_vec();
             if bits_per_byte.len() < 8 {
                 bits_per_byte.resize_with(8, || Boolean::constant(false));
             }
 
-            bytes.push(UInt8::from_bits_le(&bits_per_byte));
-        });
+            bytes.push(UInt8::from_bits_le(cs.ns(|| format!("from bits of chunk {} to byte", i)), &bits_per_byte)?);
+        }
 
         Ok(bytes)
     }
@@ -1678,14 +1678,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> ToBytesGadget<ConstraintF
         bits.reverse();
 
         let mut bytes = Vec::<UInt8>::new();
-        bits.chunks(8).for_each(|bits_per_byte| {
+        for (i, bits_per_byte) in bits.chunks(8).enumerate() {
             let mut bits_per_byte: Vec<Boolean> = bits_per_byte.to_vec();
             if bits_per_byte.len() < 8 {
                 bits_per_byte.resize_with(8, || Boolean::constant(false));
             }
 
-            bytes.push(UInt8::from_bits_le(&bits_per_byte));
-        });
+            bytes.push(UInt8::from_bits_le(cs.ns(|| format!("from bits of chunk {} to byte", i)), &bits_per_byte)?);
+        }
 
         Ok(bytes)
     }
