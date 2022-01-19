@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use algebra::{Field, FpParameters, PrimeField};
 use r1cs_core::{ConstraintSystemAbstract, LinearCombination, SynthesisError, Variable};
+use crate::fields::fp::FpGadget;
 
 /// Specifies how to generate constraints that check for equality for two variables of type `Self`.
 pub trait EqGadget<ConstraintF: Field>: Eq {
@@ -128,6 +129,222 @@ impl<T: EqGadget<ConstraintF>, ConstraintF: Field> EqGadget<ConstraintF> for [T]
         }
         Ok(())
     }
+}
+
+// wrapper type employed to implement helper functions for the implementation of EqGadget for
+// Vec<Boolean>
+struct BooleanVec<'a>(&'a [Boolean]);
+impl BooleanVec<'_> {
+    #[inline]
+    // helper function that computes a linear combination of the bits of `self` and `other` which
+    // corresponds to the difference between two field elements a,b, where a (resp. b) is the field
+    // element whose little-endian bit representation is `self` (resp. other).
+    // The function returns also a-b over the field (wrapped in an Option) and a flag
+    // that specifies if all the bits in both `self` and `other` are constants.
+    fn compute_diff<ConstraintF, CS>(&self, _cs: CS, other: &Self) -> (LinearCombination<ConstraintF>, Option<ConstraintF>, bool)
+        where
+            ConstraintF: PrimeField,
+            CS: ConstraintSystemAbstract<ConstraintF>,
+    {
+        let self_bits = self.0;
+        let other_bits = other.0;
+        let field_bits = ConstraintF::Params::CAPACITY as usize;
+        assert!(self_bits.len() <= field_bits);
+        assert!(other_bits.len() <= field_bits);
+
+        let mut self_lc = LinearCombination::zero();
+        let mut other_lc = LinearCombination::zero();
+        let mut coeff = ConstraintF::one();
+        let mut diff_in_field = Some(ConstraintF::zero());
+        let mut all_constants = true;
+        for (self_bit, other_bit) in self_bits.iter().zip(other_bits.iter()) {
+            self_lc = self_lc + &self_bit.lc(CS::one(), coeff);
+            other_lc = other_lc + &other_bit.lc(CS::one(), coeff);
+
+            all_constants &= self_bit.is_constant() && other_bit.is_constant();
+
+            diff_in_field = match (self_bit.get_value(), other_bit.get_value()) {
+                (Some(bit1), Some(bit2)) => diff_in_field.as_mut().map(|diff| {
+                    let self_term = if bit1 {
+                        coeff
+                    } else {
+                        ConstraintF::zero()
+                    };
+                    let other_term = if bit2 {
+                        coeff
+                    } else {
+                        ConstraintF::zero()
+                    };
+                    *diff += self_term - other_term;
+                    *diff
+                }),
+                _ => None,
+            };
+
+            coeff.double_in_place();
+        }
+
+        (self_lc - other_lc, diff_in_field, all_constants)
+    }
+
+    // is_eq computes a Boolean which is true iff `self` == `other`. This function requires that
+    // `self` and `other` are bit sequences with length at most the capacity of the field ConstraintF.
+    fn is_eq<ConstraintF, CS>(&self, mut cs: CS, other: &Self) -> Result<Boolean, SynthesisError>
+    where
+    ConstraintF: PrimeField,
+    CS: ConstraintSystemAbstract<ConstraintF>,
+    {
+
+        let (diff_lc, diff_in_field, all_constants) = self.compute_diff(&mut cs, other);
+
+        if all_constants && diff_in_field.is_some() {
+            return Ok(Boolean::constant(diff_in_field.unwrap().is_zero()));
+        }
+
+        let is_eq = Boolean::alloc(cs.ns(|| "alloc result"), || {
+            let diff = diff_in_field.ok_or(SynthesisError::AssignmentMissing)?;
+            Ok(diff.is_zero())
+        })?;
+
+        let inv = diff_in_field.map(|diff| {
+            match diff.inverse() {
+                Some(inv) => inv,
+                None => ConstraintF::one(), // in this case the value of inv does not matter for the constraint
+            }
+        });
+
+        let inv_var = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc inv"), || {inv.ok_or(SynthesisError::AssignmentMissing)})?;
+
+        // enforce constraints:
+        // is_eq * diff_lc = 0 enforces that is_eq == 0 when diff_lc != 0, i.e., when self != other
+        // inv * diff_lc = 1 - is_eq enforces that is_eq == 1 when diff_lc == 0, i.e., when self == other
+        cs.enforce(|| "enforce is not eq", |_| is_eq.lc(CS::one(), ConstraintF::one()), |lc| lc + &diff_lc, |lc| lc);
+        cs.enforce(|| "enforce is eq", |lc| &inv_var.get_variable() + lc, |lc| lc + &diff_lc, |_| is_eq.not().lc(CS::one(), ConstraintF::one()));
+
+        Ok(is_eq)
+    }
+
+    // conditional_enforce_equal enforces that `self` == `other` if `should_enforce` is true,
+    // enforce nothing otherwise. This function requires that `self` and `other` are bit sequences
+    // with length at most the capacity of the field ConstraintF.
+    fn conditional_enforce_equal<ConstraintF, CS>(&self, mut cs: CS, other: &Self, should_enforce: &Boolean) -> Result<(), SynthesisError>
+    where
+        ConstraintF: PrimeField,
+        CS: ConstraintSystemAbstract<ConstraintF>
+    {
+        let (diff_lc, diff_in_field, all_constants) = self.compute_diff(&mut cs, other);
+
+        if all_constants && diff_in_field.is_some() && should_enforce.is_constant() {
+            if should_enforce.get_value().unwrap() && !diff_in_field.unwrap().is_zero() {
+                return Err(SynthesisError::Unsatisfiable)
+            }
+            return Ok(())
+        }
+
+        // enforce that diff_lc*should_enforce = 0, which enforces that diff_lc = 0 if should_enforce=1, while it enforces nothing if should_enforce=0
+        cs.enforce(|| "conditionally enforce equal", |lc| lc + &diff_lc, |_| should_enforce.lc(CS::one(), ConstraintF::one()), |lc| lc);
+
+        Ok(())
+    }
+
+    // conditional_enforce_not_equal enforces that `self` != `other` if `should_enforce` is true,
+    // enforce nothing otherwise. This function requires that `self` and `other` are bit sequences
+    // with length at most the capacity of the field ConstraintF.
+    fn conditional_enforce_not_equal<ConstraintF, CS>(&self, mut cs: CS, other: &Self, should_enforce: &Boolean) -> Result<(), SynthesisError>
+        where
+            ConstraintF: PrimeField,
+            CS: ConstraintSystemAbstract<ConstraintF>
+    {
+        let (diff_lc, diff_in_field, all_constants) = self.compute_diff(&mut cs, other);
+
+        if all_constants && diff_in_field.is_some() && should_enforce.is_constant() {
+            if should_enforce.get_value().unwrap() && diff_in_field.unwrap().is_zero() {
+                    return Err(SynthesisError::Unsatisfiable);
+            }
+            return Ok(())
+        }
+
+        let inv = diff_in_field.map(|diff| {
+            match diff.inverse() {
+                Some(inv) => inv,
+                None => ConstraintF::one(), //in this case the value of inv does not matter for the constraint
+            }
+        });
+
+        let inv_var = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc inv"), || {
+            let cond = should_enforce.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+            if cond {
+                return inv.ok_or(SynthesisError::AssignmentMissing)
+            }
+            // should not enforce anything, so set inv_var to 0 to trivially satisfy the constraint
+            Ok(ConstraintF::zero())
+        })?;
+
+        // enforce that diff_lc*inv_var = should_enforce, which enforces that diff_lc != 0 if
+        // should_enforce=1, while it enforces no constraint on diff_lc when should_enforce = 0,
+        // since inv can be trivially set by the prover to 0 to satisfy the constraint
+        cs.enforce(|| "conditionally enforce not equal", |lc| lc + &diff_lc, |lc| &inv_var.get_variable() + lc, |_| should_enforce.lc(CS::one(), ConstraintF::one()));
+
+        Ok(())
+    }
+}
+
+impl<ConstraintF: PrimeField> EqGadget<ConstraintF> for Vec<Boolean> {
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        other: &Self,
+    ) -> Result<Boolean, SynthesisError> {
+        assert_eq!(self.len(), other.len());
+        let len = self.len();
+        let field_bits = ConstraintF::Params::CAPACITY as usize;
+        if field_bits < len {
+            // if `self` and `other` cannot be packed in a single field element,
+            // then we split them in chunks of size field_bits and then leverage
+            // `self` == `other` iff each pair of chunks are equal
+            let mut chunk_eq_gadgets = Vec::new();
+            for (i, (self_chunk, other_chunk)) in self.chunks(field_bits).zip(other.chunks(field_bits)).enumerate() {
+                let is_eq = BooleanVec(self_chunk).is_eq(cs.ns(|| format!("equality for chunk {}", i)), &BooleanVec(other_chunk))?;
+                chunk_eq_gadgets.push(is_eq);
+            }
+            return Boolean::kary_and(cs.ns(|| "is eq"), chunk_eq_gadgets.as_slice())
+        }
+
+        BooleanVec(self).is_eq(cs, &BooleanVec(other))
+    }
+
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>
+    (&self, mut cs: CS, other: &Self, should_enforce: &Boolean) -> Result<(), SynthesisError> {
+        assert_eq!(self.len(), other.len());
+        // split `self` and `other` in chunks of size field_bits and enforce equality between each
+        // pair of chunks
+        let field_bits = ConstraintF::Params::CAPACITY as usize;
+        for (i, (self_chunk, other_chunk)) in self.chunks(field_bits).zip(other.chunks(field_bits)).enumerate() {
+            BooleanVec(self_chunk).conditional_enforce_equal(cs.ns(|| format!("enforce equal for chunk {}", i)), &BooleanVec(other_chunk), should_enforce)?;
+        }
+
+        Ok(())
+    }
+
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>
+    (&self, mut cs: CS, other: &Self, should_enforce: &Boolean) -> Result<(), SynthesisError> {
+        assert_eq!(self.len(), other.len());
+        let field_bits = ConstraintF::Params::CAPACITY as usize;
+        let len = self.len();
+        if field_bits < len {
+            // in this case, it is not useful to split `self` and `other` in chunks,
+            // as `self` != `other` iff at least one pair of chunks are different, but we do not
+            // know on which pair we should enforce inequality. Therefore, we
+            // compute a Boolean which is true iff `self != `other` and we conditionally
+            // enforce it to be true
+            let is_neq = self.is_neq(cs.ns(|| "is not equal"), other)?;
+            return is_neq.conditional_enforce_equal(cs, &Boolean::constant(true), should_enforce)
+        }
+        // instead, if `self` and `other` can be packed in a single field element, we can
+        // conditionally enforce their inequality, which is more efficient that calling is_neq
+        BooleanVec(self).conditional_enforce_not_equal(cs, &BooleanVec(other), should_enforce)
+    }
+
 }
 
 /// A struct for collecting identities of linear combinations of Booleans to serve
@@ -267,5 +484,104 @@ impl<ConstraintF: PrimeField, CS: ConstraintSystemAbstract<ConstraintF>>
 
     fn num_constraints(&self) -> usize {
         self.cs.num_constraints()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use rand::{thread_rng, Rng};
+    use r1cs_core::{ConstraintSystem, SynthesisMode, ConstraintSystemAbstract, ConstraintSystemDebugger};
+    use algebra::fields::{tweedle::Fr, PrimeField, FpParameters};
+    use crate::{boolean::Boolean, alloc::AllocGadget, eq::EqGadget};
+
+    #[test]
+    fn test_eq_for_boolean_vec() {
+        let rng = &mut thread_rng();
+        const FIELD_BITS: usize = <Fr as PrimeField>::Params::CAPACITY as usize;
+        // test with vectors whose length is either smaller or greater than the field capacity
+        const VEC_LENGTHS: [usize; 3] = [FIELD_BITS /2, FIELD_BITS, FIELD_BITS *2];
+        for len in &VEC_LENGTHS {
+            let num_chunks = *len/ FIELD_BITS + if *len % FIELD_BITS != 0 {1} else {0};
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+
+            let vec1 = (0..*len).map(|_| rng.gen()).collect::<Vec<bool>>();
+            let vec2 = (0..*len).map(|_| rng.gen()).collect::<Vec<bool>>();
+
+            let vec1_var = vec1.iter().enumerate().map(|(i, bit)| {
+                match i % 3 {
+                    0 => Boolean::constant(*bit),
+                    1 => Boolean::alloc(cs.ns(|| format!("alloc vec1 bit {}", i)), || Ok(*bit)).unwrap(),
+                    2 => Boolean::alloc(cs.ns(|| format!("alloc vec1 bit {}", i)), || Ok(*bit)).unwrap().not(),
+                    _ => Boolean::Constant(false),
+                }
+            }).collect::<Vec<_>>();
+            let vec2_var = vec2.iter().enumerate().map(|(i, bit)| {
+                match i % 3 {
+                    0 => Boolean::alloc(cs.ns(|| format!("alloc vec2 bit {}", i)), || Ok(*bit)).unwrap().not(),
+                    1 => Boolean::constant(*bit),
+                    2 => Boolean::alloc(cs.ns(|| format!("alloc vec2 bit {}", i)), || Ok(*bit)).unwrap(),
+                    _ => Boolean::Constant(false),
+                }
+            }).collect::<Vec<_>>();
+
+            // test functions on vectors which are distinct
+            let is_eq = vec1_var.is_eq(cs.ns(|| "vec1 == vec2"), &vec2_var).unwrap();
+            assert!(!is_eq.get_value().unwrap());
+            assert!(cs.is_satisfied());
+
+            let is_neq = vec1_var.is_neq(cs.ns(|| "vec1 != vec2"), &vec2_var).unwrap();
+            assert!(is_neq.get_value().unwrap());
+            assert!(cs.is_satisfied());
+
+            vec1_var.enforce_not_equal(cs.ns(|| "enforce vec1 != vec2"), &vec2_var).unwrap();
+            assert!(cs.is_satisfied());
+            vec1_var.conditional_enforce_equal(cs.ns(|| "fake enforce vec1 == vec2"), &vec2_var, &Boolean::constant(false)).unwrap();
+            assert!(cs.is_satisfied());
+            vec1_var.conditional_enforce_equal(cs.ns(|| "enforce vec1 == vec2"), &vec2_var, &Boolean::constant(true)).unwrap();
+            assert!(!cs.is_satisfied());
+
+            // test functions on vectors which are equal
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+            let vec1_var = vec1.iter().enumerate().map(|(i, bit)| {
+                match i % 3 {
+                    0 => Boolean::constant(*bit),
+                    1 => Boolean::alloc(cs.ns(|| format!("alloc vec1 bit {}", i)), || Ok(*bit)).unwrap(),
+                    2 => Boolean::alloc(cs.ns(|| format!("alloc vec1 bit {}", i)), || Ok(*bit)).unwrap().not(),
+                    _ => Boolean::Constant(false),
+                }
+            }).collect::<Vec<_>>();
+            let vec1_var_copy = vec1.iter().enumerate().map(|(i, bit)| {
+                match i % 3 {
+                    0 => Boolean::alloc(cs.ns(|| format!("alloc vec1 copy bit {}", i)), || Ok(*bit)).unwrap(),
+                    1 => Boolean::constant(*bit),
+                    2 => Boolean::alloc(cs.ns(|| format!("alloc vec1 copy bit {}", i)), || Ok(*bit)).unwrap().not(),
+                    _ => Boolean::Constant(false),
+                }
+            }).collect::<Vec<_>>();
+            let num_constraints = cs.num_constraints();
+            let is_eq = vec1_var.is_eq(cs.ns(|| "vec1 == vec1"), &vec1_var_copy).unwrap();
+            assert!(is_eq.get_value().unwrap());
+            assert!(cs.is_satisfied());
+            assert_eq!(num_constraints + 3 + 4*(num_chunks-1), cs.num_constraints());
+
+            let num_constraints = cs.num_constraints();
+            let is_neq = vec1_var.is_neq(cs.ns(|| "vec1 != vec1"), &vec1_var_copy).unwrap();
+            assert!(!is_neq.get_value().unwrap());
+            assert!(cs.is_satisfied());
+            assert_eq!(num_constraints + 3 + 4*(num_chunks-1), cs.num_constraints());
+
+            let num_constraints = cs.num_constraints();
+            vec1_var.enforce_equal(cs.ns(|| "enforce vec1 == vec1"), &vec1_var_copy).unwrap();
+            assert!(cs.is_satisfied());
+            assert_eq!(num_constraints + num_chunks, cs.num_constraints());
+            vec1_var.conditional_enforce_not_equal(cs.ns(|| "fake enforce vec1!=vec1"), &vec1_var_copy, &Boolean::constant(false)).unwrap();
+            assert!(cs.is_satisfied());
+            let num_constraints = cs.num_constraints();
+            vec1_var.conditional_enforce_not_equal(cs.ns(|| "enforce vec1!=vec1"), &vec1_var_copy, &Boolean::constant(true)).unwrap();
+            assert!(!cs.is_satisfied());
+            assert_eq!(num_constraints + 4*(num_chunks-1) + if num_chunks == 1 {1} else {4}, cs.num_constraints());
+        }
+
+
     }
 }
