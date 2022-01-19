@@ -133,7 +133,7 @@ macro_rules! impl_uint_gadget {
                     result
                 }
 
-                /// enfroces that self >= other. This function is provided as it is much efficient
+                /// enforces that self >= other. This function is provided as it is much efficient
                 /// in terms of constraints with respect to the default implementation of
                 /// ComparisonGadget, which relies on the smaller_than functions
                 pub fn enforce_greater_or_equal_than<ConstraintF, CS>(&self, mut cs: CS, other: &Self)
@@ -193,6 +193,86 @@ macro_rules! impl_uint_gadget {
                         value,
                     })
                 }
+
+                /// This function allows to multiply `self` and `other` with a variant of
+                /// double & add algorithm.
+                /// It is useful when the field ConstraintF is too small to employ the much more
+                /// efficient algorithm employed in multiplication functions of the UIntGadget.
+                /// If `no_carry` is true, then the function checks that the multiplication
+                /// does not overflow, otherwise modular multiplication with no overflow checking
+                /// is performed
+                fn mul_with_double_and_add<ConstraintF, CS>(&self, mut cs: CS, other: &Self,
+                no_carry: bool) -> Result<Self, SynthesisError>
+                where
+                    ConstraintF: PrimeField,
+                    CS: ConstraintSystemAbstract<ConstraintF>,
+
+                {
+                    let field_bits = ConstraintF::Params::CAPACITY as usize;
+                    // max_overflow_bits are the maximum number of non-zero bits a `Self` element
+                    // can have to be multiplied to another `Self` without overflowing the field
+                    let max_overflow_bits = field_bits - $bit_size;
+                    // given a base b = 2^m, where m=2^max_overflow_bits, the `other` operand is
+                    // represented in base b with digits of m bits. Then, the product self*other
+                    // is computed by the following summation:
+                    // sum_{i from 0 to h-1} ((self*b^i) % 2^$bit_size * digit_i), where h is the
+                    // number of digits employed to represent other in base b
+                    let mut coeff = self.clone(); // coeff will hold self*b^i mod 2^$bit_size for digit i
+                    let mut operands = Vec::new(); // operands will accumulate all the operands of the summation
+                    for (i, digit) in other.bits.chunks(max_overflow_bits).enumerate() {
+                        // multiply digit to coeff over the field, since digit < b,
+                        // then we are sure no field overflow will occur
+                        let be_bits = digit.iter().rev().map(|bit| *bit).collect::<Vec<_>>();
+                        let digit_in_field = FpGadget::<ConstraintF>::from_bits(cs.ns(|| format!("digit {} to field", i)), &be_bits[..])?;
+                        let coeff_bits = coeff.to_bits(cs.ns(|| format!("unpack coeff for digit {}", i)))?;
+                        let coeff_in_field = FpGadget::<ConstraintF>::from_bits(cs.ns(|| format!("coeff for digit {} to field", i)), &coeff_bits[..])?;
+                        let tmp_result = coeff_in_field.mul(cs.ns(|| format!("tmp result for digit {}", i)), &digit_in_field)?;
+                        let result_bits = if no_carry {
+                            // ensure that tmp_result can be represented with $bit_size bits to
+                            // ensure that no native type overflow has happened in the multiplication
+                            tmp_result.to_bits_with_length_restriction(cs.ns(|| format!("to bits for digit {}", i)), field_bits + 1 - $bit_size)?
+                        } else {
+                            let result_bits = tmp_result.to_bits_with_length_restriction(cs.ns(|| format!("to bits for digit {}", i)), 1)?;
+                            result_bits
+                            .iter()
+                            .skip(max_overflow_bits)
+                            .map(|el| *el)
+                            .collect::<Vec<_>>()
+                        };
+                        // addend is equal to coeff*digit mod 2^$bit_size
+                        let addend = $type_name::from_bits(cs.ns(|| format!("packing addend for digit {}", i)), &result_bits[..])?;
+                        operands.push(addend);
+                        // move coeff from self*b^i mod 2^$bit_size to self*b^(i+1) mod 2^$bit_size
+                        coeff = coeff.shl(max_overflow_bits);
+                    }
+                    let mut multi_eq = MultiEq::new(&mut cs);
+                    if no_carry {
+                        return $type_name::addmany_nocarry(multi_eq.ns(|| "add operands"), &operands)
+                    } else {
+                        return $type_name::addmany(multi_eq.ns(|| "add operands"), &operands)
+                    }
+                }
+
+                /// This function allows to multiply a set of operands with a variant of
+                /// double & add algorithm.
+                /// It is useful when the field ConstraintF is too small to employ the much more
+                /// efficient algorithm employed in multiplication functions of the UIntGadget.
+                /// If `no_carry` is true, then the function checks that the multiplication
+                /// does not overflow, otherwise modular multiplication with no overflow checking
+                /// is performed
+                fn mulmany_with_double_and_add<ConstraintF, CS>(mut cs: CS, operands: &[Self],
+                no_carry: bool) -> Result<Self, SynthesisError>
+                where
+                    ConstraintF: PrimeField,
+                    CS: ConstraintSystemAbstract<ConstraintF>,
+                {
+                    let mut result = operands[0].mul_with_double_and_add(cs.ns(|| "double and add first operands"), &operands[1], no_carry)?;
+                    for (i, op) in operands.iter().skip(2).enumerate() {
+                        result = result.mul_with_double_and_add(cs.ns(|| format!("double and add operand {}", i)),op, no_carry)?;
+                    }
+                    Ok(result)
+                }
+
             }
 
             impl PartialEq for $type_name {
@@ -779,7 +859,30 @@ macro_rules! impl_uint_gadget {
                     let num_operands = operands.len();
                     let field_bits = (ConstraintF::Params::CAPACITY) as usize;
                     assert!(num_operands >= 2);
-                    assert!(field_bits >= 2*$bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
+
+                    // corner case: check if all operands are constants before allocating any variable
+                    let mut all_constants = true;
+                    let mut result_value: Option<$native_type> = Some(1);
+                    for op in operands {
+                        for bit in &op.bits {
+                            all_constants &= bit.is_constant();
+                        }
+
+                        result_value = match op.value {
+                            Some(val) => result_value.as_mut().map(|v| v.overflowing_mul(val).0),
+                            None => None,
+                        }
+                    }
+
+                    if all_constants && result_value.is_some() {
+                        return Ok($type_name::from_value(cs.ns(|| "alloc constant result"), &result_value.unwrap()));
+                    }
+
+                    assert!(field_bits > $bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
+
+                    if field_bits < 2*$bit_size {
+                        return $type_name::mulmany_with_double_and_add(cs.ns(|| "double and add"), operands, false);
+                    }
 
                     if field_bits < num_operands*$bit_size {
                         let max_num_operands = field_bits/$bit_size;
@@ -801,24 +904,6 @@ macro_rules! impl_uint_gadget {
                     to the a*b*c mod 2^n (assuming that no field overflow occurs in computing a*b*c,
                     which is checked with the initial assertions)
                     */
-
-                    // corner case: check if all operands are constants before allocating any variable
-                    let mut all_constants = true;
-                    let mut result_value: Option<$native_type> = Some(1);
-                    for op in operands {
-                        for bit in &op.bits {
-                            all_constants &= bit.is_constant();
-                        }
-
-                        result_value = match op.value {
-                            Some(val) => result_value.as_mut().map(|v| v.overflowing_mul(val).0),
-                            None => None,
-                        }
-                    }
-
-                    if all_constants && result_value.is_some() {
-                        return Ok($type_name::from_value(cs.ns(|| "alloc constant result"), &result_value.unwrap()));
-                    }
 
                     let op0_bits = operands[0].to_bits(cs.ns(|| "unpack first operand"))?;
                     let op1_bits = operands[1].to_bits(cs.ns(|| "unpack second operand"))?;
@@ -847,28 +932,6 @@ macro_rules! impl_uint_gadget {
                     let num_operands = operands.len();
                     let field_bits = (ConstraintF::Params::CAPACITY) as usize;
                     assert!(num_operands >= 2);
-                    assert!(field_bits >= 2*$bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
-
-                    if field_bits < num_operands*$bit_size {
-                        let max_num_operands = field_bits/$bit_size;
-                        handle_numoperands_opmany!(mulmany_nocarry, cs, operands, max_num_operands);
-                    }
-
-                    /*
-                    Result is computed as follows.
-                    Without loss of generality, consider 3 operands a, b, c and n = $bit_size.
-                    The operands are converted to field gadgets fa, fb, fc employing their big-endian
-                    bit representations.
-                    Then, the product of all this elements over the field is computed with
-                    num_operands-1 (i.e., 2 in this case) constraints:
-                    - a*b=tmp
-                    - tmp*c=res
-                    Field gadget res is then converted to a big-endian bit representation employing
-                    only n bits. If this conversion succeeds, then it means that a*b*c does not
-                    overflow 2^n (assuming that no field overflow occurs in computing a*b*c, which
-                    is checked by the initial assertions), and such n bits represent the final
-                    product
-                    */
 
                     // corner case: check if all operands are constants before allocating any variable
                     let mut all_constants = true;
@@ -896,6 +959,33 @@ macro_rules! impl_uint_gadget {
                             return Ok($type_name::from_value(cs.ns(|| "alloc constant result"), &result_value.unwrap()));
                         }
                     }
+
+                    assert!(field_bits > $bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
+
+                    if field_bits < 2*$bit_size {
+                        return $type_name::mulmany_with_double_and_add(cs.ns(|| "double and add"), operands, true);
+                    }
+
+                    if field_bits < num_operands*$bit_size {
+                        let max_num_operands = field_bits/$bit_size;
+                        handle_numoperands_opmany!(mulmany_nocarry, cs, operands, max_num_operands);
+                    }
+
+                    /*
+                    Result is computed as follows.
+                    Without loss of generality, consider 3 operands a, b, c and n = $bit_size.
+                    The operands are converted to field gadgets fa, fb, fc employing their big-endian
+                    bit representations.
+                    Then, the product of all this elements over the field is computed with
+                    num_operands-1 (i.e., 2 in this case) constraints:
+                    - a*b=tmp
+                    - tmp*c=res
+                    Field gadget res is then converted to a big-endian bit representation employing
+                    only n bits. If this conversion succeeds, then it means that a*b*c does not
+                    overflow 2^n (assuming that no field overflow occurs in computing a*b*c, which
+                    is checked by the initial assertions), and such n bits represent the final
+                    product
+                    */
 
                     let op0_bits = operands[0].to_bits(cs.ns(|| "unpack first operand"))?;
                     let op1_bits = operands[1].to_bits(cs.ns(|| "unpack second operand"))?;
@@ -1743,6 +1833,7 @@ macro_rules! impl_uint_gadget {
                 }
 
                 #[test]
+                #[allow(unconditional_panic)] // otherwise test will not compile for uint128, as field is too small
                 fn test_mulmany() {
                     const MAX_NUM_OPERANDS: usize = (<Fr as PrimeField>::Params::CAPACITY) as usize/$bit_size ;
                     const NUM_OPERANDS: usize = MAX_NUM_OPERANDS*2+5;
@@ -1767,44 +1858,45 @@ macro_rules! impl_uint_gadget {
                     assert!(cs.is_satisfied());
 
 
+                    if MAX_NUM_OPERANDS >= 2 { // negative tests are skipped if if double and add must be used because the field is too small
+                        // negative test on first batch
+                        let bit_gadget_path = "mul operands/first batch of operands/unpack result field element/bit 0/boolean";
+                        if cs.get(bit_gadget_path).is_zero() {
+                            cs.set(bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(bit_gadget_path, Fr::zero());
+                        }
+                        assert!(!cs.is_satisfied());
 
-                    // negative test on first batch
-                    let bit_gadget_path = "mul operands/first batch of operands/unpack result field element/bit 0/boolean";
-                    if cs.get(bit_gadget_path).is_zero() {
-                        cs.set(bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(bit_gadget_path, Fr::zero());
-                    }
-                    assert!(!cs.is_satisfied());
+                        // set bit value back
+                        if cs.get(bit_gadget_path).is_zero() {
+                            cs.set(bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(bit_gadget_path, Fr::zero());
+                        }
+                        assert!(cs.is_satisfied());
 
-                    // set bit value back
-                    if cs.get(bit_gadget_path).is_zero() {
-                        cs.set(bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(bit_gadget_path, Fr::zero());
-                    }
-                    assert!(cs.is_satisfied());
+                        // negative test on allocated field element: skip if double and add must be used because the field is too small
+                        let mut last_batch_start_operand = MAX_NUM_OPERANDS + (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1)*(MAX_NUM_OPERANDS-1);
+                        if last_batch_start_operand == NUM_OPERANDS {
+                            last_batch_start_operand -= MAX_NUM_OPERANDS-1;
+                        }
+                        let bit_gadget_path = format!("mul operands/operands from {} to {}/unpack result field element/bit 0/boolean", last_batch_start_operand, NUM_OPERANDS);
+                        if cs.get(&bit_gadget_path).is_zero() {
+                            cs.set(&bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(&bit_gadget_path, Fr::zero());
+                        }
+                        assert!(!cs.is_satisfied());
 
-                    // negative test on allocated field element
-                    let mut last_batch_start_operand = MAX_NUM_OPERANDS + (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1)*(MAX_NUM_OPERANDS-1);
-                    if last_batch_start_operand == NUM_OPERANDS {
-                        last_batch_start_operand -= MAX_NUM_OPERANDS-1;
+                        // set bit value back
+                        if cs.get(&bit_gadget_path).is_zero() {
+                            cs.set(&bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(&bit_gadget_path, Fr::zero());
+                        }
+                        assert!(cs.is_satisfied());
                     }
-                    let bit_gadget_path = format!("mul operands/operands from {} to {}/unpack result field element/bit 0/boolean", last_batch_start_operand, NUM_OPERANDS);
-                    if cs.get(&bit_gadget_path).is_zero() {
-                        cs.set(&bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(&bit_gadget_path, Fr::zero());
-                    }
-                    assert!(!cs.is_satisfied());
-
-                    // set bit value back
-                    if cs.get(&bit_gadget_path).is_zero() {
-                        cs.set(&bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(&bit_gadget_path, Fr::zero());
-                    }
-                    assert!(cs.is_satisfied());
 
                     let operands = operand_values.iter().enumerate().map(|(i, val)| {
                         alloc_fn(&mut cs, format!("alloc constant operand {}", i).as_str(), &VARIABLE_TYPES[0], *val)
@@ -1956,9 +2048,11 @@ macro_rules! impl_uint_gadget {
                 }
 
                 #[test]
+                #[allow(unconditional_panic)] // otherwise test will not compile for uint128, as field is too small
                 fn test_mulmany_nocarry() {
                     const MAX_NUM_OPERANDS: usize = (<Fr as PrimeField>::Params::CAPACITY) as usize/$bit_size ;
                     const NUM_OPERANDS: usize = MAX_NUM_OPERANDS*2+5;
+
                     // we want to test a case when the operands must be split in multiple chunks
                     assert!(NUM_OPERANDS > MAX_NUM_OPERANDS);
 
@@ -1981,43 +2075,47 @@ macro_rules! impl_uint_gadget {
                     test_uint_gadget_value(result_value, &result_var, "result correctness");
                     assert!(cs.is_satisfied());
 
-                    // negative test on first batch
-                    let bit_gadget_path = "mul operands/first batch of operands/unpack result field element/bit 0/boolean";
-                    if cs.get(bit_gadget_path).is_zero() {
-                        cs.set(bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(bit_gadget_path, Fr::zero());
-                    }
-                    assert!(!cs.is_satisfied());
+                    if MAX_NUM_OPERANDS >= 2 { // negative tests are skipped if if double and add must be used because the field is too small
+                        // negative test on first batch
+                        let bit_gadget_path = "mul operands/first batch of operands/unpack result field element/bit 0/boolean";
+                        if cs.get(bit_gadget_path).is_zero() {
+                            cs.set(bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(bit_gadget_path, Fr::zero());
+                        }
+                        assert!(!cs.is_satisfied());
 
-                    // set bit value back
-                    if cs.get(bit_gadget_path).is_zero() {
-                        cs.set(bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(bit_gadget_path, Fr::zero());
-                    }
-                    assert!(cs.is_satisfied());
+                        // set bit value back
+                        if cs.get(bit_gadget_path).is_zero() {
+                            cs.set(bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(bit_gadget_path, Fr::zero());
+                        }
+                        assert!(cs.is_satisfied());
 
-                    // negative test on allocated field element
-                    let mut last_batch_start_operand = MAX_NUM_OPERANDS + (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1)*(MAX_NUM_OPERANDS-1);
-                    if last_batch_start_operand == NUM_OPERANDS {
-                        last_batch_start_operand -= MAX_NUM_OPERANDS-1;
-                    }
-                    let bit_gadget_path = format!("mul operands/operands from {} to {}/unpack result field element/bit 0/boolean", last_batch_start_operand, NUM_OPERANDS);
-                    if cs.get(&bit_gadget_path).is_zero() {
-                        cs.set(&bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(&bit_gadget_path, Fr::zero());
-                    }
-                    assert!(!cs.is_satisfied());
+                        // negative test on allocated field element
 
-                    // set bit value back
-                    if cs.get(&bit_gadget_path).is_zero() {
-                        cs.set(&bit_gadget_path, Fr::one());
-                    } else {
-                        cs.set(&bit_gadget_path, Fr::zero());
+                        let mut last_batch_start_operand = MAX_NUM_OPERANDS + (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1)*(MAX_NUM_OPERANDS-1);
+                        if last_batch_start_operand == NUM_OPERANDS {
+                            last_batch_start_operand -= MAX_NUM_OPERANDS-1;
+                        }
+                        let bit_gadget_path = format!("mul operands/operands from {} to {}/unpack result field element/bit 0/boolean", last_batch_start_operand, NUM_OPERANDS);
+                        if cs.get(&bit_gadget_path).is_zero() {
+                            cs.set(&bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(&bit_gadget_path, Fr::zero());
+                        }
+                        assert!(!cs.is_satisfied());
+
+
+                        // set bit value back
+                        if cs.get(&bit_gadget_path).is_zero() {
+                            cs.set(&bit_gadget_path, Fr::one());
+                        } else {
+                            cs.set(&bit_gadget_path, Fr::zero());
+                        }
+                        assert!(cs.is_satisfied());
                     }
-                    assert!(cs.is_satisfied());
 
                     // test with all constants
                     let num_constraints = cs.num_constraints();
@@ -2136,7 +2234,7 @@ macro_rules! impl_uint_gadget {
                                                 SynthesisError::Unsatisfiable => (),
                                                 _ => assert!(false, "invalid error returned by {}", if is_add {"conditionally_add_nocarry"} else {"conditionally_mul_nocarry"})
                                             };
-                                            return;
+                                            continue;
                                         },
                                         (_, _) => (),
                                         };
@@ -2148,7 +2246,7 @@ macro_rules! impl_uint_gadget {
                                     } else {
                                         op1
                                     }, &result_var, format!("{} correctness", op).as_str());
-                                    assert!(!cs.is_satisfied(), "checking overflow constraint for {:?} {:?}", var_type_op1, var_type_op2);
+                                    assert!(!cs.is_satisfied(), "checking overflow constraint for {:?} {:?} {}", var_type_op1, var_type_op2, is_add);
 
                                 }
                             }

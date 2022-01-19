@@ -16,6 +16,9 @@ pub mod macros;
 impl_uint_gadget!(U8, 8, u8, uint8);
 impl_uint_gadget!(UInt64, 64, u64, uint64);
 impl_uint_gadget!(UInt32, 32, u32, uint32);
+impl_uint_gadget!(UInt16, 16, u16, uint16);
+impl_uint_gadget!(UInt128, 128, u128, uint128);
+
 
 pub type UInt8 = uint8::U8;
 
