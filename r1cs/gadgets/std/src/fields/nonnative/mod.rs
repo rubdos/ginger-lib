@@ -13,6 +13,7 @@
 //! [Kosba et al]: https://ieeexplore.ieee.org/document/8418647
 //! [arkworks]: https://github.com/arkworks-rs/nonnative
 use std::fmt::Debug;
+use algebra::{PrimeField, FpParameters};
 
 pub mod params;
 
@@ -24,6 +25,14 @@ pub mod nonnative_field_gadget;
 
 /// The intermediate non-normalized representation resulting from products.
 pub mod nonnative_field_mul_result_gadget;
+
+/// checks if the simulation field is a prime field with pseudo-mersenne modulus
+fn is_pseudo_mersenne<SimulationF: PrimeField>() -> bool {
+    match SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO {
+        Some(_) => true,
+        None => false,
+    }
+}
 
 #[cfg(test)]
 mod tests;

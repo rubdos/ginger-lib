@@ -117,7 +117,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             "pre_add_reduce(): check() failed on input gadgets"
         );
 
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
         // To output a sum which does not exceed the capacity bound, we need to demand that
         // ``
         //     bits_per_limb + log(num_add(sum) + 1) <= CAPACITY,
@@ -150,7 +150,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             "pre_sub_reduce(): check() failed on input gadgets"
         );
 
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
         // The sub_without_prereduce() assumes that 
         // ``
         //     bits_per_limb + len(num_add(L) + num_add(R) + 5) <= CAPACITY - 3,
@@ -181,7 +181,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             "pre_mul_reduce(): check() failed on input gadgets"
         );
 
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
 
         // To assure that the limbs of the product representation do not exceed the capacity
         // bound, we demand
@@ -223,6 +223,60 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         Ok(())
     }
 
+    pub(crate) fn pre_mul_reduce_for_pseudomersenne<CS: ConstraintSystemAbstract<ConstraintF>>(
+        mut cs: CS,
+        elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+        elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
+    ) -> Result<(), SynthesisError> {
+        debug_assert!(
+            elem.check() && elem_other.check(),
+            "pre_mul_reduce(): check() failed on input gadgets"
+        );
+
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        // To assure that the limbs of the product representation do not exceed the capacity
+        // bound, we demand
+        // ``
+        //      bits_per_limb + surfeit(product) <= CAPACITY,
+        // ``
+        // where
+        // ``
+        //      surfeit(product) = log(num_limbs * (num_add(L)+1) * (num_add(R) + 1) * (c+1) * 2^bits_per_limb).
+        // ``
+        // To allow for a subsequent reduction we need to assure the stricter condition
+        // that
+        // ``
+        //    bits_per_limb + surfeit' <= CAPACITY - 3,
+        // ``
+        // where
+        // ``
+        //      surfeit' = log(num_adds(product) + 3) =
+        //          = log(num_limbs * (num_add(L)+1) * (num_add(R) + 1) * (c+1) * 2^bits_per_limb - 1 + 3)
+        //          = log(num_limbs * (num_add(L)+1) * (num_add(R) + 1) * (c+1) * 2^bits_per_limb + 2)
+        // ``
+        let c = SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO.unwrap(); // safe to unwrap as we know it is a pseudo-mersenne field
+        Self::reduce_until_cond_is_satisfied(
+            cs.ns(|| "pre mul reduce"),
+            elem,
+            elem_other,
+            |elem, elem_other| {
+                let term = BigUint::from(params.num_limbs)
+                    * (BigUint::one() + &elem.num_of_additions_over_normal_form)
+                    * (BigUint::one() + &elem_other.num_of_additions_over_normal_form)
+                    * (BigUint::one() + BigUint::from(c))
+                    * BigUint::from(2usize).pow(params.bits_per_limb as u32)
+                    ;
+                let surfeit_prime = ceil_log_2!(
+                    BigUint::from(2usize) + term
+                );
+
+                params.bits_per_limb + surfeit_prime <= ConstraintF::Params::CAPACITY as usize - 3
+            }
+        )?;
+
+        Ok(())
+    }
+
      /// Optional reduction which assures that the resulting operands produce do not exceed
      /// the capacity bound for a enforce_equal_without_prereduce(). 
      pub(crate) fn pre_enforce_equal_reduce<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -235,7 +289,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             "pre_sub_reduce(): check() failed on input gadgets"
         );
 
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
         // The enforce_equal_without_prereduce() assumes that
         // ``
         //    bits_per_limb + surfeit <= CAPACITY - 2,
@@ -283,7 +337,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// 
     // Costs
     // ``
-    //      (num_groups - 1) * (1 + bits_per_limb + surfeit + 2 - shift_per_limb) + 2
+    //      (num_groups - 1) * (1 + bits_per_limb + surfeit + 3 - shift_per_limb) + 2
     // ``
     // constraints, where `1 <= num_groups <= num_limbs` is the number of groups, determined
     // by `num_groups = Ceil[num_limbs / S]` with 
@@ -599,7 +653,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
                 )?;
             } else {
                 // The length restriction for the carry
-                // Costs `bits_per_limb + surfeit + 2 - shift_per_limb` many constraints.
+                // Costs `bits_per_limb + surfeit + 2 - shift_per_limb + 1` many constraints.
                 Reducer::<SimulationF, ConstraintF>::limb_to_bits(
                     cs.ns(|| format!("carry_to_bits_{}", group_id)),
                     &carry,

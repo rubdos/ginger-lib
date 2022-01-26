@@ -35,8 +35,8 @@ debug = true
 
 # Uncomment these lines for local development paths
 
-# [patch.'https://github.com/HorizenOfficial/ginger-lib']
-# algebra = { path = './algebra' }
+[patch.'https://github.com/HorizenOfficial/ginger-lib']
+algebra = { path = './algebra' }
 # r1cs-core = { path = "./r1cs/core" }
 
 # [patch.'https://github.com/HorizenLabs/marlin']

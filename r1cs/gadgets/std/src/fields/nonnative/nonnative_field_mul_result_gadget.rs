@@ -16,9 +16,10 @@ use crate::{
 };
 use algebra::fields::{FpParameters, PrimeField};
 use num_bigint::BigUint;
-use num_traits::{One, Pow, Zero};
+use num_traits::{One, Pow};
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::{marker::PhantomData, vec::Vec};
+use crate::fields::nonnative::NonNativeFieldParams;
 
 #[derive(Debug)]
 #[must_use]
@@ -54,7 +55,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         other: &NonNativeFieldGadget<SimulationF, ConstraintF>,
         cs: CS,
     ) -> Result<Self, SynthesisError> {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
 
         let mut limbs = other.limbs.clone();
         limbs.reverse();
@@ -78,7 +79,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// A function for test purposes. Returns `true` if `&self.num_add` respects 
     /// the capacity bound, and bounds all the limbs correctly.
     pub(crate) fn check(&self) -> bool {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
 
         let valid_num_limbs = self.limbs.len() == 2 * params.num_limbs - 1;
 
@@ -113,7 +114,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
     /// Get the value of the multiplication result
     pub fn value(&self) -> Result<SimulationF, SynthesisError> {
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
 
         let p_representations =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::get_limbs_representations_from_big_integer(
@@ -129,6 +130,56 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         let res = bigint_to_constraint_field::<SimulationF>(&(value_bigint % p_bigint));
         Ok(res)
+    }
+
+    /// Construct a NonNativeFieldMulResult gadget from a NonNativeFieldGadget
+    pub(crate) fn from_non_native_field_gadget<CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS, input_gagdet: &NonNativeFieldGadget<SimulationF, ConstraintF>,
+        params: &NonNativeFieldParams) -> Self {
+
+        debug_assert!(
+            input_gagdet.check(),
+            "convert to mul result gagdet from non native gadget: check() failed on input gadget"
+        );
+
+        let mut limbs = vec![FpGadget::<ConstraintF>::from_value(&mut cs, &ConstraintF::zero()); params.num_limbs-1];
+        limbs.extend_from_slice(&input_gagdet.limbs[..]);
+        // set num_add to ceil(input_gadget.num_add/2^bits_per_limb) as a limb of
+        // NonNativeFieldMulResultGadget has 2*bits_per_limb for each limb
+        let num_add_over_normal_form = &input_gagdet.num_of_additions_over_normal_form/BigUint::from(2usize).pow(params.bits_per_limb as u32) + BigUint::from(if &input_gagdet.num_of_additions_over_normal_form % BigUint::from(2usize).pow(params.bits_per_limb as u32) != BigUint::from(0usize) { 1usize } else {0usize});
+
+        let result = Self{
+            limbs,
+            num_add_over_normal_form,
+            simulation_phantom: PhantomData,
+        };
+
+        debug_assert!(result.check(), "convert to mul result gagdet from non native gadget: check() failed on output gadget");
+
+        result
+    }
+
+    /// convert `self` to NonNativeFieldGadget. This functions assumes that `self` has the first
+    /// `params.num_limbs` set to 0, otherwise it is pointless to convert them to
+    /// a NonNativeFieldGadget.
+    // This function is currently only employed to convert back to NonNativeFieldGadget
+    // multiplication results for pseudo-mersenne field, for which such condition
+    // on the most significant limbs holds
+    fn to_non_native_field_gadget(&self, params: &NonNativeFieldParams) -> NonNativeFieldGadget<SimulationF, ConstraintF> {
+        debug_assert!(self.check(), "convert mul result gadget to non native gagdet: check failed on input gadget");
+
+        let limbs = self.limbs[params.num_limbs-1..].iter().cloned().collect();
+        // num_add of the NonNativeFieldGadget is 2^bits_per_limb times higher than the num_add of
+        // NonNativeFieldMulResultGadget, as the limbs in normal form are bits_per_limb smaller
+        let num_of_additions_over_normal_form = &self.num_add_over_normal_form*BigUint::from(2usize).pow(params.bits_per_limb as u32);
+        let result = NonNativeFieldGadget {
+            limbs,
+            num_of_additions_over_normal_form,
+            simulation_phantom: PhantomData,
+        };
+
+        debug_assert!(result.check(), "convert mul result gadget to non native gagdet: check failed on output gadget");
+
+        result
     }
 
     /// Reducing a NonNativeMulResultGadget back to a non-native field gadget
@@ -162,6 +213,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         &self,
         mut cs: CS,
     ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {
+        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        if super::is_pseudo_mersenne::<SimulationF>() {
+            let mut result = self.to_non_native_field_gadget(&params);
+            Reducer::reduce(&mut cs, &mut result)?;
+            return Ok(result)
+        }
+
         debug_assert!(
             self.check(),
             "reduce(): check() failed on input mul result gadget" 
@@ -179,8 +237,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // the quotient `k` is length bounded by
         // ``
         //      len(k) <= len(p) + log(num_adds + 1) + 1. 
-        // `` 
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
+        // ``
 
         // Note: To assure that the limb-wise computation of the `k * p + r` does not 
         // exceed the capacity bound, we demand 
@@ -201,7 +258,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             )?;
         let p_bigint = limbs_to_bigint(params.bits_per_limb, &p_representations);
 
-        let mut p_gadget_limbs = Vec::new();
+        /*let mut p_gadget_limbs = Vec::new();
         for (i, limb) in p_representations.iter().enumerate() {
             p_gadget_limbs.push(FpGadget::<ConstraintF>::from_value(
                 cs.ns(|| format!("hardcode limb {}", i)),
@@ -212,7 +269,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             limbs: p_gadget_limbs,
             num_of_additions_over_normal_form: BigUint::zero(),
             simulation_phantom: PhantomData,
-        };
+        };*/
 
         // Step 2: compute surfeit
         let surfeit = ceil_log_2!(BigUint::one() + &self.num_add_over_normal_form);
@@ -296,15 +353,14 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         };
 
         // alloc r in normal form. 
-        // Costs `C = len(p)` constraints.
+        // Costs `C = len(p) + num_limbs` constraints.
         let r_gadget =
             NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc(cs.ns(|| "alloc r"), || {
                 self.value()
             })?;
 
         // Compute the product representation for `k*p`
-        // Costs `C =  num_limbs^2` constraints.
-        // TODO: let us use `mul_by_constant()` and `add_by_constant()`. Costs no constraints.
+        // Costs no constraints.
         let mut prod_limbs = Vec::new();
         let zero = FpGadget::<ConstraintF>::zero(cs.ns(|| "hardcode zero for step 1"))?;
 
@@ -314,9 +370,9 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
 
         for i in 0..params.num_limbs {
             for j in 0..params.num_limbs {
-                let mul_result = p_gadget.limbs[i].mul(
-                    cs.ns(|| format!("mul_result = p_gadget.limbs[{}] * k_gadget.limbs[{}]", i, j)),
-                    &k_gadget.limbs[j],
+                let mul_result = k_gadget.limbs[j].mul_by_constant(
+                    cs.ns(|| format!("mul_result = p_limbs[{}] * k_gadget.limbs[{}]", i, j)),
+                    &p_representations[i],
                 )?;
                 prod_limbs[i + j] = prod_limbs[i + j].add(
                     cs.ns(|| {
