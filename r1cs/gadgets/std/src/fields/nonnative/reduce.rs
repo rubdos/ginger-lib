@@ -255,6 +255,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         //          = log(num_limbs * (num_add(L)+1) * (num_add(R) + 1) * (c+1) * 2^bits_per_limb + 2)
         // ``
         let c = SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO.unwrap(); // safe to unwrap as we know it is a pseudo-mersenne field
+        let h = params.bits_per_limb*params.num_limbs - SimulationF::size_in_bits();
+        let pseudo_mersenne_factor = BigUint::from(2usize).pow(h as u32)*BigUint::from(c); // c*2^h
         Self::reduce_until_cond_is_satisfied(
             cs.ns(|| "pre mul reduce"),
             elem,
@@ -263,7 +265,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
                 let term = BigUint::from(params.num_limbs)
                     * (BigUint::one() + &elem.num_of_additions_over_normal_form)
                     * (BigUint::one() + &elem_other.num_of_additions_over_normal_form)
-                    * (BigUint::one() + BigUint::from(c))
+                    * (BigUint::one() + &pseudo_mersenne_factor)
                     * BigUint::from(2usize).pow(params.bits_per_limb as u32)
                     ;
                 let surfeit_prime = ceil_log_2!(

@@ -121,7 +121,6 @@ fn get_params_test() {
  * elementary arithemtic tests
  * 
  * ***********************************************************************************************/
- #[allow(dead_code)]
  fn constraint_count_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     let (_, _, constraints) = find_parameters(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
 
@@ -146,8 +145,17 @@ fn get_params_test() {
     );
 }
 
-fn test_constraint_count_for_pseudomersenne<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    NonNativeFieldGadget::<SimulationF, ConstraintF>::constraint_count_for_pseudomersenne(rng);
+// This test is only useful to print the constraints gain with and without pseudo-mersenne optimization.
+#[allow(dead_code)]
+fn test_different_constraint<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(_rng: &mut R) {
+    let (num_limbs, bits_per_limb, constraints) = find_parameters(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+
+    let (num_limbs_unopt, bits_per_limb_unopt, constraints_unopt) = find_parameters(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), None);
+
+    if constraints != constraints_unopt {
+        println!("optimized: num limbs={}, bits_per_limb={}, cost={}, h={}", num_limbs, bits_per_limb, constraints, num_limbs * bits_per_limb - SimulationF::size_in_bits());
+        println!("unoptimized: num limbs={}, bits_per_limb={}, cost={}", num_limbs_unopt, bits_per_limb_unopt, constraints_unopt);
+    }
 }
 
 fn elementary_test_allocation<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
@@ -724,9 +732,11 @@ fn elementary_test_mul_without_prereduce<SimulationF: PrimeField, ConstraintF: P
             //      2^(surfeit_a + surfeit_b) <= (2^(CAPACITY - 3 - 2*bits_per_limb) - 2)/(num_limbs*(c+1))
             // ``
             let c = SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO.unwrap();
+            let h = params.bits_per_limb*params.num_limbs - SimulationF::size_in_bits();
+            let pseudo_mersenne_factor = BigUint::from(2usize).pow(h as u32)*BigUint::from(c); // c*2^h
             (
                 (BigUint::from(2usize).pow((ConstraintF::Params::CAPACITY as usize - 3 - params.bits_per_limb) as u32) - BigUint::from(2usize))
-                    / (BigUint::from(2usize).pow(params.bits_per_limb as u32)*params.num_limbs*(BigUint::from(c) + BigUint::from(1usize)))
+                    / (BigUint::from(2usize).pow(params.bits_per_limb as u32)*params.num_limbs*(&pseudo_mersenne_factor + BigUint::from(1usize)))
             ).bits() as usize
         } else {
             // We sample reducible nonnatives.
@@ -1844,9 +1854,15 @@ macro_rules! stress_test {
 
 macro_rules! nonnative_test {
     ($test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
-        // Commented out as the estimated number of constraints from `find_paramaters`
-        // slightly differ from the measured ones.
-        //
+        /* elementary tests
+        */
+        elementary_test!(
+             test_different_constraint,
+             $test_name,
+             $test_simulation_field,
+             $test_constraint_field
+        );
+
         elementary_test!(
              constraint_count_test,
              $test_name,
@@ -1854,14 +1870,6 @@ macro_rules! nonnative_test {
              $test_constraint_field
         );
 
-        /* elementary tests
-        */
-        elementary_test!(
-            test_constraint_count_for_pseudomersenne,
-            $test_name,
-            $test_simulation_field,
-            $test_constraint_field
-        );
         elementary_test!(
             elementary_test_allocation,
             $test_name,
@@ -2125,6 +2133,9 @@ nonnative_test!(secp256k1Fq_over_Bn382Fr, secp256k1Fq, Bn382Fr);
 #[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
 nonnative_test!(Mnt4753Fq_over_Bn382Fr, Mnt4753Fq, Bn382Fr);
 
+#[cfg(all(feature = "tweedle", feature = "ed25519"))]
+nonnative_test!(ed25519_over_Bn382Fr, ed25519Fq, Bn382Fr);
+
 // tests over bn382 fq
 
 #[cfg(feature = "bn_382")]
@@ -2137,3 +2148,6 @@ nonnative_test!(TweedleFr_over_Mnt4753Fr, TweedleFr, Mnt4753Fr);
 
 #[cfg(all(feature = "bn_382", feature = "mnt4_753"))]
 nonnative_test!(Bn382Fq_over_Mnt4753Fr, Bn382Fq, Mnt4753Fr);
+
+#[cfg(all(feature = "mnt4_753", feature = "ed25519"))]
+nonnative_test!(ed25519_over_Mnt4753Fr, ed25519Fq, Mnt4753Fr);

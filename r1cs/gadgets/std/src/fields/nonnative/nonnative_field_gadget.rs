@@ -217,45 +217,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         })
     }
 
-    #[cfg(test)]
-    /// Function that allows to test the improvement in temrs of constraint with the optimization for
-    /// pseudo-mersenne. The assertion should fails and print the number of constraints if the `mul`
-    /// function is modified to not call the optimized implementation for pseudo-mersenne fields,
-    /// otherwise the test just succeeds
-    pub(crate) fn constraint_count_for_pseudomersenne<R: rand::RngCore>(rng: &mut R) {
-        use r1cs_core::{ConstraintSystem, SynthesisMode};
-        use crate::fields::nonnative::params::SURFEIT;
-        if !super::is_pseudo_mersenne::<SimulationF>() {
-            // skip test if SimulationF is not pseudo-mersenne
-            return;
-        }
-        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
-            cs.ns(|| "alloc random a" ),
-            rng,
-            SURFEIT as usize).unwrap();
-        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
-            cs.ns(|| "alloc random b" ),
-            rng,
-            SURFEIT as usize).unwrap();
-        let _a_times_b = a.mul_for_pseudomersenne(cs.ns(|| "a * b"), &b, false).unwrap();
-
-        let num_constraints_with_opt = cs.num_constraints();
-
-        let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
-            cs.ns(|| "alloc random a" ),
-            rng,
-            SURFEIT as usize).unwrap();
-        let b = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
-            cs.ns(|| "alloc random b" ),
-            rng,
-            SURFEIT as usize).unwrap();
-        let _a_times_b = a.mul(cs.ns(|| "a * b"), &b).unwrap();
-
-        assert_eq!(num_constraints_with_opt, cs.num_constraints());
-    }
-
     /* 
         conversion functions on vectors of limbs
     */
@@ -770,9 +731,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     /// ``
     /// where
     /// ``
-    ///      surfeit' = log(num_adds(prod) + 3) =
-    ///             = log(num_limbs*(num_add(L)+1)*(num_add(R)+1)*(c+1)*2^bits_per_limb - 1 + 3)
-    ///             = log(num_limbs*(num_add(L)+1)*(num_add(R)+1)*(c+1)*2^bits_per_limb + 2)
+    ///     h = num_limbs*bits_per_limb - n
+    ///     surfeit' = log(num_adds(prod) + 3) =
+    ///             = log(num_limbs*(num_add(L)+1)*(num_add(R)+1)*(c*2^h+1)*2^bits_per_limb - 1 + 3)
+    ///             = log(num_limbs*(num_add(L)+1)*(num_add(R)+1)*(c*2^h+1)*2^bits_per_limb + 2)
     /// ``
     // cost: num_limbs^2 constraints
     fn mul_without_prereduce_for_pseudomersenne<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -793,26 +755,29 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         // ``
         // where
         // ``
-        //      surfeit(product) = log(num_limbs * (num_add(L)+1) * (num_add(R) + 1) * (c+1) * 2^bits_per_limb).
+        //      h = num_limbs*bits_per_limb - n
+        //      surfeit(product) = log(num_limbs * (num_add(L)+1) * (num_add(R) + 1) * (c*2^h+1) * 2^bits_per_limb).
         // ``
         // To allow for a subsequent reduction we need to assure the stricter condition
         // that
         // ``
         //     bits_per_limb + surfeit' <= CAPACITY - 3,
         // ``
-        // with `surfeit' = log(num_limbs*(num_add(L)+1)*(num_add(R)+1)*(c+1)*2^bits_per_limb + 2)`.
+        // with `surfeit' = log(num_limbs*(num_add(L)+1)*(num_add(R)+1)*(c*2^h+1)*2^bits_per_limb + 2)`.
         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
         let c = SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO.unwrap(); // safe to unwrap as we know it is a pseudo-mersenne field
+        let h = params.bits_per_limb*params.num_limbs - SimulationF::size_in_bits();
+        let pseudo_mersenne_factor = BigUint::from(2usize).pow(h as u32)*BigUint::from(c); // c*2^h
         let num_add_bound =  BigUint::from(params.num_limbs)
             * (BigUint::one() + &self.num_of_additions_over_normal_form)
             * (BigUint::one() + &other.num_of_additions_over_normal_form)
-            * (BigUint::one() + BigUint::from(c))
+            * (BigUint::one() + &pseudo_mersenne_factor)
             * BigUint::from(2u32).pow(params.bits_per_limb as u32);
 
         let surfeit_prime = ceil_log_2!(
             &num_add_bound + BigUint::from(2u32)
         );
-
+        println!("{} {} {}", params.bits_per_limb, params.num_limbs, surfeit_prime);
         if params.bits_per_limb + surfeit_prime > ConstraintF::Params::CAPACITY as usize - 3 {
             return Err(SynthesisError::Other(format!("Security bound exceeded for mul_without_prereduce_for_pseudomersenne. Max: {}, Actual: {}",
                                                      ConstraintF::Params::CAPACITY as usize - 3,
@@ -864,31 +829,32 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         /*
         Apply the optimization for pseudo-mersenne fields.
         Denoting A = 2^bits_per_limb and N=num_limbs, prod_limbs represents the product prod
-        between L and R with 2*num_libs - 1 limbs as follows:
+        between L and R with 2*num_limbs - 1 limbs as follows:
         prod = Sum_{i=0 to 2N-2} prod_limbs[i]*A^(2N-2-i)
         By grouping A^N, prod can be seen as:
         prod = A^N * Sum_{i=0 to N-2} prod_limbs[i]*A^(N-2-i) + Sum_{i=0 to N-1} prod_limbs[i+N-1]*A^(N-1-i).
-        Since A^N = 2^n, where n = SimulationF::MODULUS_BITS, and SimulationF is pseudo-mersenne,
-        which means that 2^n mod p = c, then
+        Since A^N = 2^n*2^h, where n = SimulationF::MODULUS_BITS, and SimulationF is pseudo-mersenne,
+        which means that 2^n mod p = c, then A^N mod p = c*2^h and thus:
         ``
-        prod mod p = c * Sum_{i=0 to N-2} prod_limbs[i]*A^(N-2-i) + Sum_{i=0 to N-1} prod_limbs[i+N-1]*A^(N-1-i)
+        prod mod p = c*2^h * Sum_{i=0 to N-2} prod_limbs[i]*A^(N-2-i) + Sum_{i=0 to N-1} prod_limbs[i+N-1]*A^(N-1-i)
         ``
-        Therefore, since c << A^n, we can combine pair of limbs in a single limb, obtaining the
+        Therefore, since c*2^h << A^N (otherwise security bound will not be satisfied),
+        we can combine pair of limbs in a single limb, obtaining the
         vector reduced_prod_limb, as follows:
         ``
         reduced_prob_limbs[0] = prod_limbs[num_limbs-1]
-        reduced_prob_limbs[i], i=1 to num_limbs-1 = prod_limbs[i-1] + c*prob_limbs[i-1+num_limbs]
+        reduced_prob_limbs[i], i=1 to num_limbs-1 = prod_limbs[i-1] + c*2^h*prob_limbs[i-1+num_limbs]
         ``
         This allows to obtain a set of num_limbs limbs where each limb is upper bounded
-        by ((num_add(prod)+1)+c*(num_add(prod)+1))*2^bits_per_limb, which means that
-        num_add(reduced_prod) = (num_add(prod)+1)*(c+1)-1 and reduced_prod can be represented as a
+        by ((num_add(prod)+1)+c*2^h*(num_add(prod)+1))*2^bits_per_limb, which means that
+        num_add(reduced_prod) = (num_add(prod)+1)*(c*2^h+1)-1 and reduced_prod can be represented as a
         `NonNativeFieldGadget`
         */
         let mut reduced_prod_limbs = Vec::with_capacity(params.num_limbs);
-        // push prob_limb[num_limbs-1] as the msot significant limb of reduced prod
+        // push prob_limb[num_limbs-1] as the most significant limb of reduced prod
         reduced_prod_limbs.push(prod_limbs[params.num_limbs-1].clone());
         for (i, (low_limb, high_limb)) in prod_limbs.iter().skip(params.num_limbs).zip(prod_limbs.iter()).enumerate() {
-            let mul = high_limb.mul_by_constant(cs.ns(|| format!("c*high limb {}", i)), &ConstraintF::from(c as u128))?;
+            let mul = high_limb.mul_by_constant(cs.ns(|| format!("c*high limb {}", i)), &bigint_to_constraint_field(&pseudo_mersenne_factor))?;
             reduced_prod_limbs.push(low_limb.add(cs.ns(|| format!("low limb + high limb for reduced limb {}", i)),&mul)?);
         }
 
@@ -1092,19 +1058,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             )?;
         // TODO: check if the recomputation of MODULUS is the best way we can do.
         let p_bigint = limbs_to_bigint(params.bits_per_limb, &p_representations);
-
-        /*let mut p_gadget_limbs = Vec::new();
-        for (i, limb) in p_representations.iter().enumerate() {
-            p_gadget_limbs.push(FpGadget::<ConstraintF>::from_value(
-                cs.ns(|| format!("hardcode limb {}", i)),
-                limb,
-            ));
-        }
-        let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
-            limbs: p_gadget_limbs,
-            num_of_additions_over_normal_form: BigUint::zero(),
-            simulation_phantom: PhantomData,
-        };*/
 
         // Compute `delta = self - other`, costs no constraints. 
         let zero = Self::zero(cs.ns(|| "hardcode zero"))?;

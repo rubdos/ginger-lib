@@ -1,7 +1,7 @@
 use crate::fields::nonnative::NonNativeFieldParams;
 
 /// The surfeit used for finding the optimal parameters
-pub(crate) const SURFEIT:u32 = 10; 
+pub(crate) const SURFEIT:u32 = 10;
 
 /// Obtain the parameters from a `ConstraintSystem`'s cache or generate a new one
 #[must_use]
@@ -28,25 +28,37 @@ const fn ceil_log2(value: u128) -> usize{
 const fn estimate_cost_for_pseudomersenne(target_field_prime_length: usize, base_field_prime_length: usize, pseudo_mersenne_const: u64, bits_per_limb: usize, num_limbs: usize) -> Option<usize> {
     let num_adds_plus_one = 2u128.pow(SURFEIT);
     let capacity = base_field_prime_length  - 1;
+    let h = bits_per_limb*num_limbs - target_field_prime_length;
     // cost of mul
     let mut constraints = num_limbs*num_limbs;
     // compute surfeit_prod in a compatible way with const function:
-    // surfeit_prod = 1 + log(num_limbs*(num_adds+1)*(num_adds+1)*(c+1)*2^bits_per_limb + 2)
+    // surfeit_prod = 1 + log(num_limbs*(num_adds+1)*(num_adds+1)*(c*2^h+1)*2^bits_per_limb + 2)
     // surfeit_prod may overflow u128 if bits_per_limb is high
-    let surfeit_prod = if bits_per_limb < 32 {
+    let surfeit_prod = if bits_per_limb + h < 32 {
         // in this case we can compute num_adds_prod without overflowing, as num_limbs*(num_adds+1)*(num_adds+1)*(c+1) < 2^96 with our choice of surfeit
-        let num_adds_prod: u128 = (num_limbs as u128*num_adds_plus_one*num_adds_plus_one)*(pseudo_mersenne_const as u128+1)*2u128.pow(bits_per_limb as u32) - 1;
+        let num_adds_prod: u128 = (num_limbs as u128*num_adds_plus_one*num_adds_plus_one)*(pseudo_mersenne_const as u128*2u128.pow(h as u32)+1)*2u128.pow(bits_per_limb as u32) - 1;
         ceil_log2(num_adds_prod+3)+1
     } else {
         // otherwise, we compute the log without explicitly computing num_adds_prod:
-        // given num_adds_unshifted = num_limbs*(num_adds+1)*(num_adds+1)*(c+1), we need
-        // to compute 1+log(num_adds_unshifted*2^bits_per_limb + 2). Since num_adds_unshifted
+        // given num_adds_unshifted = num_limbs*(num_adds+1)*(num_adds+1), we need
+        // to compute 1+log(num_adds_unshifted*(c*2^h+1)*2^bits_per_limb + 2). Since num_adds_unshifted
         // must be shifted by bits_per_limb, we can neglect the addition with 2 and compute
-        // log(num_adds_unshifted*2^bits_per_limb + 2) = log(num_adds_unshifted)+bits_per_limb
-        let num_adds_unshifted: u128 = (num_limbs as u128*num_adds_plus_one*num_adds_plus_one)*(pseudo_mersenne_const as u128+1);
-        (128 - num_adds_unshifted.leading_zeros() as usize)+1+bits_per_limb
-        // NOTE: no need to apply correction to the result if num_adds_unshifted is a power of two,
-        // since num_adds_unshifted*2^bits_per_limb + 2 is never a power of two
+        // log(num_adds_unshifted*2^bits_per_limb + 2) = log(num_adds_unshifted*(c*2^h+1))+bits_per_limb.
+        // To compute log(num_adds_unshifted), we consider that
+        // num_adds_unshifted*(c*2^h+1) = num_adds_unshifted*c*2^h + num_adds_unshifted.
+        // Since num_adds_unshifted < 2^31 and c < 2^64, then if h < 32, num_adds_unshifted*(c*2^h+1)
+        // can be computed without overflow. Otherwise, if h >= 32, then
+        // log(num_adds_unshifted*(c*2^h+1)) = log(num_adds_unshifted*c*2^h) = log(num_adds_unshifted*c)+h
+        let log_num_adds_unshifted = if h < 32 {
+            let num_adds_unshifted: u128 = num_limbs as u128 * num_adds_plus_one * num_adds_plus_one * (pseudo_mersenne_const as u128*2u128.pow(h as u32) + 1);
+            128 - num_adds_unshifted.leading_zeros() as usize
+            // NOTE: no need to apply correction to the result if num_adds_unshifted is a power of two,
+            // since num_adds_unshifted*2^bits_per_limb + 2 is never a power of two
+        } else {
+            let num_adds_unshifted: u128 = num_limbs as u128 * num_adds_plus_one * num_adds_plus_one * pseudo_mersenne_const as u128;
+            128 - num_adds_unshifted.leading_zeros() as usize+h
+        };
+        log_num_adds_unshifted+1+bits_per_limb
     };
     if surfeit_prod + bits_per_limb > capacity - 2 {
         return None
@@ -83,9 +95,6 @@ const fn estimate_cost_for_generic_field(target_field_prime_length: usize, base_
     let surfeit_prod = ceil_log2((num_add_prod+1) as u128);
     // alloc k and r
     constraints += 2 * target_field_prime_length + surfeit_prod + 1 + num_limbs;
-
-    // computing k*p + r
-    //constraints += num_limbs * num_limbs;
 
     // The surfeit caused by (k*p + r)
     let num_add_kp_r = num_limbs + 2 * (num_add_prod + 1);
@@ -134,14 +143,10 @@ pub(crate) const fn find_parameters(target_field_prime_length: usize, base_field
     while bits_per_limb <= target_field_prime_length - 1  {
         // we compute the number of constraints for a `single mul_without_prereduce()`
         // and a subsequent `reduce()`
-        //ToDo: either remove this requirement for pseudo-mersenne or refactor the function prototype to take into account the type of field
+        //ToDo: evaluate if removing this requirement for pseudo-mersenne
         let num_limbs = (target_field_prime_length  + bits_per_limb - 1)/ bits_per_limb;
         // if SimulationF is pseudo-mersenne, then consider only bits_per_limb which divides modulus bits
         let constraints = if let Some(c) = pseudo_mersenne_const {
-            if target_field_prime_length != bits_per_limb*num_limbs {
-                bits_per_limb += 1;
-                continue;
-            }
             match estimate_cost_for_pseudomersenne(target_field_prime_length, base_field_prime_length, c, bits_per_limb, num_limbs) {
                 Some(cost) => cost,
                 None => {

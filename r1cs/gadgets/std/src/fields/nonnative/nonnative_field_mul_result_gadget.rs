@@ -258,19 +258,6 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             )?;
         let p_bigint = limbs_to_bigint(params.bits_per_limb, &p_representations);
 
-        /*let mut p_gadget_limbs = Vec::new();
-        for (i, limb) in p_representations.iter().enumerate() {
-            p_gadget_limbs.push(FpGadget::<ConstraintF>::from_value(
-                cs.ns(|| format!("hardcode limb {}", i)),
-                limb,
-            ));
-        }
-        let p_gadget = NonNativeFieldGadget::<SimulationF, ConstraintF> {
-            limbs: p_gadget_limbs,
-            num_of_additions_over_normal_form: BigUint::zero(),
-            simulation_phantom: PhantomData,
-        };*/
-
         // Step 2: compute surfeit
         let surfeit = ceil_log_2!(BigUint::one() + &self.num_add_over_normal_form);
 
