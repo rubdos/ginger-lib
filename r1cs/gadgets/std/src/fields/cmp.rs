@@ -130,15 +130,28 @@ impl<F: PrimeField> FpGadget<F> {
 
     /// Variant of `enforce_cmp` that assumes `self` and `other` are `<= (p-1)/2` and
     /// does not generate constraints to verify that.
-    fn enforce_cmp_unchecked<CS: ConstraintSystemAbstract<F>>(
+    pub fn enforce_cmp_unchecked<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
         other: &Self,
         ordering: Ordering,
         should_also_check_equality: bool,
     ) -> Result<(), SynthesisError> {
+        self.conditional_enforce_cmp_unchecked(&mut cs, other, &Boolean::constant(true), ordering, should_also_check_equality)
+    }
+
+    /// Variant of `conditional_enforce_cmp` that assumes `self` and `other` are `<= (p-1)/2` and
+    /// does not generate constraints to verify that.
+    pub fn conditional_enforce_cmp_unchecked<CS: ConstraintSystemAbstract<F>>(
+        &self,
+        mut cs: CS,
+        other: &Self,
+        should_enforce: &Boolean,
+        ordering: Ordering,
+        should_also_check_equality: bool,
+    ) -> Result<(), SynthesisError> {
         let is_cmp = self.is_cmp_unchecked(cs.ns(|| "is cmp unchecked"), other, ordering, should_also_check_equality)?;
-        is_cmp.enforce_equal(cs.ns(|| "enforce cmp"), &Boolean::constant(true))
+        is_cmp.conditional_enforce_equal(cs.ns(|| "conditionally enforce cmp"), &Boolean::constant(true), should_enforce)
     }
 
     /// Variant of `is_cmp` that assumes `self` and `other` are `<= (p-1)/2` and does not generate
@@ -190,8 +203,8 @@ mod test {
     use r1cs_core::{ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode};
     use crate::{algebra::{UniformRand, PrimeField,
                           fields::tweedle::Fr, Group,
-    }, fields::fp::FpGadget};
-    use crate::{alloc::{AllocGadget, ConstantGadget}, cmp::ComparisonGadget};
+    }, fields::{fp::FpGadget, FieldGadget}};
+    use crate::{alloc::{AllocGadget, ConstantGadget}, cmp::ComparisonGadget, boolean::Boolean};
 
     fn rand_in_range<R: Rng>(rng: &mut R) -> Fr {
         let pminusonedivtwo: Fr = Fr::modulus_minus_one_div_two().into();
@@ -206,9 +219,10 @@ mod test {
     }
 
     macro_rules! test_cmp_function {
-        ($cmp_func: tt) => {
+        ($cmp_func: tt, $should_enforce: expr, $should_fail_with_invalid_operands: expr) => {
             let mut rng = &mut thread_rng();
-            for i in 0..10 {
+            let should_enforce = Boolean::constant($should_enforce);
+            for _i in 0..10 {
                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
                 let a = rand_in_range(&mut rng);
@@ -218,18 +232,14 @@ mod test {
 
                 match a.cmp(&b) {
                     Ordering::Less => {
-                        a_var.$cmp_func(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false).unwrap();
-                        a_var.$cmp_func(cs.ns(|| "enforce less equal"), &b_var, Ordering::Less, true).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce less"), &b_var, &should_enforce, Ordering::Less, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce less equal"), &b_var, &should_enforce, Ordering::Less, true).unwrap();
                     }
                     Ordering::Greater => {
-                        a_var.$cmp_func(cs.ns(|| "enforce greater"), &b_var, Ordering::Greater, false).unwrap();
-                        a_var.$cmp_func(cs.ns(|| "enforce greater equal"), &b_var, Ordering::Greater, true).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce greater"), &b_var, &should_enforce, Ordering::Greater, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce greater equal"), &b_var, &should_enforce, Ordering::Greater, true).unwrap();
                     }
                     _ => {}
-                }
-
-                if i == 0 {
-                    println!("number of constraints: {}", cs.num_constraints());
                 }
                 if !cs.is_satisfied(){
                     println!("{:?}", cs.which_is_unsatisfied());
@@ -247,32 +257,32 @@ mod test {
 
                 match b.cmp(&a) {
                     Ordering::Less => {
-                        a_var.$cmp_func(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false).unwrap();
-                        a_var.$cmp_func(cs.ns(|| "enforce less equal"),&b_var, Ordering::Less, true).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce less"), &b_var, &should_enforce, Ordering::Less, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce less equal"),&b_var, &should_enforce, Ordering::Less, true).unwrap();
                     }
                     Ordering::Greater => {
-                        a_var.$cmp_func(cs.ns(|| "enforce greater"),&b_var, Ordering::Greater, false).unwrap();
-                        a_var.$cmp_func(cs.ns(|| "enforce greater equal"),&b_var, Ordering::Greater, true).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce greater"),&b_var, &should_enforce, Ordering::Greater, false).unwrap();
+                        a_var.$cmp_func(cs.ns(|| "enforce greater equal"),&b_var, &should_enforce, Ordering::Greater, true).unwrap();
                     }
                     _ => {}
                 }
-                assert!(!cs.is_satisfied());
+                assert!($should_enforce ^ cs.is_satisfied()); // check that constraints are satisfied iff should_enforce == false
             }
 
             for _i in 0..10 {
                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
                 let a = rand_in_range(&mut rng);
                 let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-                a_var.$cmp_func(cs.ns(|| "enforce less"),&a_var, Ordering::Less, false).unwrap();
+                a_var.$cmp_func(cs.ns(|| "enforce less"),&a_var, &should_enforce, Ordering::Less, false).unwrap();
 
-                assert!(!cs.is_satisfied());
+                assert!($should_enforce ^ cs.is_satisfied());
             }
 
             for _i in 0..10 {
                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
                 let a = rand_in_range(&mut rng);
                 let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-                a_var.$cmp_func(cs.ns(|| "enforce less"),&a_var, Ordering::Less, true).unwrap();
+                a_var.$cmp_func(cs.ns(|| "enforce less"),&a_var, &should_enforce, Ordering::Less, true).unwrap();
                 if !cs.is_satisfied(){
                     println!("{:?}", cs.which_is_unsatisfied());
                 }
@@ -284,26 +294,28 @@ mod test {
             let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
             let max_val: Fr = Fr::modulus_minus_one_div_two().into();
             let max_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_max"), || Ok(max_val)).unwrap();
-            let zero_var = FpGadget::<Fr>::from_value(cs.ns(|| "alloc zero"), &Fr::zero());
-            zero_var.$cmp_func(cs.ns(|| "enforce 0 <= (p-1) div 2"), &max_var, Ordering::Less, true).unwrap();
+            let zero_var = FpGadget::<Fr>::zero(cs.ns(|| "alloc zero")).unwrap();
+            zero_var.$cmp_func(cs.ns(|| "enforce 0 <= (p-1) div 2"), &max_var, &should_enforce, Ordering::Less, true).unwrap();
 
             assert!(cs.is_satisfied());
 
             // test when one of the operands is beyond (p-1)/2
             let out_range_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_out_range"), || Ok(max_val.double())).unwrap();
-            zero_var.$cmp_func(cs.ns(|| "enforce 0 <= p-1"), &out_range_var, Ordering::Less, true).unwrap();
-            assert!(!cs.is_satisfied());
+            zero_var.$cmp_func(cs.ns(|| "enforce 0 <= p-1"), &out_range_var, &should_enforce, Ordering::Less, true).unwrap();
+            assert!($should_fail_with_invalid_operands ^ cs.is_satisfied());
         }
     }
 
     #[test]
     fn test_cmp() {
-        test_cmp_function!(enforce_cmp);
+        test_cmp_function!(conditional_enforce_cmp, true, true);
+        test_cmp_function!(conditional_enforce_cmp, false, true);
     }
 
     #[test]
     fn test_cmp_unchecked() {
-        test_cmp_function!(enforce_cmp_unchecked);
+        test_cmp_function!(conditional_enforce_cmp_unchecked, true, true);
+        test_cmp_function!(conditional_enforce_cmp_unchecked, false, false);
     }
 
     macro_rules! test_smaller_than_func {

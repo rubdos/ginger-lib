@@ -1500,7 +1500,7 @@ macro_rules! impl_uint_gadget {
                     let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
                     let vec_len: usize = rng.gen_range($bit_size..$bit_size*2);
-                    println!("vec len: {}", vec_len);
+
                     // allocate input vector of VEC_LEN random bytes
                     let input_vec = (0..vec_len).map(|_| rng.gen()).collect::<Vec<u8>>();
 
@@ -2356,9 +2356,9 @@ macro_rules! impl_uint_gadget {
                     // helper closure which is useful to deal with the error returned by enforce cmp
                     // function if both the operands are constant and the comparison is
                     // unsatisfiable on such constants
-                    let handle_constant_operands = |cs: &ConstraintSystem::<Fr>, must_be_satisfied: bool, cmp_result: Result<(), SynthesisError>, var_type_op1: &VariableType, var_type_op2: &VariableType, assertion_label| {
-                        match (*var_type_op1, *var_type_op2) {
-                            (VariableType::Constant, VariableType::Constant) => {
+                    let handle_constant_operands = |cs: &ConstraintSystem::<Fr>, must_be_satisfied: bool, cmp_result: Result<(), SynthesisError>, var_type_op1: &VariableType, var_type_op2: &VariableType, is_constant: bool, assertion_label| {
+                        match (*var_type_op1, *var_type_op2, is_constant) {
+                            (VariableType::Constant, VariableType::Constant, true) => {
                                 if must_be_satisfied {
                                     cmp_result.unwrap()
                                 } else {
@@ -2407,12 +2407,12 @@ macro_rules! impl_uint_gadget {
 
                                 // test enforce_smaller_than
                                 let enforce_ret = a_var.enforce_smaller_than(cs.ns(|| "enforce a < b"), &b_var);
-                                handle_constant_operands(&cs, is_smaller, enforce_ret, var_type_op1, var_type_op2, "enforce_smaller_than test");
+                                handle_constant_operands(&cs, is_smaller, enforce_ret, var_type_op1, var_type_op2, true, "enforce_smaller_than test");
 
                                 // test equality
                                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
                                 let enforce_ret = a_var.enforce_smaller_than(cs.ns(|| "enforce a < a"), &a_var);
-                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, "enforce a < a test");
+                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce a < a test");
 
 
                                 // test all comparisons
@@ -2422,15 +2422,15 @@ macro_rules! impl_uint_gadget {
                                 match a.cmp(&b) {
                                     Ordering::Less => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, "enforce less test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce less test");
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less equal"), &b_var, Ordering::Less, true);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, "enforce less equal test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce less equal test");
                                     }
                                     Ordering::Greater => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater"), &b_var, Ordering::Greater, false);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, "enforce greater test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce greater test");
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater equal"), &b_var, Ordering::Greater, true);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, "enforce greater equal test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce greater equal test");
                                     }
                                     _ => {}
                                 }
@@ -2440,16 +2440,16 @@ macro_rules! impl_uint_gadget {
                                 match b.cmp(&a) {
                                     Ordering::Less => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, "enforce less negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce less negative test");
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less equal"),&b_var, Ordering::Less, true);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, "enforce less equal negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce less equal negative test");
 
                                     }
                                     Ordering::Greater => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater"),&b_var, Ordering::Greater, false);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, "enforce greater negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce greater negative test");
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater equal"),&b_var, Ordering::Greater, true);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, "enforce greater equal negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce greater equal negative test");
                                     }
                                     _ => {}
                                 }
@@ -2459,9 +2459,60 @@ macro_rules! impl_uint_gadget {
                                 let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
 
                                 let enforce_ret = a_var.enforce_cmp(cs.ns(|| "enforce a <= a"), &a_var, Ordering::Less, true);
-                                handle_constant_operands(&cs, true, enforce_ret, var_type_op1, &VariableType::Constant, "enforce less equal on same variable test");
+                                handle_constant_operands(&cs, true, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce less equal on same variable test");
                                 let enforce_ret = a_var.enforce_cmp(cs.ns(|| "enforce a < a"), &a_var, Ordering::Less, false);
-                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, "enforce less on same variable test");
+                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce less on same variable test");
+
+                                // test conditional_enforce_cmp
+                                for condition in BOOLEAN_TYPES.iter() {
+                                    let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                    let a: $native_type = rng.gen();
+                                    let b: $native_type = rng.gen();
+                                    let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                    let b_var = alloc_fn(&mut cs, "alloc b", var_type_op2, b);
+                                    let cond = alloc_boolean_cond(&mut cs, "alloc cond", condition);
+                                    match a.cmp(&b) {
+                                        Ordering::Less => {
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less"), &b_var, &cond, Ordering::Less, false);
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce less test");
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less equal"), &b_var, &cond, Ordering::Less, true);
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce less equal test");
+                                        }
+                                        Ordering::Greater => {
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater"), &b_var, &cond, Ordering::Greater, false);
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce greater test");
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater equal"), &b_var, &cond, Ordering::Greater, true);
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce greater equal test");
+                                        }
+                                        _ => {}
+                                    }
+                                    // negative tests
+                                    match b.cmp(&a) {
+                                        Ordering::Less => {
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less"), &b_var, &cond, Ordering::Less, false);
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce less negative test");
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less equal"),&b_var, &cond, Ordering::Less, true);
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce less equal negative test");
+
+                                        }
+                                        Ordering::Greater => {
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater"),&b_var, &cond, Ordering::Greater, false);
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce greater negative test");
+                                            let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater equal"),&b_var, &cond, Ordering::Greater, true);
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce greater equal negative test");
+                                        }
+                                        _ => {}
+                                    }
+                                    // test with the same variable
+                                    let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                    let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                    let cond = alloc_boolean_cond(&mut cs, "alloc cond", condition);
+
+                                    let enforce_ret = a_var.conditional_enforce_cmp(cs.ns(|| "enforce a <= a"), &a_var, &cond, Ordering::Less, true);
+                                    handle_constant_operands(&cs, true, enforce_ret, var_type_op1, &VariableType::Constant, cond.is_constant(), "cond enforce less equal on same variable test");
+                                    let enforce_ret = a_var.conditional_enforce_cmp(cs.ns(|| "enforce a < a"), &a_var, &cond, Ordering::Less, false);
+                                    handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_ret, var_type_op1, &VariableType::Constant, cond.is_constant(), "cond enforce less on same variable test");
+                                }
                             }
                         }
                     }

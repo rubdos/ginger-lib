@@ -44,8 +44,6 @@ pub trait ComparisonGadget<ConstraintF: Field>: Sized + EqGadget<ConstraintF>
     /// Enforce the given order relationship between `self` and `other`.
     /// If `should_also_check_equality` is true, then the order relationship is not strict
     /// (e.g., `self <= other` is enforced rather than `self < other`).
-    // Default implementation calls `is_cmp` to get a Boolean which is true iff the order
-    // relationship holds, and then enforce this Boolean to be true
     fn enforce_cmp<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
@@ -53,8 +51,25 @@ pub trait ComparisonGadget<ConstraintF: Field>: Sized + EqGadget<ConstraintF>
         ordering: Ordering,
         should_also_check_equality: bool,
     ) -> Result<(), SynthesisError> {
+        self.conditional_enforce_cmp(&mut cs, other, &Boolean::constant(true), ordering, should_also_check_equality)
+    }
+
+    /// Enforce the given order relationship between `self` and `other` if `should_enforce` is true,
+    /// enforce nothing otherwise.
+    /// If `should_also_check_equality` is true, then the order relationship is not strict
+    /// (e.g., `self <= other` is enforced rather than `self < other`).
+    // Default implementation calls `is_cmp` to get a Boolean which is true iff the order
+    // relationship holds, and then conditionally enforce this Boolean to be true
+    fn conditional_enforce_cmp<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        mut cs: CS,
+        other: &Self,
+        should_enforce: &Boolean,
+        ordering: Ordering,
+        should_also_check_equality: bool,
+    ) -> Result<(), SynthesisError> {
         let is_cmp = self.is_cmp(cs.ns(|| "cmp outcome"), other, ordering, should_also_check_equality)?;
 
-        is_cmp.enforce_equal(cs.ns(|| "enforce cmp"), &Boolean::constant(true))
+        is_cmp.conditional_enforce_equal(cs.ns(|| "enforce cmp"), &Boolean::constant(true), should_enforce)
     }
 }

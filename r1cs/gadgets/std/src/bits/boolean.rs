@@ -841,7 +841,16 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
             // 1 - 1 = 0 - 0 = 0
             (Constant(true), Constant(true)) | (Constant(false), Constant(false)) => return Ok(()),
             // false != true
-            (Constant(_), Constant(_)) => return Err(SynthesisError::AssignmentMissing),
+            (Constant(_), Constant(_)) => {
+                if should_enforce.is_constant() {
+                    return if should_enforce.get_value().unwrap() {
+                        Err(SynthesisError::AssignmentMissing)
+                    } else {
+                        Ok(())
+                    }
+                }
+                LinearCombination::zero() + CS::one() // set difference != 0
+            },
             // 1 - a
             (Constant(true), Is(a)) | (Is(a), Constant(true)) => {
                 LinearCombination::zero() + one - a.get_variable()
