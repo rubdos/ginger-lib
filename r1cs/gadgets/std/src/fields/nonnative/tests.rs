@@ -25,9 +25,9 @@ use crate::{
     fields::{
         fp::FpGadget,
         nonnative::{
-            nonnative_field_gadget::NonNativeFieldGadget,
+            nonnative_field_gadget::{NonNativeFieldGadget, bench_mul_without_reduce},
             nonnative_field_mul_result_gadget::NonNativeFieldMulResultGadget,
-            params::{SURFEIT, get_params, find_parameters},
+            params::{SURFEIT, get_params, find_parameters, test_different_constraint},
             reduce::Reducer,
         },
         FieldGadget,
@@ -122,7 +122,7 @@ fn get_params_test() {
  * 
  * ***********************************************************************************************/
  fn constraint_count_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
-    let (_, _, constraints) = find_parameters(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+    let (_, _, constraints) = find_parameters::<SimulationF, ConstraintF>();
 
     let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
     let a = NonNativeFieldGadget::<SimulationF, ConstraintF>::alloc_random(
@@ -145,18 +145,7 @@ fn get_params_test() {
     );
 }
 
-// This test is only useful to print the constraints gain with and without pseudo-mersenne optimization.
-#[allow(dead_code)]
-fn test_different_constraint<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(_rng: &mut R) {
-    let (num_limbs, bits_per_limb, constraints) = find_parameters(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
 
-    let (num_limbs_unopt, bits_per_limb_unopt, constraints_unopt) = find_parameters(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), None);
-
-    if constraints != constraints_unopt {
-        println!("optimized: num limbs={}, bits_per_limb={}, cost={}, h={}", num_limbs, bits_per_limb, constraints, num_limbs * bits_per_limb - SimulationF::size_in_bits());
-        println!("unoptimized: num limbs={}, bits_per_limb={}, cost={}", num_limbs_unopt, bits_per_limb_unopt, constraints_unopt);
-    }
-}
 
 fn elementary_test_allocation<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
@@ -187,7 +176,7 @@ fn elementary_test_alloc_random<SimulationF: PrimeField, ConstraintF: PrimeField
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
         
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
         let surfeit = rng.gen_range(0..(ConstraintF::size_in_bits() - params.bits_per_limb - 1));
         
         println!("expected surfeit: {} ", surfeit);
@@ -209,7 +198,7 @@ fn elementary_test_alloc_random<SimulationF: PrimeField, ConstraintF: PrimeField
 // fn group_and_check_equality_test<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
 //     for i in 0..TEST_COUNT {
 //         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-//         let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+//         let params = get_params::<SimulationF, ConstraintF>();
 //         // ``
 //         //     bits_per_limb + surfeit + 2 <= ConstraintF::CAPACITY,
 //         // ``
@@ -232,7 +221,7 @@ fn elementary_test_alloc_random<SimulationF: PrimeField, ConstraintF: PrimeField
 fn elementary_test_enforce_equal_without_prereduce<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for i in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
 
         // enforce_equal() of a non-native versus its normal form assumes that  
         // ``
@@ -313,7 +302,7 @@ fn elementary_test_enforce_equal_without_prereduce<SimulationF: PrimeField, Cons
 fn elementary_test_reduce<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for i in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
 
         // To sample a reducible non-native we need to assure that
         // ``
@@ -363,7 +352,7 @@ fn elementary_test_reduce<SimulationF: PrimeField, ConstraintF: PrimeField, R: R
 fn elementary_test_add_without_prereduce<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for i in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
 
         // We sample reducible nonnatives.        
         // ``
@@ -439,7 +428,7 @@ fn elementary_test_add_without_prereduce<SimulationF: PrimeField, ConstraintF: P
 fn elementary_test_addition<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
 
         // We sample reducible nonnatives.        
         // ``
@@ -505,7 +494,7 @@ fn elementary_test_addition<SimulationF: PrimeField, ConstraintF: PrimeField, R:
 fn elementary_test_sub_without_prereduce<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for i in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
     
         // We sample reducible nonnatives.        
         // ``
@@ -593,7 +582,7 @@ fn elementary_test_sub_without_prereduce<SimulationF: PrimeField, ConstraintF: P
 fn elementary_test_substraction<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
     
         // We sample reducible nonnatives.        
         // ``
@@ -661,7 +650,7 @@ fn elementary_test_substraction<SimulationF: PrimeField, ConstraintF: PrimeField
 fn elementary_test_negation<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for i in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
 
         // We sample reducible nonnatives.        
         // ``
@@ -711,7 +700,7 @@ fn elementary_test_negation<SimulationF: PrimeField, ConstraintF: PrimeField, R:
 fn elementary_test_mul_without_prereduce<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for i in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
 
         let surfeit_bound = if super::is_pseudo_mersenne::<SimulationF>() {
             // if simulation field is pseudo-mersenne, then surfeit_bound must be computed as follows:
@@ -828,7 +817,7 @@ fn elementary_test_mul_without_prereduce<SimulationF: PrimeField, ConstraintF: P
 fn elementary_test_multiplication<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for _ in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
     
         // We sample reducible nonnatives.  
         // ``
@@ -900,7 +889,7 @@ fn elementary_test_multiplication<SimulationF: PrimeField, ConstraintF: PrimeFie
 fn elementary_test_multiplication_by_constant<SimulationF: PrimeField, ConstraintF: PrimeField, R: RngCore>(rng: &mut R) {
     for i in 0..TEST_COUNT {
         let mut cs = ConstraintSystem::<ConstraintF>::new(SynthesisMode::Debug);
-        let params = get_params(SimulationF::size_in_bits(), ConstraintF::size_in_bits(), SimulationF::Params::DIFFERENCE_WITH_HIGHER_POWER_OF_TWO);
+        let params = get_params::<SimulationF, ConstraintF>();
 
         // We sample reducible nonnatives.        
         // ``
@@ -1839,6 +1828,30 @@ macro_rules! elementary_test {
     };
 }
 
+macro_rules! pseudomersenne_test {
+    ($test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) =>
+        {
+        elementary_test!(
+             test_different_constraint,
+             $test_name,
+             $test_simulation_field,
+             $test_constraint_field
+        );
+        /*elementary_test!(
+             test_correctness_pseudomersenne_mul,
+             $test_name,
+             $test_simulation_field,
+             $test_constraint_field
+        );*/
+        paste::item! {
+            #[test]
+            fn [<test_mul_without_reduce _ $test_name:lower>]() {
+                bench_mul_without_reduce::<$test_simulation_field, $test_constraint_field, _>(&mut thread_rng(), SURFEIT as usize);
+            }
+        }
+    }
+}
+
 macro_rules! stress_test {
     ($test_method:ident, $test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
         paste::item! {
@@ -1856,12 +1869,6 @@ macro_rules! nonnative_test {
     ($test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
         /* elementary tests
         */
-        elementary_test!(
-             test_different_constraint,
-             $test_name,
-             $test_simulation_field,
-             $test_constraint_field
-        );
 
         elementary_test!(
              constraint_count_test,
@@ -2096,9 +2103,11 @@ nonnative_test!(TweedleFq_over_Fr, TweedleFq, TweedleFr);
 
 #[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_test!(ed25519Fq_over_TweedleFr, ed25519Fq, TweedleFr);
+pseudomersenne_test!(ed25519Fq_over_TweedleFr, ed25519Fq, TweedleFr);
 
 #[cfg(all(feature = "tweedle", feature = "secp256k1"))]
 nonnative_test!(secp256k1_over_TweedleFr, secp256k1Fq, TweedleFr);
+pseudomersenne_test!(secp256k1_over_TweedleFr, secp256k1Fq, TweedleFr);
 
 #[cfg(all(feature = "tweedle", feature = "bn_382"))]
 nonnative_test!(Bn382Fr_over_TweedleFr, Bn382Fr, TweedleFr);
@@ -2118,6 +2127,8 @@ nonnative_test!(Bls12377Fq_over_Fr, Bls12377Fq, Bls12377Fr);
 
 #[cfg(all(feature = "secp256k1", feature = "bls12_377"))]
 nonnative_test!(secp256k1Fq_over_Bls12377Fr, secp256k1Fq, Bls12377Fr);
+#[cfg(all(feature = "secp256k1", feature = "bls12_377"))]
+pseudomersenne_test!(secp256k1Fq_over_Bls12377Fr, secp256k1Fq, Bls12377Fr);
 
 // tests over bn382 fr
 
@@ -2129,12 +2140,15 @@ nonnative_test!(TweedleFq_over_Bn382Fr, TweedleFq, Bn382Fr);
 
 #[cfg(all(feature = "bn_382", feature = "secp256k1"))]
 nonnative_test!(secp256k1Fq_over_Bn382Fr, secp256k1Fq, Bn382Fr);
+pseudomersenne_test!(secp256k1Fq_over_Bn382Fr, secp256k1Fq, Bn382Fr);
 
 #[cfg(all(feature = "tweedle", feature = "mnt4_753"))]
 nonnative_test!(Mnt4753Fq_over_Bn382Fr, Mnt4753Fq, Bn382Fr);
 
 #[cfg(all(feature = "tweedle", feature = "ed25519"))]
 nonnative_test!(ed25519_over_Bn382Fr, ed25519Fq, Bn382Fr);
+#[cfg(all(feature = "tweedle", feature = "ed25519"))]
+pseudomersenne_test!(ed25519_over_Bn382Fr, ed25519Fq, Bn382Fr);
 
 // tests over bn382 fq
 
@@ -2151,3 +2165,5 @@ nonnative_test!(Bn382Fq_over_Mnt4753Fr, Bn382Fq, Mnt4753Fr);
 
 #[cfg(all(feature = "mnt4_753", feature = "ed25519"))]
 nonnative_test!(ed25519_over_Mnt4753Fr, ed25519Fq, Mnt4753Fr);
+#[cfg(all(feature = "mnt4_753", feature = "ed25519"))]
+pseudomersenne_test!(ed25519_over_Mnt4753Fr, ed25519Fq, Mnt4753Fr);
