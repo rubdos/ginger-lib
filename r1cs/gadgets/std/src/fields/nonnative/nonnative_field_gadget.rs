@@ -864,8 +864,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         we can combine pair of limbs in a single limb, obtaining the
         vector reduced_prod_limb, as follows:
         ``
-        reduced_prob_limbs[0] = prod_limbs[num_limbs-1]
-        reduced_prob_limbs[i], i=1 to num_limbs-1 = prod_limbs[i-1] + c*2^h*prob_limbs[i-1+num_limbs]
+        reduced_prod_limbs[0] = prod_limbs[num_limbs-1]
+        reduced_prod_limbs[i], i=1 to num_limbs-1 = prod_limbs[i-1] + c*2^h*prod_limbs[i-1+num_limbs]
         ``
         This allows to obtain a set of num_limbs limbs where each limb is upper bounded
         by ((num_add(prod)+1)+c*2^h*(num_add(prod)+1))*2^bits_per_limb, which means that
@@ -873,7 +873,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         `NonNativeFieldGadget`
         */
         let mut reduced_prod_limbs = Vec::with_capacity(params.num_limbs);
-        // push prob_limb[num_limbs-1] as the most significant limb of reduced prod
+        // push prod_limb[num_limbs-1] as the most significant limb of reduced prod
         reduced_prod_limbs.push(prod_limbs[params.num_limbs - 1].clone());
         let pseudo_mersenne_factor_field_element =
             bigint_to_constraint_field(&pseudo_mersenne_factor);
@@ -957,7 +957,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     // ``
     //     C = (num_groups - 1) * (surfeit + 4) + 2 + surfeit + num_limbs(p) + 1,
     // ``
-    // where
+    // where `1 <= num_groups <= num_limbs` is the number of groups, determined
+    // by `num_groups = Ceil[num_limbs / S]` with
     // ``
     //      S =  Floor[
     //          (ConstraintF::CAPACITY - 2 - surfeit) / bits_per_limb
@@ -1369,7 +1370,24 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
             self.check() && other.check(),
             "mul_equals(): check() failed on input gadgets "
         );
-        let actual_result = self.mul(cs.ns(|| "calc_actual_result"), other)?;
+        let actual_result = if super::is_pseudo_mersenne::<SimulationF>() {
+            // in case SimulationF is pseudo_mersenne, we can avoid reduction
+            // Step 1: reduce `self` and `other` if necessary
+            let mut self_reduced = self.clone();
+            let mut other_reduced = other.clone();
+
+            Reducer::<SimulationF, ConstraintF>::pre_mul_reduce_for_pseudomersenne(
+                cs.ns(|| "pre mul reduce"),
+                &mut self_reduced,
+                &mut other_reduced,
+            )?;
+
+            // Step 2: mul without pre reduce
+            self.mul_without_prereduce_for_pseudomersenne(cs.ns(|| "calc actual result"), other, false)?
+        } else {
+            self.mul_no_pseudomersenne(cs.ns(|| "calc_actual_result"), other, false)?
+        };
+
         debug_assert!(
             actual_result.check(),
             "mul_equals(): check() failed on actual_result."
@@ -1391,8 +1409,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         })?;
         let one = Self::one(cs.ns(|| "alloc one"))?;
 
-        let actual_result = self.clone().mul(cs.ns(|| "self * inverse"), &inverse)?;
-        actual_result.enforce_equal(cs.ns(|| "self * inverse == 1"), &one)?;
+        self.mul_equals(cs.ns(|| "self*inverse == 1"), &inverse, &one)?;
+
         Ok(inverse)
     }
 
