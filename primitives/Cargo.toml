@@ -23,7 +23,7 @@ edition = "2018"
 ################################# Dependencies ################################
 
 [dependencies]
-algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "nonnative_doc", features = ["parallel"] }
+algebra = { git = "https://github.com/HorizenOfficial/ginger-lib", branch = "Optimize-non-native-field-mul-for-pseudo-mersenne-primes", features = ["parallel"] }
 bench-utils = { path = "../bench-utils" }
 
 digest = { version = "=0.8.1", optional = true }
