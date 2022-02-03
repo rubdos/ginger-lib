@@ -384,17 +384,19 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMerkleTree for Fiel
     /// This function will return Error in the following situations:
     /// - Invalid leaf idx (leaf.coord.position > self.width);
     /// - Remove a non existing leaf
-    fn update_leaves(&mut self, leaves_set: HashSet<OperationLeaf<Self::Position, T::Data>>) -> Result<&mut Self, Error> {
+    /// No guarantee is provided to the state of the tree in case the execution of this function
+    /// terminates abruptly.
+    fn update_leaves(&mut self, leaves: Vec<OperationLeaf<Self::Position, T::Data>>) -> Result<&mut Self, Error> {
 
         // Update internal leaves
-        if !leaves_set.is_empty() {
+        if !leaves.is_empty() {
             
             // Can't perform any leaf update operation in a tree of height 0.
             if self.height == 0 {
                 return Err(MerkleTreeError::TooManyLeaves(0))?
             }
 
-            for leaf in leaves_set.into_iter() {
+            for leaf in leaves.into_iter() {
                 let idx = leaf.position;
                 
                 // Check that the index of the leaf is less than the width of the Merkle tree
@@ -430,7 +432,7 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMerkleTree for Fiel
 #[cfg(test)]
 mod test {
 
-    use std::collections::{BTreeMap, HashMap, HashSet};
+    use std::collections::{BTreeMap, HashMap};
 
     use algebra::{
         Field, UniformRand,
@@ -441,8 +443,8 @@ mod test {
             FieldBasedMerkleTreeParameters, BatchFieldBasedMerkleTreeParameters,
             FieldBasedMerkleTreePath, FieldBasedMerkleTreePrecomputedZeroConstants,
             FieldBasedBinaryMHTPath, FieldBasedMerkleTree, FieldBasedAppendOnlyMHT,
-            OperationLeaf, ActionLeaf,
-        }};
+            ActionLeaf,
+        }, OperationLeaf};
 
     use rand::{Rng, RngCore, prelude::SliceRandom};
 
@@ -576,7 +578,7 @@ mod test {
         let mut leaves = (0..num_leaves/2)
             .map(|idx| OperationLeaf::new(idx, ActionLeaf::Insert, Some(T::Data::rand(rng))))
             .collect::<Vec<_>>();
-        smt.update_leaves(leaves.iter().cloned().collect::<HashSet<_>>()).unwrap();
+        smt.update_leaves(leaves.clone()).unwrap();
 
         // Test batches of mixed insertions/removals: fill the other half of the tree and remove the first half.
 
@@ -600,7 +602,7 @@ mod test {
         leaves
             .chunks(chunk_size)
             .for_each(|leaves| {
-                smt.update_leaves(leaves.iter().cloned().collect::<HashSet<_>>()).unwrap();
+                smt.update_leaves(leaves.to_vec()).unwrap();
                 if !finalize_in_the_end { compare_append_only_and_smt_roots(&mut smt) }
             });
 
@@ -609,18 +611,6 @@ mod test {
         // Nodes map must be half full
         assert_eq!(smt.leaves.len() as u32, num_leaves/2);
         assert_eq!(smt.nodes.len() as u32, num_leaves/2);
-    }
-
-    macro_rules! set {
-        ( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
-            {
-                let mut temp_set = HashSet::new();  // Create a mutable HashSet
-                $(
-                    temp_set.insert($x); // Insert each item matched into the HashSet
-                )*
-                temp_set // Return the populated HashSet
-            }
-        };
     }
 
     fn test_error_cases<T: BatchFieldBasedMerkleTreeParameters>(
@@ -632,22 +622,19 @@ mod test {
         let mut dummy_leaf = OperationLeaf::new(0, ActionLeaf::Remove, Some(T::Data::one()));
         
         // Remove leaf from an empty tree
-        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains("Leaf with index 0 doesn't exist"));
-        assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
+        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains("Leaf with index 0 doesn't exist"));
 
         // Remove a leaf out of range
         dummy_leaf.position = smt.width;
-        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
-        assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
+        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
 
         // Add a leaf out of range
         dummy_leaf.action = ActionLeaf::Insert;
-        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
-        assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
+        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
 
         // Add a correct leaf
         dummy_leaf.position -= 1;
-        smt.update_leaves(set![dummy_leaf]).unwrap();
+        smt.update_leaves(vec![dummy_leaf]).unwrap();
         smt.finalize_in_place().unwrap();
         let smt_root = smt.root().unwrap();
         assert_eq!(smt_root, compute_append_only_tree_root(&smt));
@@ -656,49 +643,50 @@ mod test {
 
         // Replace previously added leaf with a new value and check correct replacement
         dummy_leaf.hash = Some(T::Data::from(2u8));
-        smt.update_leaves(set![dummy_leaf]).unwrap();
+        smt.update_leaves(vec![dummy_leaf]).unwrap();
         let new_smt_root = smt.finalize_in_place().unwrap().root().unwrap();
         assert_ne!(new_smt_root, smt_root);
         assert_eq!(new_smt_root, compute_append_only_tree_root(&smt));
         assert_eq!(smt.leaves.len(), 1);
         assert_eq!(smt.nodes.len() as u8, height);
 
+        // Perform removal then insertion of the same leaf at the same time and check correct result
+        let mut dummy_leaf_removal = dummy_leaf.clone();
+        dummy_leaf_removal.action = ActionLeaf::Remove;
+        smt.update_leaves(vec![dummy_leaf_removal, dummy_leaf]).unwrap();
+
+        // Situation must be unchanged with respect to before
+        assert_eq!(new_smt_root, smt.finalize_in_place().unwrap().root().unwrap());
+        assert_eq!(smt.leaves.len(), 1);
+        assert_eq!(smt.nodes.len() as u8, height);
+
+        // Perform insertion then removal of the same leaf at the same time and check correct result
+        let new_dummy_leaf = OperationLeaf::new(0, ActionLeaf::Insert, Some(T::Data::one()));
+        let mut new_dummy_leaf_removal = new_dummy_leaf.clone();
+        new_dummy_leaf_removal.action = ActionLeaf::Remove;
+        smt.update_leaves(vec![new_dummy_leaf, new_dummy_leaf_removal]).unwrap();
+
+        // Situation must be unchanged with respect to before
+        assert_eq!(new_smt_root, smt.finalize_in_place().unwrap().root().unwrap());
+        assert_eq!(smt.leaves.len(), 1);
+        assert_eq!(smt.nodes.len() as u8, height);
+
         // Remove non existing leaf with non empty tree
         dummy_leaf.position -= 1;
         dummy_leaf.action = ActionLeaf::Remove;
-        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 2).as_str()));
-        assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
+        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 2).as_str()));
 
         // Remove leaf
         dummy_leaf.position += 1;
         dummy_leaf.action = ActionLeaf::Remove;
-        smt.update_leaves(set![dummy_leaf]).unwrap();
+        smt.update_leaves(vec![dummy_leaf]).unwrap();
 
         // Remove same leaf as before: should be the same as trying to remove a non existing leaf
-        assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 1).as_str()));
+        assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains(format!("Leaf with index {} doesn't exist", smt.width - 1).as_str()));
 
         // Tree must be empty now
         smt.finalize_in_place().unwrap();
         assert_tree_empty(&smt);
-
-        // TODO: Do we really want to give up on this feature ?
-        // // Test that if some error occurs during the processing of a batch of leaves, the tree state will be untouched.
-        // {
-        //     // Valid leaves to be added
-        //     let mut leaves = (0..=NUM_SAMPLES as u32)
-        //         .map(|i| OperationLeaf::new(i, ActionLeaf::Insert, Some(T::Data::from(i as u8))))
-        //         .collect::<Vec<_>>();
-
-        //     // Let's add an out-of-range leaf at the end to trigger an error
-        //     leaves.push(OperationLeaf::new(smt.width, ActionLeaf::Insert, Some(T::Data::from(NUM_SAMPLES as u8))));
-
-        //     assert!(smt.update_leaves(leaves.iter().cloned().collect::<HashSet<_>>()).unwrap_err().to_string().contains(format!("Leaf index out of range. Max: {}, got: {}", smt.width - 1, smt.width).as_str()));
-
-        //     // Tree must be empty as before
-        //     assert!(!smt.pending_changes(), "Update errored so state should be unaffected");
-        //     smt.finalize_in_place().unwrap();
-        //     assert_tree_empty(&smt);
-        // }
     }
 
     fn test_edge_cases<T: BatchFieldBasedMerkleTreeParameters>() {
@@ -719,7 +707,7 @@ mod test {
             }
 
             // Generate tree with only 1 leaf and attempt to get the root
-            assert!(smt.update_leaves(set![dummy_leaf]).is_ok());
+            assert!(smt.update_leaves(vec![dummy_leaf]).is_ok());
             smt.finalize_in_place().unwrap();
             let new_root = smt.root().unwrap();
             assert_ne!(new_root, root);
@@ -741,7 +729,7 @@ mod test {
             }
 
             // Generate tree with only 1 leaf and attempt to get the root
-            assert!(smt.update_leaves(set![dummy_leaf]).is_ok());
+            assert!(smt.update_leaves(vec![dummy_leaf]).is_ok());
             smt.finalize_in_place().unwrap();
             let new_root = smt.root().unwrap();
             assert_ne!(new_root, root);
@@ -750,13 +738,13 @@ mod test {
 
             // Generate tree with exactly 2 leaves and attempt to get the root.
             // Assert error if trying to add another leaf
-            assert!(smt.update_leaves(set![OperationLeaf::new(1, ActionLeaf::Insert, Some(T::Data::one()))]).is_ok());
+            assert!(smt.update_leaves(vec![OperationLeaf::new(1, ActionLeaf::Insert, Some(T::Data::one()))]).is_ok());
             smt.finalize_in_place().unwrap();
             let new_root = smt.root().unwrap();
             assert_ne!(new_root, root);
             assert_ne!(new_root, T::ZERO_NODE_CST.unwrap().nodes[1]);
 
-            assert!(smt.update_leaves(set![OperationLeaf::new(2, ActionLeaf::Insert, Some(T::Data::one()))]).is_err());
+            assert!(smt.update_leaves(vec![OperationLeaf::new(2, ActionLeaf::Insert, Some(T::Data::one()))]).is_err());
         }
 
         // HEIGHT == 0
@@ -774,7 +762,7 @@ mod test {
             }
 
             // Generate tree with only 1 leaf and assert error
-            assert!(smt.update_leaves(set![dummy_leaf]).unwrap_err().to_string().contains("Reached maximum number of leaves for a tree of height 0"));
+            assert!(smt.update_leaves(vec![dummy_leaf]).unwrap_err().to_string().contains("Reached maximum number of leaves for a tree of height 0"));
         }
     }
 
@@ -798,7 +786,7 @@ mod test {
         optimized.finalize_in_place().unwrap();
 
         // Compute the root of the tree, and do the same for a FieldBasedAppendOnlyMHT, used here as reference
-        smt.update_leaves(leaves_for_lazy_smt.iter().cloned().collect::<HashSet<_>>()).unwrap();
+        smt.update_leaves(leaves_for_lazy_smt).unwrap();
         smt.finalize_in_place().unwrap();
         let optimized_root = optimized.root().unwrap();
         let root = smt.root().unwrap();

@@ -160,7 +160,7 @@ pub trait FieldBasedSparseMerkleTree: FieldBasedMerkleTree {
     }
 
     // Insert or remove leaves at specified positions
-    fn update_leaves(&mut self, leaves: HashSet<OperationLeaf<Self::Position, <Self::Parameters as FieldBasedMerkleTreeParameters>::Data>>) -> Result<&mut Self, Error>;
+    fn update_leaves(&mut self, leaves: Vec<OperationLeaf<Self::Position, <Self::Parameters as FieldBasedMerkleTreeParameters>::Data>>) -> Result<&mut Self, Error>;
 }
 
 /// Definition of a Merkle Path for a Merkle Tree whose leaves and nodes are field elements. The
