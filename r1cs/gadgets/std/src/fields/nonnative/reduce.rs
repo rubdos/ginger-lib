@@ -166,7 +166,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
     /// Reduction used before multiplication to assure that the limbs of the product of the
     /// the two non-natives `elem` and `elem_other` are length bounded by CAPACITY - 1.
     /// Optionally reduces one or both of the operands to normal form.
-    pub(crate) fn pre_mul_reduce_no_pseudomersenne<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub(crate) fn pre_mul_reduce_for_generic_field<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         elem: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,
         elem_other: &mut NonNativeFieldGadget<SimulationF, ConstraintF>,

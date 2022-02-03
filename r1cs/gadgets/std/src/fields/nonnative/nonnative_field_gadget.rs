@@ -617,7 +617,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             // convert res to NonNativeFieldMulResultGadget to be compatible with type returned by the function
             FromGadget::from(&res, &mut cs)
         } else {
-            self.mul_without_prereduce_no_pseudomersenne(
+            self.mul_without_prereduce_for_generic_field(
                 cs.ns(|| "mul no pseudo-mersenne"),
                 other,
                 false,
@@ -637,7 +637,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     ///             = log(num_limbs * (1 + 2 * (num_add(L) + 1) * (num_add(R) + 1))) =
     /// ``
     // cost: num_limbs^2 constraints if `is_other_constant == false`, 0 constraints otherwise
-    fn mul_without_prereduce_no_pseudomersenne<CS: ConstraintSystemAbstract<ConstraintF>>(
+    fn mul_without_prereduce_for_generic_field<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -936,7 +936,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             // convert res to NonNativeFieldMulResultGadget to be compatible with type returned by the function
             FromGadget::from(&res, &mut cs)
         } else {
-            self.mul_without_prereduce_no_pseudomersenne(
+            self.mul_without_prereduce_for_generic_field(
                 cs.ns(|| "mul no pseudo-mersenne"),
                 &other_gadget,
                 true,
@@ -1142,7 +1142,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     //          (ConstraintF::CAPACITY - 2 - surfeit') / bits_per_limb
     //          ] - 2.
     // ``
-    fn mul_no_pseudomersenne<CS: ConstraintSystemAbstract<ConstraintF>>(
+    fn mul_for_generic_field<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -1152,21 +1152,21 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
         let mut self_reduced = self.clone();
         let mut other_reduced = other.clone();
 
-        Reducer::<SimulationF, ConstraintF>::pre_mul_reduce_no_pseudomersenne(
+        Reducer::<SimulationF, ConstraintF>::pre_mul_reduce_for_generic_field(
             cs.ns(|| "pre mul reduce"),
             &mut self_reduced,
             &mut other_reduced,
         )?;
 
         // Step 2: mul without pre reduce
-        let res = self_reduced.mul_without_prereduce_no_pseudomersenne(
+        let res = self_reduced.mul_without_prereduce_for_generic_field(
             cs.ns(|| "mul"),
             &other_reduced,
             is_other_constant,
         )?;
 
         // Step 3: reduction of the product to normal form
-        let res_reduced = res.reduce_no_pseudomersenne(cs.ns(|| "reduce result"))?;
+        let res_reduced = res.reduce_for_generic_field(cs.ns(|| "reduce result"))?;
 
         Ok(res_reduced)
     }
@@ -1320,7 +1320,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         return if super::is_pseudo_mersenne::<SimulationF>() {
             self.mul_for_pseudomersenne(cs.ns(|| "mul pseudo-mersenne"), other, false)
         } else {
-            self.mul_no_pseudomersenne(cs.ns(|| "mul no pseudo-mersenne"), other, false)
+            self.mul_for_generic_field(cs.ns(|| "mul no pseudo-mersenne"), other, false)
         };
     }
 
@@ -1353,7 +1353,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         return if super::is_pseudo_mersenne::<SimulationF>() {
             self.mul_for_pseudomersenne(&mut cs, &other, true)
         } else {
-            self.mul_no_pseudomersenne(&mut cs, &other, true)
+            self.mul_for_generic_field(&mut cs, &other, true)
         };
     }
 
@@ -1385,7 +1385,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
             // Step 2: mul without pre reduce
             self.mul_without_prereduce_for_pseudomersenne(cs.ns(|| "calc actual result"), other, false)?
         } else {
-            self.mul_no_pseudomersenne(cs.ns(|| "calc_actual_result"), other, false)?
+            self.mul_for_generic_field(cs.ns(|| "calc_actual_result"), other, false)?
         };
 
         debug_assert!(

@@ -8,7 +8,6 @@
 //! - `NonNativeFieldMulResultGadget` is an intermediate representations of the
 //!     result of multiplication, which is hidden from the `FieldGadget` interface
 //!     and is left for advanced users who want better performance.
-//! DISCLAIMER: THIS LIBRARY IS EXPERIMENTAL AND NEEDS TO UNDERGO A MORE IN-DEPTH REVIEW
 //!
 //! [Kosba et al]: https://ieeexplore.ieee.org/document/8418647
 //! [arkworks]: https://github.com/arkworks-rs/nonnative

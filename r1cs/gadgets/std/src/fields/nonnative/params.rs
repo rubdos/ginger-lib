@@ -251,17 +251,15 @@ pub(crate) fn test_different_constraint<
     let (num_limbs_unopt, bits_per_limb_unopt, constraints_unopt) =
         find_parameters_for_generic_field(SimulationF::size_in_bits(), ConstraintF::size_in_bits());
 
-    if constraints != constraints_unopt {
-        println!(
-            "optimized: num limbs={}, bits_per_limb={}, cost={}, h={}",
-            num_limbs,
-            bits_per_limb,
-            constraints,
-            num_limbs * bits_per_limb - SimulationF::size_in_bits()
-        );
-        println!(
-            "unoptimized: num limbs={}, bits_per_limb={}, cost={}",
-            num_limbs_unopt, bits_per_limb_unopt, constraints_unopt
-        );
-    }
+    println!(
+        "optimized: num limbs={}, bits_per_limb={}, cost={}, h={}",
+        num_limbs,
+        bits_per_limb,
+        constraints,
+        num_limbs * bits_per_limb - SimulationF::size_in_bits()
+    );
+    println!(
+        "unoptimized: num limbs={}, bits_per_limb={}, cost={}",
+        num_limbs_unopt, bits_per_limb_unopt, constraints_unopt
+    );
 }

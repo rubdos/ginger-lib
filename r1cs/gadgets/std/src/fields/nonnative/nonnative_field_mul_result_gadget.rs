@@ -173,7 +173,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
     //          (ConstraintF::CAPACITY - 2 - surfeit') / bits_per_limb
     //      ] - 2.
     // ``
-    pub(crate) fn reduce_no_pseudomersenne<CS: ConstraintSystemAbstract<ConstraintF>>(
+    pub(crate) fn reduce_for_generic_field<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<NonNativeFieldGadget<SimulationF, ConstraintF>, SynthesisError> {
@@ -435,7 +435,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField>
             Reducer::reduce(&mut cs, &mut result)?;
             return Ok(result);
         } else {
-            return self.reduce_no_pseudomersenne(&mut cs);
+            return self.reduce_for_generic_field(&mut cs);
         }
     }
 

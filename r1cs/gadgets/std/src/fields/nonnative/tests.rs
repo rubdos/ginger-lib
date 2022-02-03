@@ -1892,7 +1892,7 @@ macro_rules! pseudomersenne_test {
             }
         }
     }
-}
+}   
 
 macro_rules! stress_test {
     ($test_method:ident, $test_name:ident, $test_simulation_field:ty, $test_constraint_field:ty) => {
