@@ -1357,9 +1357,8 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> FieldGadget<SimulationF, 
         };
     }
 
-    // TODO: This is as the default implementation. I have put it here
-    // as we can implement an improved variant, which does not reduce
-    // twice.
+    // ToDo: For generic fields (i.e., non pseudo-mersenne), the implementation of this function may
+    // be optimized by avoiding reducing twice, as it is currently done for pseudo-mersenne fields
     fn mul_equals<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
