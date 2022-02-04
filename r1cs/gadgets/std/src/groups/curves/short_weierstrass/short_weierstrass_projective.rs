@@ -5,7 +5,7 @@ use algebra::{
     AffineCurve, BitIterator, EndoMulParameters, Field, PrimeField, ProjectiveCurve,
     SWModelParameters,
 };
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use std::ops::{Add, Mul};
 use std::{borrow::Borrow, marker::PhantomData, ops::Neg};
 
@@ -50,7 +50,7 @@ where
     /// Incomplete addition: neither `self` nor `other` can be the neutral
     /// element, and other != ±self.
     /// If `safe` is set, enforce in the circuit exceptional cases not occurring.
-    fn add_internal<CS: ConstraintSystem<ConstraintF>>(
+    fn add_internal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -121,7 +121,7 @@ where
     #[inline]
     /// Incomplete, unsafe, addition: neither `self` nor `other` can be the neutral
     /// element, and other != ±self.
-    pub fn add_unsafe<CS: ConstraintSystem<ConstraintF>>(
+    pub fn add_unsafe<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -134,7 +134,7 @@ where
     /// than computing self.double().add(other).
     /// Incomplete add: neither `self` nor `other` can be the neutral element, and other != ±self;
     /// If `safe` is set, enforce in the circuit that exceptional cases not occurring.
-    fn double_and_add_internal<CS: ConstraintSystem<ConstraintF>>(
+    fn double_and_add_internal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -258,7 +258,7 @@ where
     /// Compute 2 * self + other.
     /// Incomplete, safe, addition: neither `self` nor `other` can be the neutral
     /// element, and other != ±self.
-    pub fn double_and_add<CS: ConstraintSystem<ConstraintF>>(
+    pub fn double_and_add<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -270,7 +270,7 @@ where
     /// Compute 2 * self + other.
     /// Incomplete, unsafe, addition: neither `self` nor `other` can be the neutral
     /// element, and other != ±self.
-    pub fn double_and_add_unsafe<CS: ConstraintSystem<ConstraintF>>(
+    pub fn double_and_add_unsafe<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -329,7 +329,7 @@ where
     }
 
     #[inline]
-    fn zero<CS: ConstraintSystem<ConstraintF>>(mut cs: CS) -> Result<Self, SynthesisError> {
+    fn zero<CS: ConstraintSystemAbstract<ConstraintF>>(mut cs: CS) -> Result<Self, SynthesisError> {
         Ok(Self::new(
             F::zero(cs.ns(|| "zero"))?,
             F::one(cs.ns(|| "one"))?,
@@ -338,14 +338,17 @@ where
     }
 
     #[inline]
-    fn is_zero<CS: ConstraintSystem<ConstraintF>>(&self, _: CS) -> Result<Boolean, SynthesisError> {
+    fn is_zero<CS: ConstraintSystemAbstract<ConstraintF>>(
+        &self,
+        _: CS,
+    ) -> Result<Boolean, SynthesisError> {
         Ok(self.infinity)
     }
 
     #[inline]
     /// Incomplete, safe, addition: neither `self` nor `other` can be the neutral
     /// element.
-    fn add<CS: ConstraintSystem<ConstraintF>>(
+    fn add<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
         other: &Self,
@@ -355,7 +358,7 @@ where
 
     /// Incomplete addition: neither `self` nor `other` can be the neutral
     /// element.
-    fn add_constant<CS: ConstraintSystem<ConstraintF>>(
+    fn add_constant<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &SWProjective<P>,
@@ -431,7 +434,7 @@ where
     }
 
     #[inline]
-    fn double_in_place<CS: ConstraintSystem<ConstraintF>>(
+    fn double_in_place<CS: ConstraintSystemAbstract<ConstraintF>>(
         &mut self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
@@ -490,7 +493,7 @@ where
         Ok(())
     }
 
-    fn negate<CS: ConstraintSystem<ConstraintF>>(
+    fn negate<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Self, SynthesisError> {
@@ -514,7 +517,7 @@ where
     ///
     /// [Hopwood] https://github.com/zcash/zcash/issues/3924
     /// Implementation adapted from https://github.com/ebfull/halo/blob/master/src/gadgets/ecc.rs#L1762.
-    fn mul_bits<'a, CS: ConstraintSystem<ConstraintF>>(
+    fn mul_bits<'a, CS: ConstraintSystemAbstract<ConstraintF>>(
         // variable base point, must be non-trivial and in the prime order subgroup
         &self,
         mut cs: CS,
@@ -702,7 +705,7 @@ where
     ///
     /// [Hopwood]: https://github.com/zcash/zcash/issues/3924
     #[inline]
-    fn mul_bits_fixed_base<'a, CS: ConstraintSystem<ConstraintF>>(
+    fn mul_bits_fixed_base<'a, CS: ConstraintSystemAbstract<ConstraintF>>(
         base: &'a SWProjective<P>,
         mut cs: CS,
         bits: &[Boolean],
@@ -822,7 +825,7 @@ where
         scalars: &[J],
     ) -> Result<Self, SynthesisError>
     where
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
         I: Borrow<[Boolean]>,
         J: Borrow<[I]>,
         B: Borrow<[SWProjective<P>]>,
@@ -928,7 +931,7 @@ where
 {
     /// Given an arbitrary curve element `&self`, applies the endomorphism
     /// defined by `ENDO_COEFF`.
-    fn apply_endomorphism<CS: ConstraintSystem<ConstraintF>>(
+    fn apply_endomorphism<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Self, SynthesisError> {
@@ -948,7 +951,7 @@ where
     /// where `phi(bits)` is the equivalent scalar representation of `bits`.
     ///
     /// [Halo]: https://eprint.iacr.org/2019/1021
-    fn endo_mul<CS: ConstraintSystem<ConstraintF>>(
+    fn endo_mul<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         bits: &[Boolean],
@@ -1006,7 +1009,7 @@ where
     F: FieldGadget<P::BaseField, ConstraintF>,
 {
     #[inline]
-    fn conditionally_select<CS: ConstraintSystem<ConstraintF>>(
+    fn conditionally_select<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         cond: &Boolean,
         first: &Self,
@@ -1036,7 +1039,7 @@ where
     ConstraintF: PrimeField,
     F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn is_eq<CS: ConstraintSystem<ConstraintF>>(
+    fn is_eq<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -1057,7 +1060,7 @@ where
     }
 
     #[inline]
-    fn conditional_enforce_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -1073,7 +1076,7 @@ where
     }
 
     #[inline]
-    fn conditional_enforce_not_equal<CS: ConstraintSystem<ConstraintF>>(
+    fn conditional_enforce_not_equal<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -1100,7 +1103,7 @@ where
     F: FieldGadget<P::BaseField, ConstraintF>,
 {
     #[inline]
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -1148,7 +1151,7 @@ where
     }
 
     #[inline]
-    fn alloc_without_check<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_without_check<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -1176,7 +1179,7 @@ where
     }
 
     #[inline]
-    fn alloc_checked<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_checked<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -1257,7 +1260,7 @@ where
     }
 
     #[inline]
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -1311,7 +1314,10 @@ where
     ConstraintF: PrimeField,
     F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn from_value<CS: ConstraintSystem<ConstraintF>>(mut cs: CS, value: &SWProjective<P>) -> Self {
+    fn from_value<CS: ConstraintSystemAbstract<ConstraintF>>(
+        mut cs: CS,
+        value: &SWProjective<P>,
+    ) -> Self {
         let value = value.into_affine();
         let x = F::from_value(cs.ns(|| "hardcode x"), &value.x);
         let y = F::from_value(cs.ns(|| "hardcode y"), &value.y);
@@ -1340,7 +1346,7 @@ where
     ConstraintF: PrimeField,
     F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn to_bits<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -1351,7 +1357,7 @@ where
         Ok(x_bits)
     }
 
-    fn to_bits_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -1374,7 +1380,7 @@ where
     ConstraintF: PrimeField,
     F: FieldGadget<P::BaseField, ConstraintF>,
 {
-    fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -1386,7 +1392,7 @@ where
         Ok(x_bytes)
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -1436,7 +1442,7 @@ where
 {
     /// Enforce compression of a point through serialization of the x coordinate and storing
     /// a sign bit for the y coordinate.
-    fn to_compressed<CS: ConstraintSystem<ConstraintF>>(
+    fn to_compressed<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
