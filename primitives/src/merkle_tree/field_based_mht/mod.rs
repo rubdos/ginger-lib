@@ -119,7 +119,7 @@ pub enum ActionLeaf {
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 // Action associated to the leaf
-pub struct OperationLeaf <P, F: Field>{
+pub struct OperationLeaf<P, F: Field> {
     pub position: P,
     pub action: ActionLeaf,
     pub hash: Option<F>,
@@ -127,7 +127,11 @@ pub struct OperationLeaf <P, F: Field>{
 
 impl<P, F: Field> OperationLeaf<P, F> {
     pub fn new(position: P, action: ActionLeaf, hash: Option<F>) -> Self {
-        Self { position, action, hash }
+        Self {
+            position,
+            action,
+            hash,
+        }
     }
 }
 
@@ -138,14 +142,16 @@ impl<P: Hash, F: Field> Hash for OperationLeaf<P, F> {
 }
 
 pub trait FieldBasedSparseMerkleTree: FieldBasedMerkleTree {
-
     /// Insert leaves at specified positions
-    fn insert_leaves(&mut self, leaves: HashMap<Self::Position, <Self::Parameters as FieldBasedMerkleTreeParameters>::Data>) -> Result<&mut Self, Error> {
+    fn insert_leaves(
+        &mut self,
+        leaves: HashMap<Self::Position, <Self::Parameters as FieldBasedMerkleTreeParameters>::Data>,
+    ) -> Result<&mut Self, Error> {
         self.update_leaves(
             leaves
                 .into_iter()
                 .map(|(pos, leaf)| OperationLeaf::new(pos, ActionLeaf::Insert, Some(leaf)))
-                .collect()
+                .collect(),
         )
     }
 
@@ -155,12 +161,20 @@ pub trait FieldBasedSparseMerkleTree: FieldBasedMerkleTree {
             leaves
                 .into_iter()
                 .map(|pos| OperationLeaf::new(pos, ActionLeaf::Remove, None))
-                .collect()
+                .collect(),
         )
     }
 
     // Insert or remove leaves at specified positions
-    fn update_leaves(&mut self, leaves: Vec<OperationLeaf<Self::Position, <Self::Parameters as FieldBasedMerkleTreeParameters>::Data>>) -> Result<&mut Self, Error>;
+    fn update_leaves(
+        &mut self,
+        leaves: Vec<
+            OperationLeaf<
+                Self::Position,
+                <Self::Parameters as FieldBasedMerkleTreeParameters>::Data,
+            >,
+        >,
+    ) -> Result<&mut Self, Error>;
 }
 
 /// Definition of a Merkle Path for a Merkle Tree whose leaves and nodes are field elements. The
