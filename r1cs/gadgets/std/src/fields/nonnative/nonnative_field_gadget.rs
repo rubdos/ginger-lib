@@ -80,7 +80,7 @@ pub fn bigint_to_constraint_field<ConstraintF: PrimeField>(bigint: &BigUint) -> 
     let mut cur = ConstraintF::one();
     let bytes = bigint.to_bytes_be();
 
-    let basefield_256 = ConstraintF::from(256);
+    let basefield_256 = ConstraintF::from(256u128);
 
     for byte in bytes.iter().rev() {
         let bytes_basefield = ConstraintF::from(*byte as u128);

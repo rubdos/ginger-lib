@@ -132,7 +132,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         Self::reduce_until_cond_is_satisfied(cs, elem, elem_other, |elem, elem_other| {
             let sum_add = &elem.num_of_additions_over_normal_form
-                + &elem_other.num_of_additions_over_normal_form;
+                + &elem_other.num_of_additions_over_normal_form + BigUint::one();
             let surfeit = ceil_log_2!(sum_add + BigUint::from(3usize));
             surfeit + params.bits_per_limb <= ConstraintF::Params::CAPACITY as usize - 3
         })
