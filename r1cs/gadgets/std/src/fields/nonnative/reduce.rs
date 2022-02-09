@@ -393,7 +393,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
 
         if shift_per_limb < 2 {
             return Err(SynthesisError::Other(format!(
-                "shift_per_limb must be smaller than 2. Found: {}",
+                "shift_per_limb must be >=2. Found: {}",
                 shift_per_limb
             )));
         }
