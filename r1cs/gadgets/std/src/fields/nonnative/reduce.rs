@@ -483,7 +483,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // ``
         // to represent
         // ``
-        //      Sum_{i>=0} shift_constant * A^i.
+        //      acc = Sum_{i>=0} shift_constant * A^i.
         // ``
         // The constant `shift_constant = 2^bits_per_group  - 1` is to circumvent underflows in a
         // length-preserving manner. With this choice
@@ -523,6 +523,7 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
         // [Bellman]: https://github.com/alex-ozdemir/bellman-bignat/blob/master/src/mp/bignat.rs#L567
         let mut carry_in = zero;
         let mut carry_in_value = ConstraintF::zero();
+        // used as carry when computing the normalized representation of `acc`
         let mut accumulated_extra = BigUint::zero();
         // The group totals have arity `A^S = 2^{S*shift_per_limb}`.
         for (group_id, (left_total_limb, right_total_limb, num_limb_in_this_group)) in
@@ -532,9 +533,10 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
             // The quotient-remainder constraint
             // ``
             //    carry_in + group_total_left + shift_constant - group_total_right
-            //          == carry * A^S + 0 + (shift_constant % A^S),
+            //          == carry * A^S + 0 + acc_limb,
             // ``
-            // and the length restrictions for the carry
+            // where `acc_limb` is the corresponding limb of normalized representation
+            // of `acc`, and the length restrictions for the carry
             // ``
             //        len(carry) <= bits_per_limb + surfeit + 2 - shift_per_limb
             // ``
@@ -579,11 +581,13 @@ impl<SimulationF: PrimeField, ConstraintF: PrimeField> Reducer<SimulationF, Cons
                 || Ok(carry_value),
             )?;
 
-            // We add the shift_constant to the accumulator
+            // Computing the normalized limb of `acc`: we add the previous carry
+            // `accumulated_extra` to the current pad limb, and compute 
+            // ``
+            //      accumulated_extra = A^S * new_accumulated_extra + remainder,
+            // ``
+            // with remainder < A^S  being the normalized limb. 
             accumulated_extra += limbs_to_bigint(bits_per_limb, &[pad_limb]);
-
-            // accumulated_extra = A^S * new_accumulated_extra + remainder,
-            // with remainder < A^S, or equivalently
             let (new_accumulated_extra, remainder) = accumulated_extra.div_rem(
                 &BigUint::from(2u64).pow((shift_per_limb * num_limb_in_this_group) as u32),
             );
