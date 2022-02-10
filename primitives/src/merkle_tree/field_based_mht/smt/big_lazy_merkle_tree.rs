@@ -47,7 +47,6 @@ pub struct FieldBasedSparseMHT<T: BatchFieldBasedMerkleTreeParameters> {
 impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedSparseMHT<T> {
     /// Creates a new tree of specified `height`.
     pub fn init(height: u8) -> Self {
-        assert!(1 << height <= u32::MAX); // If not we might overflow the u32
         assert!(check_precomputed_parameters::<T>(height as usize));
 
         let rate = <<T::H as FieldBasedHash>::Parameters as FieldBasedHashParameters>::R;
