@@ -44,7 +44,6 @@ impl<T: BatchFieldBasedMerkleTreeParameters> FieldBasedAppendOnlyMHT<T> {
     /// `primitives/src/benches/poseidon_mht.rs` to properly tune the `processing_step`
     /// parameter according to your use case.
     pub fn init(height: usize, processing_step: usize) -> Result<Self, Error> {
-        assert!(1 << height <= u32::MAX); // If not we might overflow the u32
 
         if !check_precomputed_parameters::<T>(height) {
             Err(Box::new(MerkleTreeError::Other(

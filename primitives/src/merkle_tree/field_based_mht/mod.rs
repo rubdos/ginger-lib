@@ -117,7 +117,7 @@ pub enum ActionLeaf {
     Remove,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone)]
 // Action associated to the leaf
 pub struct OperationLeaf<P, F: Field> {
     pub position: P,
@@ -132,12 +132,6 @@ impl<P, F: Field> OperationLeaf<P, F> {
             action,
             hash,
         }
-    }
-}
-
-impl<P: Hash, F: Field> Hash for OperationLeaf<P, F> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.position.hash(state);
     }
 }
 
