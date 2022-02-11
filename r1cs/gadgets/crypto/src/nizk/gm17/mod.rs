@@ -1,6 +1,6 @@
 use algebra::{AffineCurve, Field, PairingEngine, ToConstraintField};
 use proof_systems::gm17::{Parameters, PreparedVerifyingKey, Proof, VerifyingKey};
-use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSynthesizer, ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::prelude::*;
 use std::{borrow::Borrow, marker::PhantomData};
 
@@ -66,7 +66,7 @@ pub struct VerifyingKeyGadget<
 impl<PairingE: PairingEngine, ConstraintF: Field, P: PairingGadget<PairingE, ConstraintF>>
     VerifyingKeyGadget<PairingE, ConstraintF, P>
 {
-    pub fn prepare<CS: ConstraintSystem<ConstraintF>>(
+    pub fn prepare<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<PreparedVerifyingKeyGadget<PairingE, ConstraintF, P>, SynthesisError> {
@@ -139,7 +139,7 @@ where
         proof: &Self::ProofGadget,
     ) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<ConstraintF>,
+        CS: ConstraintSystemAbstract<ConstraintF>,
         I: Iterator<Item = &'a T>,
         T: 'a + ToBitsGadget<ConstraintF> + ?Sized,
     {
@@ -157,7 +157,9 @@ where
                 .enumerate()
             {
                 let input_bits = input.to_bits(cs.ns(|| format!("Input {}", i)))?;
-                g_psi = b.mul_bits(cs.ns(|| format!("Mul {}", i)), &g_psi, input_bits.iter())?;
+                g_psi = b
+                    .mul_bits(cs.ns(|| format!("Mul {}", i)), input_bits.iter())?
+                    .add(cs.ns(|| format!("Add {}", i)), &g_psi)?;
                 input_len += 1;
             }
             // Check that the input and the query in the verification are of the
@@ -233,7 +235,7 @@ where
     P: PairingGadget<PairingE, ConstraintF>,
 {
     #[inline]
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -283,7 +285,7 @@ where
     }
 
     #[inline]
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -343,7 +345,7 @@ where
     P: PairingGadget<PairingE, ConstraintF>,
 {
     #[inline]
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -361,7 +363,7 @@ where
     }
 
     #[inline]
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         value_gen: FN,
     ) -> Result<Self, SynthesisError>
@@ -389,7 +391,7 @@ where
     P: PairingGadget<PairingE, ConstraintF>,
 {
     #[inline]
-    fn to_bytes<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -422,7 +424,7 @@ where
         Ok(bytes)
     }
 
-    fn to_bytes_strict<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bytes_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
@@ -459,17 +461,19 @@ where
 #[cfg(test)]
 mod test {
     use proof_systems::gm17::*;
-    use r1cs_core::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
+    use r1cs_core::{
+        ConstraintSynthesizer, ConstraintSystem, ConstraintSystemAbstract,
+        ConstraintSystemDebugger, SynthesisError, SynthesisMode,
+    };
 
     use super::*;
     use algebra::{
         curves::bls12_377::Bls12_377,
         fields::bls12_377::{Fq, Fr},
-        BitIterator, PrimeField,
+        ToBits,
     };
     use r1cs_std::{
         boolean::Boolean, instantiated::bls12_377::PairingGadget as Bls12_377PairingGadget,
-        test_constraint_system::TestConstraintSystem,
     };
     use rand::{thread_rng, Rng};
 
@@ -484,7 +488,7 @@ mod test {
     }
 
     impl<F: Field> ConstraintSynthesizer<F> for Bench<F> {
-        fn generate_constraints<CS: ConstraintSystem<F>>(
+        fn generate_constraints<CS: ConstraintSystemAbstract<F>>(
             self,
             cs: &mut CS,
         ) -> Result<(), SynthesisError> {
@@ -555,7 +559,7 @@ mod test {
             };
 
             // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
-            let mut cs = TestConstraintSystem::<Fq>::new();
+            let mut cs = ConstraintSystem::<Fq>::new(SynthesisMode::Debug);
 
             let inputs: Vec<_> = inputs.iter().map(|input| input.unwrap()).collect();
             let mut input_gadgets = Vec::new();
@@ -563,7 +567,7 @@ mod test {
             {
                 let mut cs = cs.ns(|| "Allocate Input");
                 for (i, input) in inputs.iter().enumerate() {
-                    let mut input_bits = BitIterator::new(input.into_repr()).collect::<Vec<_>>();
+                    let mut input_bits = input.write_bits();
                     // Input must be in little-endian, but BitIterator outputs in big-endian.
                     input_bits.reverse();
 

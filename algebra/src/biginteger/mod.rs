@@ -3,12 +3,14 @@ use crate::{
     fields::BitIterator,
     CanonicalDeserialize, CanonicalSerialize, SerializationError, UniformRand,
 };
+use num_bigint::BigUint;
 use rand::{
     distributions::{Distribution, Standard},
     Rng,
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    convert::TryFrom,
     fmt::{Debug, Display},
     io::{Read, Result as IoResult, Write},
 };
@@ -51,6 +53,8 @@ pub trait BigInteger:
     + AsMut<[u64]>
     + AsRef<[u64]>
     + From<u64>
+    + TryFrom<BigUint>
+    + Into<BigUint>
 {
     /// Add another representation to this one, returning the carry bit.
     fn add_nocarry(&mut self, other: &Self) -> bool;
@@ -94,6 +98,8 @@ pub trait BigInteger:
 
     /// Returns the bit representation in a big endian boolean array, without
     /// leading zeros.
+    // TODO: the current implementation does not seem to skip leading zeroes.
+    // Let us check its usage and determine if a change is reasonable.
     fn to_bits(&self) -> Vec<bool>;
 
     /// Returns a vector for wnaf.

@@ -15,9 +15,8 @@ use crate::{
     vrf::FieldBasedVrfGadget,
 };
 use primitives::vrf::ecvrf::FieldBasedEcVrfPk;
-use r1cs_core::{ConstraintSystem, SynthesisError, ToConstraintField};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError, ToConstraintField};
 use r1cs_std::bits::boolean::Boolean;
-use rand::rngs::OsRng;
 use std::{borrow::Borrow, marker::PhantomData};
 
 #[derive(Derivative)]
@@ -46,7 +45,7 @@ where
     G: ProjectiveCurve,
     GG: GroupGadget<G, ConstraintF>,
 {
-    fn alloc_internal<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_internal<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         f: FN,
         gamma_on_curve: bool,
@@ -107,7 +106,7 @@ where
     G: ProjectiveCurve,
     GG: GroupGadget<G, ConstraintF>,
 {
-    fn alloc_without_check<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_without_check<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         f: FN,
     ) -> Result<Self, SynthesisError>
@@ -118,7 +117,7 @@ where
         Self::alloc_internal(cs, f, false, false)
     }
 
-    fn alloc<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         f: FN,
     ) -> Result<Self, SynthesisError>
@@ -129,7 +128,7 @@ where
         Self::alloc_internal(cs, f, true, false)
     }
 
-    fn alloc_checked<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_checked<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         f: FN,
     ) -> Result<Self, SynthesisError>
@@ -140,7 +139,7 @@ where
         Self::alloc_internal(cs, f, true, true)
     }
 
-    fn alloc_input<FN, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<FN, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         f: FN,
     ) -> Result<Self, SynthesisError>
@@ -190,7 +189,7 @@ where
     G: Group,
     GG: GroupGadget<G, ConstraintF>,
 {
-    fn alloc<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -211,7 +210,7 @@ where
         })
     }
 
-    fn alloc_without_check<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_without_check<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -227,7 +226,7 @@ where
         })
     }
 
-    fn alloc_checked<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_checked<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -248,7 +247,7 @@ where
         })
     }
 
-    fn alloc_input<F, T, CS: ConstraintSystem<ConstraintF>>(
+    fn alloc_input<F, T, CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         f: F,
     ) -> Result<Self, SynthesisError>
@@ -311,7 +310,7 @@ where
     type PublicKeyGadget = FieldBasedEcVrfPkGadget<ConstraintF, G, GG>;
     type GHParametersGadget = GHG::ParametersGadget;
 
-    fn enforce_proof_to_hash_verification<CS: ConstraintSystem<ConstraintF>>(
+    fn enforce_proof_to_hash_verification<CS: ConstraintSystemAbstract<ConstraintF>>(
         mut cs: CS,
         group_hash_params: &Self::GHParametersGadget,
         public_key: &Self::PublicKeyGadget,
@@ -375,58 +374,25 @@ where
             &G::prime_subgroup_generator(),
         );
 
-        // Random shift to avoid exceptional cases if add is incomplete.
-        // With overwhelming probability the circuit will be satisfiable,
-        // otherwise the prover can sample another shift by re-running
-        // the proof creation.
-        let shift = GG::alloc(cs.ns(|| "alloc random shift"), || {
-            let mut rng = OsRng::default();
-            Ok(loop {
-                let r = G::rand(&mut rng);
-                if !r.is_zero() {
-                    break (r);
-                }
-            })
-        })?;
-
         //Check u = g^s - pk^c
         let u = {
-            let neg_c_times_pk = public_key
+            let c_times_pk = public_key
                 .pk
-                .mul_bits(
-                    cs.ns(|| "pk * c + shift"),
-                    &shift,
-                    c_bits.as_slice().iter().rev(),
-                )?
-                .negate(cs.ns(|| "- (c * pk + shift)"))?;
-            GG::mul_bits_fixed_base(
-                &g.get_constant(),
-                cs.ns(|| "(s * G + shift)"),
-                &shift,
-                s_bits.as_slice(),
-            )?
-            // If add is incomplete, and s * G - c * pk = 0, the circuit of the add won't be satisfiable
-            .add(cs.ns(|| "(s * G) - (c * pk)"), &neg_c_times_pk)?
+                .mul_bits(cs.ns(|| "pk * c"), c_bits.as_slice().iter().rev())?;
+            GG::mul_bits_fixed_base(&g.get_constant(), cs.ns(|| "s * G"), s_bits.as_slice())?
+                // If add is incomplete, and s * G - c * pk = 0, the circuit of the add won't be satisfiable
+                .sub(cs.ns(|| "(s * G) - (c * pk)"), &c_times_pk)?
         };
 
         //Check v = mh^s - gamma^c
         let v = {
-            let neg_c_times_gamma = proof
+            let c_times_gamma = proof
                 .gamma
-                .mul_bits(
-                    cs.ns(|| "c * gamma + shift"),
-                    &shift,
-                    c_bits.as_slice().iter().rev(),
-                )?
-                .negate(cs.ns(|| "- (c * gamma + shift)"))?;
+                .mul_bits(cs.ns(|| "c * gamma"), c_bits.as_slice().iter().rev())?;
             message_on_curve
-                .mul_bits(
-                    cs.ns(|| "(s * mh + shift)"),
-                    &shift,
-                    s_bits.as_slice().iter(),
-                )?
+                .mul_bits(cs.ns(|| "s * mh"), s_bits.as_slice().iter())?
                 // If add is incomplete, and s * mh - c * gamma = 0, the circuit of the add won't be satisfiable
-                .add(cs.ns(|| "(s * mh) - (c * gamma"), &neg_c_times_gamma)?
+                .sub(cs.ns(|| "(s * mh) - (c * gamma"), &c_times_gamma)?
         };
 
         // Check c' = H(m||pk.x||u.x||v.x)
@@ -493,12 +459,13 @@ mod test {
         },
     };
 
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{
+        ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
+    };
     use r1cs_std::alloc::AllocGadget;
     use r1cs_std::instantiated::{
         mnt4_753::G1Gadget as MNT4G1Gadget, mnt6_753::G1Gadget as MNT6G1Gadget,
     };
-    use r1cs_std::test_constraint_system::TestConstraintSystem;
 
     use primitives::vrf::ecvrf::FieldBasedEcVrfPk;
     use rand::{thread_rng, Rng};
@@ -565,7 +532,7 @@ mod test {
         proof: EcVrfMNT4Proof,
         pp: &BHMNT4Parameters,
     ) -> bool {
-        let mut cs = TestConstraintSystem::<MNT4Fr>::new();
+        let mut cs = ConstraintSystem::<MNT4Fr>::new(SynthesisMode::Debug);
 
         //Alloc proof, pk and message
         let proof_g =
@@ -657,7 +624,7 @@ mod test {
         proof: EcVrfMNT6Proof,
         pp: &BHMNT6Parameters,
     ) -> bool {
-        let mut cs = TestConstraintSystem::<MNT6Fr>::new();
+        let mut cs = ConstraintSystem::<MNT6Fr>::new(SynthesisMode::Debug);
 
         //Alloc proof, pk and message
         let proof_g =
@@ -752,7 +719,7 @@ mod test {
         for _ in 0..samples {
             let message: MNT4Fr = rng.gen();
             let (sig, pk) = prove::<EcVrfMNT4, _>(rng, &pp, message);
-            let mut cs = TestConstraintSystem::<MNT4Fr>::new();
+            let mut cs = ConstraintSystem::<MNT4Fr>::new(SynthesisMode::Debug);
 
             //Alloc proof, pk, hash params and message
             let proof_g =

@@ -2,10 +2,11 @@
 //! [Groth16]: https://eprint.iacr.org/2016/260.pdf
 use algebra::{
     bytes::{FromBytes, ToBytes},
+    serialize::*,
     Field, FromBytesChecked, PairingEngine, SemanticallyValid,
 };
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use r1cs_core::{Index, LinearCombination, SynthesisError};
+use r1cs_core::SynthesisError;
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Result as IoResult, Write};
 
@@ -27,7 +28,7 @@ mod test;
 pub use self::{generator::*, prover::*, verifier::*};
 
 /// A proof in the Groth16 SNARK.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Proof<E: PairingEngine> {
     pub a: E::G1Affine,
     pub b: E::G2Affine,
@@ -183,7 +184,7 @@ fn read_affine_vec<G: AffineCurve, R: Read>(len: usize, mut reader: R) -> IoResu
 }
 
 /// A verification key in the Groth16 SNARK.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, CanonicalSerialize, CanonicalDeserialize)]
 pub struct VerifyingKey<E: PairingEngine> {
     pub alpha_g1_beta_g2: E::Fqk,
     pub gamma_g2: E::G2Affine,
@@ -248,7 +249,8 @@ impl<E: PairingEngine> SemanticallyValid for VerifyingKey<E> {
             && !self.delta_g2.is_zero()
             && !self
                 .gamma_abc_g1
-                .iter().any(|p| !p.is_valid() || p.is_zero())
+                .iter()
+                .any(|p| !p.is_valid() || p.is_zero())
             && Self::check_gamma_abc_g1_points(self.gamma_abc_g1.as_slice()).is_ok()
     }
 }
@@ -374,21 +376,8 @@ impl<E: PairingEngine> PartialEq for VerifyingKey<E> {
     }
 }
 
-pub(crate) fn push_constraints<F: Field>(
-    l: LinearCombination<F>,
-    constraints: &mut [Vec<(F, Index)>],
-    this_constraint: usize,
-) {
-    for (var, coeff) in l.as_ref() {
-        match var.get_unchecked() {
-            Index::Input(i) => constraints[this_constraint].push((*coeff, Index::Input(i))),
-            Index::Aux(i) => constraints[this_constraint].push((*coeff, Index::Aux(i))),
-        }
-    }
-}
-
 /// Full public (prover and verifier) parameters for the Groth16 zkSNARK.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Parameters<E: PairingEngine> {
     pub vk: VerifyingKey<E>,
     pub alpha_g1: E::G1Affine,
@@ -469,12 +458,8 @@ impl<E: PairingEngine> SemanticallyValid for Parameters<E> {
             && !self.a_query.iter().any(|p| !p.is_valid())
             && !self.b_g1_query.iter().any(|p| !p.is_valid())
             && !self.b_g2_query.iter().any(|p| !p.is_valid())
-            && !self
-                .h_query
-                .iter().any(|p| !p.is_valid() || p.is_zero())
-            && !self
-                .l_query
-                .iter().any(|p| !p.is_valid() || p.is_zero())
+            && !self.h_query.iter().any(|p| !p.is_valid() || p.is_zero())
+            && !self.l_query.iter().any(|p| !p.is_valid() || p.is_zero())
     }
 }
 

@@ -1,8 +1,7 @@
 use algebra::fft::domain::get_best_evaluation_domain;
 use algebra::{Field, PairingEngine};
 
-use crate::groth16::{generator::KeypairAssembly, prover::ProvingAssignment};
-use r1cs_core::{ConstraintSystem, Index, SynthesisError};
+use r1cs_core::{ConstraintSystem, ConstraintSystemAbstract, Index, SynthesisError};
 
 use rayon::prelude::*;
 use std::ops::Mul;
@@ -62,7 +61,7 @@ impl R1CStoQAP {
     ///     - the number qap_num_ variables = m of QAP variables, as well as
     ///     - the domain size |H|.
     pub(crate) fn instance_map_with_evaluation<E: PairingEngine>(
-        assembly: &KeypairAssembly<E>,
+        assembly: &ConstraintSystem<E::Fr>,
         t: &E::Fr,
     ) -> Result<(Vec<E::Fr>, Vec<E::Fr>, Vec<E::Fr>, E::Fr, usize, usize), SynthesisError> {
         let domain_size = assembly.num_constraints + (assembly.num_inputs - 1) + 1;
@@ -130,7 +129,7 @@ impl R1CStoQAP {
     //  = |H|-2.
     #[inline]
     pub(crate) fn witness_map<E: PairingEngine>(
-        prover: &ProvingAssignment<E>,
+        prover: &ConstraintSystem<E::Fr>,
     ) -> Result<Vec<E::Fr>, SynthesisError> {
         let zero = E::Fr::zero();
 
@@ -202,11 +201,18 @@ impl R1CStoQAP {
 
         // compute quotient polynomial (a(Z)*b(Z)-c(Z))/v_H(Z)
         // from the coset evaluations
+        // Note: if a(Z)*b(Z)-c(Z) is not zero on H, then this way
+        // of computing the quotient might result in a polynomial
+        // of degree larger than n-2.
         domain.divide_by_vanishing_poly_on_coset_in_place(&mut ab);
         domain.coset_ifft_in_place(&mut ab);
 
         // we drop the leading coefficient, as deg(h(Z)) = n-2.
-        assert!(ab.pop().unwrap() == zero);
+        // However, if a*b-c != 0 over H then the prover supplied
+        // a variable assignment not satisfying circuit constraints.
+        if ab.pop().unwrap() != zero {
+            return Err(SynthesisError::Unsatisfiable);
+        }
         Ok(ab)
     }
 }

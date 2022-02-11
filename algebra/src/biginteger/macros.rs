@@ -8,6 +8,16 @@ macro_rules! bigint_impl {
             pub fn new(value: [u64; $num_limbs]) -> Self {
                 $name(value)
             }
+
+            #[inline]
+            fn to_bytes_le(&self) -> Vec<u8> {
+                let array_map = self.0.iter().map(|limb| limb.to_le_bytes());
+                let mut res = Vec::<u8>::with_capacity($num_limbs * 8);
+                for limb in array_map {
+                    res.extend_from_slice(&limb);
+                }
+                res
+            }
         }
 
         impl BigInteger for $name {
@@ -147,14 +157,18 @@ macro_rules! bigint_impl {
                 }
             }
 
+            // Defines a BigInt from a slice of big endian booleans.
             #[inline]
             fn from_bits(bits: &[bool]) -> Self {
                 let mut res = Self::default();
                 let mut acc: u64 = 0;
 
+                // convert to little endian as the limbs are in
+                // little endian order
                 let mut bits = bits.to_vec();
                 bits.reverse();
                 for (i, bits64) in bits.chunks(64).enumerate() {
+                    // each chunk is again arranged big endian
                     for bit in bits64.iter().rev() {
                         acc <<= 1;
                         acc += *bit as u64;
@@ -165,6 +179,7 @@ macro_rules! bigint_impl {
                 res
             }
 
+            // Note: Does not skip leading zeroes
             #[inline]
             fn to_bits(&self) -> Vec<bool> {
                 let mut res = Vec::with_capacity(256);
@@ -291,6 +306,44 @@ macro_rules! bigint_impl {
                 let mut repr = Self::default();
                 repr.0[0] = val;
                 repr
+            }
+        }
+
+        impl TryFrom<BigUint> for $name {
+            type Error = Box<dyn std::error::Error>;
+
+            #[inline]
+            fn try_from(val: BigUint) -> Result<$name, Self::Error> {
+                let bytes = val.to_bytes_le();
+
+                if bytes.len() > $num_limbs * 8 {
+                    Err(format!(
+                        "A BigUint of {} bytes cannot fit into a BigInt of {} bytes.",
+                        bytes.len(),
+                        $num_limbs * 8
+                    ))?
+                } else {
+                    let mut limbs = [0u64; $num_limbs];
+
+                    bytes
+                        .chunks(8)
+                        .into_iter()
+                        .enumerate()
+                        .for_each(|(i, chunk)| {
+                            let mut chunk_padded = [0u8; 8];
+                            chunk_padded[..chunk.len()].copy_from_slice(chunk);
+                            limbs[i] = u64::from_le_bytes(chunk_padded)
+                        });
+
+                    Ok(Self(limbs))
+                }
+            }
+        }
+
+        impl From<$name> for BigUint {
+            #[inline]
+            fn from(val: $name) -> BigUint {
+                BigUint::from_bytes_le(&val.to_bytes_le())
             }
         }
     };

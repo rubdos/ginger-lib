@@ -239,6 +239,15 @@ fn field_canonical_serialization_test<F: Field>(buf_size: usize) {
             assert_eq!(a, b);
         }
 
+        {
+            let mut serialized = vec![0; buf_size - 1];
+            let mut cursor = Cursor::new(&mut serialized[..]);
+            CanonicalSerialize::serialize(&a, &mut cursor).unwrap_err();
+
+            let mut cursor = Cursor::new(&serialized[..]);
+            <F as CanonicalDeserialize>::deserialize(&mut cursor).unwrap_err();
+        }
+
         #[derive(Default, Clone, Copy, Debug)]
         struct DummyFlags;
         impl Flags for DummyFlags {
@@ -271,15 +280,6 @@ fn field_canonical_serialization_test<F: Field>(buf_size: usize) {
             } else {
                 false
             });
-        }
-
-        {
-            let mut serialized = vec![0; buf_size - 1];
-            let mut cursor = Cursor::new(&mut serialized[..]);
-            CanonicalSerialize::serialize(&a, &mut cursor).unwrap_err();
-
-            let mut cursor = Cursor::new(&serialized[..]);
-            <F as CanonicalDeserialize>::deserialize(&mut cursor).unwrap_err();
         }
     }
 }
@@ -455,6 +455,28 @@ pub fn field_test<F: Field>(a: F, b: F) {
     random_field_tests::<F>();
 }
 
+fn deserialize_mod_order_test<F: PrimeField, R: Rng>(rng: &mut R) {
+    use crate::fields::FpParameters;
+    use num_bigint::{BigUint, RandBigInt};
+    use num_traits::Zero;
+
+    let modulus_biguint: BigUint = F::Params::MODULUS.into();
+
+    let samples = 500;
+    for _ in 0..samples {
+        // Generate a random value, between 0 and MODULUS, to add to the MODULUS
+        let random_offset: BigUint = rng.gen_biguint_range(&BigUint::zero(), &modulus_biguint);
+        let over_the_modulus_biguint = &random_offset + &modulus_biguint;
+
+        // Convert the BigUint containing the value over the modulus into a F
+        // (thus applying reduction)
+        let reduced_fe: F = over_the_modulus_biguint.into();
+
+        // We must obtain the same value as the random offset
+        assert_eq!(reduced_fe, random_offset.into());
+    }
+}
+
 pub fn primefield_test<F: PrimeField>() {
     let one = F::one();
     assert_eq!(F::from_repr(one.into_repr()), one);
@@ -462,6 +484,7 @@ pub fn primefield_test<F: PrimeField>() {
 
     let mut rng = XorShiftRng::seed_from_u64(1231275789u64);
     random_serialization_tests::<F, _>(&mut rng);
+    deserialize_mod_order_test::<F, _>(&mut rng);
 }
 
 pub fn sqrt_field_test<F: SquareRootField>(elem: F) {
