@@ -6,10 +6,9 @@ use crate::eq::{EqGadget, MultiEq};
 use crate::select::CondSelectGadget;
 use std::fmt::Debug;
 use std::ops::{Shl, Shr};
+//use rand::{Rng, thread_rng};
 
 pub mod boolean;
-//pub mod uint32;
-//pub mod uint64;
 
 #[macro_use]
 pub mod macros;
@@ -19,7 +18,12 @@ impl_uint_gadget!(UInt32, 32, u32, uint32);
 impl_uint_gadget!(UInt16, 16, u16, uint16);
 impl_uint_gadget!(UInt128, 128, u128, uint128);
 
-
+// This type alias allows to implement byte serialization/de-serialization functions inside the
+// `impl_uint_gadget` macro.
+// Indeed, the macro providing implementations of UIntGadget requires to refer to the u8 gadget
+// type for byte serialization/de-serialization functions. The type alias allows to employ a type
+// defined outside the macro in the interface of byte serialization functions, hence allowing to
+// implement them inside the `impl_uint_gadget` macro
 pub type UInt8 = uint8::U8;
 
 pub trait ToBitsGadget<ConstraintF: Field> {
@@ -233,7 +237,7 @@ Sized
             M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
     {
         let diff = self.sub_noborrow(cs.ns(|| "sub"), other)?;
-        Self::conditionally_select(cs.ns(|| "conditionally select result"), cond, &diff, self)
+        Self::conditionally_select(cs.ns(|| "conditionally select result"), cond, &diff, &self)
     }
 
     /// Perform modular multiplication of several `Self` objects.

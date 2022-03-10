@@ -638,6 +638,7 @@ impl Boolean {
             ConstraintF: PrimeField,
             CS: ConstraintSystemAbstract<ConstraintF>,
     {
+        assert!(bits.len() <= ConstraintF::Params::CAPACITY as usize);
         // this is done with a single constraint as follows:
         // - Compute a linear combination sum_lc which is the sum of all the bits
         // - enforce that the sum != 0 with a single constraint: sum*v = 1, where v can only be
@@ -672,11 +673,11 @@ impl Boolean {
         match sum.inverse() {
             Some(val) => val,
             None => ConstraintF::one(), // if sum == 0, then inverse can be any value, the constraint should never be verified
-        });
+        })  ;
 
         let inv_var = FpGadget::<ConstraintF>::alloc(cs.ns(|| "alloc inv"), || inv.ok_or(SynthesisError::AssignmentMissing))?;
 
-        cs.enforce(|| "enforce self != other", |_| sum_lc, |lc| &inv_var.get_variable() + lc, |_| (ConstraintF::one(), CS::one()).into());
+        cs.enforce(|| "enforce or", |_| sum_lc, |lc| &inv_var.get_variable() + lc, |_| (ConstraintF::one(), CS::one()).into());
 
         Ok(())
     }
@@ -712,10 +713,10 @@ impl Boolean {
         mut cs: CS,
         bits: &[Self],
         element: impl AsRef<[u64]>,
-    ) -> Result<Vec<Self>, SynthesisError> 
-        where
-            ConstraintF: Field,
-            CS: ConstraintSystemAbstract<ConstraintF>,
+    ) -> Result<Vec<Self>, SynthesisError>
+    where
+        ConstraintF: Field,
+        CS: ConstraintSystemAbstract<ConstraintF>,
     {
         let b: &[u64] = element.as_ref();
 
@@ -733,13 +734,20 @@ impl Boolean {
         if bits.len() > element_num_bits {
             let mut or_result = Boolean::constant(false);
             for (i, should_be_zero) in bits[element_num_bits..].into_iter().enumerate() {
-                or_result = Boolean::or(cs.ns(|| format!("or {} {}", should_be_zero.get_value().unwrap(), i)), &or_result, should_be_zero)?;
+                or_result = Boolean::or(
+                    cs.ns(|| format!("or {} {}", should_be_zero.get_value().unwrap(), i)),
+                    &or_result,
+                    should_be_zero,
+                )?;
                 let _ = bits_iter.next().unwrap();
             }
             or_result.enforce_equal(cs.ns(|| "enforce equal"), &Boolean::constant(false))?;
         }
 
-        for (i, (b, a)) in BitIterator::without_leading_zeros(b).zip(bits_iter.by_ref()).enumerate() {
+        for (i, (b, a)) in BitIterator::without_leading_zeros(b)
+            .zip(bits_iter.by_ref())
+            .enumerate()
+        {
             if b {
                 // This is part of a run of ones.
                 current_run.push(a.clone());
@@ -759,12 +767,48 @@ impl Boolean {
                 // If `last_run` is false, `a` can be true or false.
                 //
                 // Ergo, at least one of `last_run` and `a` must be false.
-                Self::enforce_nand(cs.ns(|| format!("enforce nand {}", i)), &[last_run.clone(), a.clone()])?;
+                Self::enforce_nand(
+                    cs.ns(|| format!("enforce nand {}", i)),
+                    &[last_run.clone(), a.clone()],
+                )?;
             }
         }
         assert!(bits_iter.next().is_none());
 
         Ok(current_run)
+    }
+
+    /// Given a sequence `bits` of Booleans, constructs a `LinearCombination<ConstraintF>`
+    /// representing the field element whose little-endian bit representation corresponds to the
+    /// input `bits`. `one` represents the fixed variable of a constraint system employed to represent
+    /// constants in the linear combination. The function returns the constructed linear combination and
+    /// the field element represented by the linear combination, if all the `bits` in the sequence have values.
+    /// In addition, the function also returns a flag which specifies if there are no "real" variables
+    /// in the linear combination, that is if the sequence of Booleans comprises all constant values.
+    /// Assumes that `bits` can be packed in a single field element (i.e., bits.len() <= ConstraintF::Params::CAPACITY).
+    pub fn bits_to_linear_combination<'a, ConstraintF:Field>(bits: impl Iterator<Item=&'a Boolean>, one: Variable) -> (LinearCombination<ConstraintF>, Option<ConstraintF>, bool)
+    {
+        let mut lc = LinearCombination::zero();
+        let mut coeff = ConstraintF::one();
+        let mut lc_in_field = Some(ConstraintF::zero());
+        let mut all_constants = true;
+        for bit in bits {
+            lc = lc + &bit.lc(one, coeff);
+            all_constants &= bit.is_constant();
+            lc_in_field = match bit.get_value() {
+                Some(b) => lc_in_field.as_mut().map(|val| {
+                    if b {
+                        *val += coeff
+                    }
+                    *val
+                }),
+                None => None,
+            };
+
+            coeff.double_in_place();
+        }
+
+        (lc, lc_in_field, all_constants)
     }
 }
 

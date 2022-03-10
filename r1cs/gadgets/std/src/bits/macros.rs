@@ -12,7 +12,6 @@ macro_rules! impl_uint_gadget {
             use std::{borrow::Borrow, ops::{Shl, Shr}, convert::TryInto, cmp::Ordering};
 
 
-            //ToDo: remove public use of fields
             #[derive(Clone, Debug)]
             pub struct $type_name {
                 // Least significant bit_gadget first
@@ -61,7 +60,7 @@ macro_rules! impl_uint_gadget {
                 /// `ConstraintF` elements, (thus reducing the number of input allocations),
                 /// and then converts this list of `ConstraintF` gadgets back into
                 /// bits and then packs chunks of such into `Self`.
-                pub fn alloc_input_vec<ConstraintF, CS>(
+                fn alloc_input_vec_from_bytes<ConstraintF, CS>(
                     mut cs: CS,
                     values: &[u8],
                 ) -> Result<Vec<Self>, SynthesisError>
@@ -118,17 +117,36 @@ macro_rules! impl_uint_gadget {
                         .collect::<Result<_, SynthesisError>>()?)
                 }
 
-                /// Construct a constant vector of `Self` from a vector of `u8`
-                pub fn constant_vec(values: &[u8]) -> Vec<Self> {
-                    const BYTES_PER_ELEMENT: usize = $bit_size/8;
+                /// Allocates a vector of `Self` from a slice of values of $native_type by serializing
+                /// them to sequence of bytes and then converting them to a sequence of `ConstraintF`
+                /// elements, (thus reducing the number of input allocations);
+                ///Then,  this list of `ConstraintF` gadgets is converted back into
+                /// bits and then packs chunks of such into `Self`.
+                pub fn alloc_input_vec<ConstraintF, CS, T>(
+                    cs: CS,
+                    values: &[T],
+                ) -> Result<Vec<Self>, SynthesisError>
+                where
+                    ConstraintF: PrimeField,
+                    CS: ConstraintSystemAbstract<ConstraintF>,
+                    T: Into<$native_type> + Copy,
+                {
+                    // convert values to vector of bytes
+                    let mut values_to_bytes = Vec::new();
+                    for val in values {
+                        let val_bytes = Into::<$native_type>::into(*val).to_le_bytes();
+                        values_to_bytes.extend_from_slice(&val_bytes[..]);
+                    }
+                    // alloc vector of `Self` from vector of bytes, minimizing the number of
+                    // `ConstraintF` elements allocated
+                    Self::alloc_input_vec_from_bytes(cs, values_to_bytes.as_slice())
+                }
+
+                /// Construct a constant vector of `Self` from a vector of `$native_type`
+                pub fn constant_vec<T: Into<$native_type> + Copy>(values: &[T]) -> Vec<Self> {
                     let mut result = Vec::new();
-                    for bytes in values.chunks(BYTES_PER_ELEMENT) {
-                        let mut value: $native_type = 0;
-                        for (i, byte) in bytes.iter().enumerate() {
-                            let byte: $native_type = (*byte).into();
-                            value |= byte << (i*8);
-                        }
-                        result.push(Self::constant(value));
+                    for val in values {
+                        result.push(Self::constant((*val).into()));
                     }
                     result
                 }
@@ -350,6 +368,7 @@ macro_rules! impl_uint_gadget {
                 F: FnOnce() -> Result<T, SynthesisError>,
                 T: Borrow<$native_type>
                 {
+                    assert!($bit_size <= ConstraintF::Params::CAPACITY);
                     let mut value = None;
                     let field_element = FpGadget::<ConstraintF>::alloc_input(cs.ns(|| "alloc_input as field element"), || {
                         let val = value_gen().map(|val| *val.borrow())?;
@@ -475,7 +494,7 @@ macro_rules! impl_uint_gadget {
                     first: &Self,
                     second: &Self,
                 ) -> Result<Self, SynthesisError> {
-                    let bits = first.bits.iter().zip(second.bits.iter()).enumerate().map(|(i, (t, f))| Boolean::conditionally_select(&mut cs.ns(|| format!("cond select bit {}", i)), cond, t, f)).collect::<Result<Vec<_>, SynthesisError>>()?;
+                    let bits = first.bits.iter().zip(second.bits.iter()).enumerate().map(|(i, (t, f))| Boolean::conditionally_select(cs.ns(|| format!("cond select bit {}", i)), cond, t, f)).collect::<Result<Vec<_>, SynthesisError>>()?;
 
                     assert_eq!(bits.len(), $bit_size); // this assert should always be verified if first and second are built only with public methods
 
@@ -500,7 +519,7 @@ macro_rules! impl_uint_gadget {
 
                 fn shl(self, rhs: usize) -> Self::Output {
                     let by = if rhs >= $bit_size {
-                        $bit_size-1
+                        panic!("overflow due to left shift of {} bits for {}", rhs, stringify!($type_name));
                     } else {
                         rhs
                     };
@@ -524,7 +543,7 @@ macro_rules! impl_uint_gadget {
 
                 fn shr(self, rhs: usize) -> Self::Output {
                     let by = if rhs >= $bit_size {
-                        $bit_size-1
+                        panic!("overflow due to right shift of {} bits for {}", rhs, stringify!($type_name));
                     } else {
                         rhs
                     };
@@ -591,7 +610,7 @@ macro_rules! impl_uint_gadget {
                                     let bits = self.bits.iter()
                                     .zip(other.bits.iter())
                                     .enumerate()
-                                    .map(|(i , (b1, b2))| Boolean::$boolean_func(cs.ns(|| format!("xor bit {}", i)), &b1, &b2))
+                                    .map(|(i , (b1, b2))| Boolean::$boolean_func(cs.ns(|| format!("apply binary operation to bit {}", i)), &b1, &b2))
                                     .collect::<Result<Vec<Boolean>, SynthesisError>>()?;
 
                                     let value = match other.value {
@@ -614,20 +633,12 @@ macro_rules! impl_uint_gadget {
             // obtain the final outcome of the operation applied to all the operands
             macro_rules! handle_numoperands_opmany {
                 ($opmany_func: tt, $cs: tt, $operands: tt, $max_num_operands: tt) => {
-                        let num_operands = $operands.len();
                         // compute the aggregate result over batches of max_num_operands
                         let mut result = $type_name::$opmany_func($cs.ns(|| "first batch of operands"), &$operands[..$max_num_operands])?;
-                        let mut operands_processed = $max_num_operands;
-                        while operands_processed < num_operands {
-                            let last_op_to_process = if operands_processed + $max_num_operands - 1 > num_operands {
-                                num_operands
-                            } else {
-                                operands_processed + $max_num_operands - 1
-                            };
-                            let mut next_operands = $operands[operands_processed..last_op_to_process].iter().cloned().collect::<Vec<_>>();
-                            next_operands.push(result);
-                            result = $type_name::$opmany_func($cs.ns(|| format!("operands from {} to {}", operands_processed, last_op_to_process)), &next_operands[..])?;
-                            operands_processed += $max_num_operands - 1;
+                        for (i, next_operands) in $operands[$max_num_operands..].chunks($max_num_operands-1).enumerate() {
+                            let mut current_batch = vec![result];
+                            current_batch.extend_from_slice(next_operands);
+                            result = $type_name::$opmany_func($cs.ns(|| format!("{}-th batch of operands", i+1)), current_batch.as_slice())?;
                         }
                         return Ok(result);
                 }
@@ -719,14 +730,9 @@ macro_rules! impl_uint_gadget {
                             },
                         };
 
-                        let mut coeff = ConstraintF::one();
-                        for bit in &op.bits {
-                            lc = lc + &bit.lc(CS::one(), coeff);
-
-                            all_constants &= bit.is_constant();
-
-                            coeff.double_in_place();
-                        }
+                        let (current_lc, _, is_op_constant) = Boolean::bits_to_linear_combination(op.bits.iter(), CS::one());
+                        lc = lc + current_lc;
+                        all_constants &= is_op_constant;
                     }
 
                     if all_constants && result_value.is_some() {
@@ -821,14 +827,9 @@ macro_rules! impl_uint_gadget {
                             None => None,
                         };
 
-                        let mut coeff = ConstraintF::one();
-                        for bit in &op.bits {
-                            lc = lc + &bit.lc(CS::one(), coeff);
-
-                            all_constants &= bit.is_constant();
-
-                            coeff.double_in_place();
-                        }
+                        let (current_lc, _, is_op_constant) = Boolean::bits_to_linear_combination(op.bits.iter(), CS::one());
+                        lc = lc + current_lc;
+                        all_constants &= is_op_constant;
                     }
 
                     if all_constants && result_value.is_some() {
@@ -837,17 +838,9 @@ macro_rules! impl_uint_gadget {
                         }
                         return Ok($type_name::from_value(cs.ns(|| "alloc constant result"), &result_value.unwrap()));
                     }
-
                     let result_var = $type_name::alloc(cs.ns(|| "alloc result"), || result_value.ok_or(SynthesisError::AssignmentMissing))?;
 
-                    let mut coeff = ConstraintF::one();
-                    let mut result_lc = LinearCombination::zero();
-
-                    for bit in result_var.bits.iter() {
-                        result_lc = result_lc + &bit.lc(CS::one(), coeff);
-
-                        coeff.double_in_place();
-                    }
+                    let (result_lc, _, _) = Boolean::bits_to_linear_combination(result_var.bits.iter(), CS::one());
 
                     cs.get_root().enforce_equal($bit_size, &lc, &result_lc);
 
@@ -1031,16 +1024,10 @@ macro_rules! impl_uint_gadget {
                     let max_value = ConstraintF::from($native_type::MAX) + ConstraintF::one();
                     // lc will be constructed as SUB(self,other)+2^$bit_size
                     let mut lc = (max_value, CS::one()).into();
-                    let mut coeff = ConstraintF::one();
-                    let mut all_constants = true;
-                    for (self_bit, other_bit) in self.bits.iter().zip(other.bits.iter()) {
-                        lc = lc + &self_bit.lc(CS::one(), coeff);
-                        lc = lc - &other_bit.lc(CS::one(), coeff);
-
-                        all_constants &= self_bit.is_constant() && other_bit.is_constant();
-
-                        coeff.double_in_place();
-                    }
+                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(self.bits.iter(), CS::one());
+                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(other.bits.iter(), CS::one());
+                    lc = lc + self_lc - other_lc;
+                    let all_constants = is_self_constant && is_other_constant;
 
                     // diff = self - other mod 2^$bit_size,
                     // while diff_in_field = self - other + 2^$bit_size over the ConstraintF field
@@ -1114,17 +1101,10 @@ macro_rules! impl_uint_gadget {
                      */
 
                     // lc is constructed as SUB(self, other)
-                    let mut lc = LinearCombination::zero();
-                    let mut coeff = ConstraintF::one();
-                    let mut all_constants = true;
-                    for (self_bit, other_bit) in self.bits.iter().zip(other.bits.iter()) {
-                        lc = lc + &self_bit.lc(CS::one(), coeff);
-                        lc = lc - &other_bit.lc(CS::one(), coeff);
-
-                        all_constants &= self_bit.is_constant() && other_bit.is_constant();
-
-                        coeff.double_in_place();
-                    }
+                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(self.bits.iter(), CS::one());
+                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(other.bits.iter(), CS::one());
+                    let lc = self_lc - other_lc;
+                    let all_constants = is_self_constant && is_other_constant;
 
                     let (diff, is_underflowing) = match (self.value, other.value) {
                         (Some(val1), Some(val2)) => {
@@ -1145,13 +1125,7 @@ macro_rules! impl_uint_gadget {
 
                     let diff_var = Self::alloc(cs.ns(|| "alloc diff"), || diff.ok_or(SynthesisError::AssignmentMissing))?;
 
-                    let mut diff_lc = LinearCombination::zero();
-                    let mut coeff = ConstraintF::one();
-                    for diff_bit in diff_var.bits.iter() {
-                        diff_lc = diff_lc + &diff_bit.lc(CS::one(), coeff);
-
-                        coeff.double_in_place();
-                    }
+                    let (diff_lc, _, _) = Boolean::bits_to_linear_combination(diff_var.bits.iter(), CS::one());
 
                     cs.get_root().enforce_equal($bit_size, &lc, &diff_lc);
 
@@ -1197,18 +1171,12 @@ macro_rules! impl_uint_gadget {
                         self.sub(multi_eq.ns(|| "a - b mod 2^n"), other)?
                     };
 
-                    let mut delta_lc = LinearCombination::zero();
-                    let mut coeff = ConstraintF::one();
-                    let mut all_constants = true;
-                    for ((self_bit, other_bit), diff_bit) in self.bits.iter().zip(other.bits.iter()).zip(diff_var.bits.iter()) {
-                        delta_lc = delta_lc + &self_bit.lc(CS::one(), coeff);
-                        delta_lc = delta_lc - &other_bit.lc(CS::one(), coeff);
-                        delta_lc = delta_lc - &diff_bit.lc(CS::one(), coeff);
+                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(self.bits.iter(), CS::one());
+                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(other.bits.iter(), CS::one());
+                    let (diff_lc, _, is_diff_constant) = Boolean::bits_to_linear_combination(diff_var.bits.iter(), CS::one());
 
-                        all_constants &= self_bit.is_constant() && other_bit.is_constant();
-
-                        coeff.double_in_place();
-                    }
+                    let delta_lc = self_lc - other_lc - diff_lc;
+                    let all_constants = is_self_constant && is_other_constant && is_diff_constant;
 
                     let (diff_val, is_underflowing, delta) = match (self.get_value(), other.get_value()) {
                         (Some(value1), Some(value2)) => {
@@ -1228,7 +1196,7 @@ macro_rules! impl_uint_gadget {
                         return Ok(Boolean::constant(is_underflowing.unwrap()))
                     }
 
-                    // ToDo: It should not be necessary to allocate it as a Boolean gadget,
+                    //ToDo: It should not be necessary to allocate it as a Boolean gadget,
                     // can be done when a Boolean::from(FieldGadget) will be implemented
                     let is_smaller = Boolean::alloc(cs.ns(|| "alloc result"), || is_underflowing.ok_or(SynthesisError::AssignmentMissing))?;
 
@@ -1243,7 +1211,7 @@ macro_rules! impl_uint_gadget {
 
                     // enforce constraints:
                     // (1 - is_smaller) * delta_lc = 0 enforces that is_smaller == 1 when delta != 0, i.e., when a < b
-                    // inv * delta_lc = is_smaller enforces that is_smaller == 0 when delta == 0, i.e., when b >= a
+                    // inv * delta_lc = is_smaller enforces that is_smaller == 0 when delta == 0, i.e., when a >= b
                     cs.enforce(|| "enforce is smaller == true", |_| is_smaller.not().lc(CS::one(), ConstraintF::one()), |lc| lc + &delta_lc, |lc| lc);
                     cs.enforce(|| "enforce is smaller == false", |lc| &inv_var.get_variable() + lc, |lc| lc + &delta_lc, |_| is_smaller.lc(CS::one(), ConstraintF::one()));
 
@@ -1297,7 +1265,7 @@ macro_rules! impl_uint_gadget {
                     ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode, SynthesisError,
                 };
 
-                use std::{ops::{Shl, Shr}, cmp::Ordering};
+                use std::{ops::{Shl, Shr}, cmp::Ordering, cmp::max};
 
                 use crate::{alloc::{AllocGadget, ConstantGadget}, eq::{EqGadget, MultiEq}, boolean::Boolean, ToBitsGadget, FromBitsGadget, ToBytesGadget, RotateUInt, UIntGadget, select::CondSelectGadget, bits::UInt8, cmp::ComparisonGadget};
 
@@ -1408,6 +1376,7 @@ macro_rules! impl_uint_gadget {
 
                     witness.enforce_equal(cs.ns(|| "enforce val == val+1"), &witness_ne).unwrap();
                     assert!(!cs.is_satisfied());
+                    assert_eq!(cs.which_is_unsatisfied().unwrap(), "enforce val == val+1/conditionally enforce equal for chunk 0");
                 }
 
 
@@ -1501,31 +1470,28 @@ macro_rules! impl_uint_gadget {
 
                     let vec_len: usize = rng.gen_range($bit_size..$bit_size*2);
 
-                    // allocate input vector of VEC_LEN random bytes
-                    let input_vec = (0..vec_len).map(|_| rng.gen()).collect::<Vec<u8>>();
+                    // allocate input vector of VEC_LEN $native_type elements
+                    let input_vec = (0..vec_len).map(|_| rng.gen()).collect::<Vec<$native_type>>();
 
                     let alloc_vec = $type_name::alloc_input_vec(cs.ns(|| "alloc input vec"), &input_vec).unwrap();
 
-                    for (i, (input_bytes, alloc_el)) in input_vec.chunks_exact($bit_size/8).zip(alloc_vec.iter()).enumerate() {
-                        let input_bytes_gadgets = UInt8::constant_vec(&input_bytes);
-                        let input_el = $type_name::from_bytes(&input_bytes_gadgets).unwrap();
+                    for (i, (input_value, alloc_el)) in input_vec.iter().zip(alloc_vec.iter()).enumerate() {
+                        let input_el = $type_name::constant(*input_value);
                         input_el.enforce_equal(cs.ns(|| format!("eq for chunk {}", i)), &alloc_el).unwrap();
-                        assert_eq!(input_el.get_value().unwrap(), alloc_el.get_value().unwrap());
+                        assert_eq!(*input_value, alloc_el.get_value().unwrap());
                     }
 
                     assert!(cs.is_satisfied());
 
-                    // test allocation of vector of constants from vector of bytes
+                    // test allocation of vector of constants from vector of $native_type elements
                     let constant_vec = $type_name::constant_vec(&input_vec);
 
-                    for (i, (input_bytes, alloc_el)) in input_vec.chunks($bit_size/8).zip(constant_vec.iter()).enumerate() {
-                        let input_bytes_gadgets = input_bytes.iter().enumerate()
-                        .map(|(j, byte)| UInt8::from_value(cs.ns(|| format!("alloc byte {} in chunk {}", j, i)), byte))
-                        .collect::<Vec<_>>();
-                        let input_el = $type_name::from_bytes(&input_bytes_gadgets).unwrap();
+                    for (i, (input_value, alloc_el)) in input_vec.iter().zip(constant_vec.iter()).enumerate() {
+                        let input_el = $type_name::constant(*input_value);
                         input_el.enforce_equal(cs.ns(|| format!("eq for chunk {} of constant vec", i)), &alloc_el).unwrap();
-                        assert_eq!(input_el.get_value().unwrap(), alloc_el.get_value().unwrap());
+                        assert_eq!(*input_value, alloc_el.get_value().unwrap());
                     }
+
 
                      assert!(cs.is_satisfied());
 
@@ -1650,22 +1616,35 @@ macro_rules! impl_uint_gadget {
                             test_uint_gadget_value((value >> by) << by, &alloc_var, format!("left shift by {} bits", by).as_str());
                         }
 
-
-
-                        // check that shl(var, by) == shl(var, $bit_size-1) for by > $bit_size
-                        let alloc_var = alloc_fn(&mut cs, "alloc var for invalid shl", var_type, value);
-                        let by = $bit_size*2;
-                        let shl_var = alloc_var.shl(by);
-                        test_uint_gadget_value(value << $bit_size-1, &shl_var, "invalid left shift");
-
-                        // check that shr(var, by) == shr(var, $bit_size) for by > $bit_size
-                        let alloc_var = alloc_fn(&mut cs, "alloc var for invalid shr", var_type, value);
-                        let by = $bit_size*2;
-                        let shr_var = alloc_var.shr(by);
-                        test_uint_gadget_value(value >> $bit_size-1, &shr_var, "invalid right shift");
-
                         assert!(cs.is_satisfied());
+
                     }
+                }
+
+                #[test]
+                #[should_panic(expected="overflow due to left shift")]
+                fn test_invalid_left_shift() {
+                    let rng = &mut thread_rng();
+
+                    let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                    let var_type = &VARIABLE_TYPES[rng.gen::<usize>() % 3];
+                    let value: $native_type = rng.gen();
+
+                    let alloc_var = alloc_fn(&mut cs, "alloc var", var_type, value);
+                    let _shl_var = alloc_var.shl($bit_size*2);
+                }
+
+                #[test]
+                #[should_panic(expected="overflow due to right shift")]
+                fn test_invalid_right_shift() {
+                    let rng = &mut thread_rng();
+
+                    let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                    let var_type = &VARIABLE_TYPES[rng.gen::<usize>() % 3];
+                    let value: $native_type = rng.gen();
+
+                    let alloc_var = alloc_fn(&mut cs, "alloc var", var_type, value);
+                    let _shl_var = alloc_var.shr($bit_size*2);
                 }
 
                 #[test]
@@ -1721,17 +1700,6 @@ macro_rules! impl_uint_gadget {
                             test_uint_gadget_value(res_or, &or_var, format!("or between {:?} {:?}", var_type_a, var_type_b).as_str());
                             test_uint_gadget_value(res_and, &and_var, format!("and between {:?} {:?}", var_type_a, var_type_b).as_str());
                             test_uint_gadget_value(res_nand, &nand_var, format!("nand between {:?} {:?}", var_type_a, var_type_b).as_str());
-
-
-                            let alloc_xor = alloc_fn(&mut cs, "alloc xor result", var_type_a, res_xor);
-                            let alloc_or = alloc_fn(&mut cs, "alloc or result", var_type_b, res_or);
-                            let alloc_and = alloc_fn(&mut cs, "alloc and result", var_type_a, res_and);
-                            let alloc_nand = alloc_fn(&mut cs, "alloc nand result", var_type_b, res_nand);
-
-                            alloc_xor.enforce_equal(cs.ns(|| "check xor result"), &xor_var).unwrap();
-                            alloc_or.enforce_equal(cs.ns(|| "check or result"), &or_var).unwrap();
-                            alloc_and.enforce_equal(cs.ns(|| "check and result"), &and_var).unwrap();
-                            alloc_nand.enforce_equal(cs.ns(|| "check nand result"), &nand_var).unwrap();
 
                             assert!(cs.is_satisfied());
                         }
@@ -1813,6 +1781,7 @@ macro_rules! impl_uint_gadget {
                         cs.set(bit_gadget_path, Fr::zero());
                     }
                     assert!(!cs.is_satisfied());
+                    assert_eq!(cs.which_is_unsatisfied().unwrap(), "multieq 0");
 
                     // test with all constants
                     let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
@@ -1867,6 +1836,7 @@ macro_rules! impl_uint_gadget {
                             cs.set(bit_gadget_path, Fr::zero());
                         }
                         assert!(!cs.is_satisfied());
+                        assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul operands/first batch of operands/unpack result field element/unpacking_constraint");
 
                         // set bit value back
                         if cs.get(bit_gadget_path).is_zero() {
@@ -1877,17 +1847,15 @@ macro_rules! impl_uint_gadget {
                         assert!(cs.is_satisfied());
 
                         // negative test on allocated field element: skip if double and add must be used because the field is too small
-                        let mut last_batch_start_operand = MAX_NUM_OPERANDS + (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1)*(MAX_NUM_OPERANDS-1);
-                        if last_batch_start_operand == NUM_OPERANDS {
-                            last_batch_start_operand -= MAX_NUM_OPERANDS-1;
-                        }
-                        let bit_gadget_path = format!("mul operands/operands from {} to {}/unpack result field element/bit 0/boolean", last_batch_start_operand, NUM_OPERANDS);
+                        let num_batches = (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1);
+                        let bit_gadget_path = format!("mul operands/{}-th batch of operands/unpack result field element/bit 0/boolean", num_batches);
                         if cs.get(&bit_gadget_path).is_zero() {
                             cs.set(&bit_gadget_path, Fr::one());
                         } else {
                             cs.set(&bit_gadget_path, Fr::zero());
                         }
                         assert!(!cs.is_satisfied());
+                        assert_eq!(cs.which_is_unsatisfied().unwrap(), format!("mul operands/{}-th batch of operands/unpack result field element/unpacking_constraint", num_batches));
 
                         // set bit value back
                         if cs.get(&bit_gadget_path).is_zero() {
@@ -1912,7 +1880,7 @@ macro_rules! impl_uint_gadget {
                 }
 
                 #[test]
-                fn test_modular_arithmetic_operations() {
+                fn test_conditional_modular_arithmetic_operations() {
                     let rng = &mut thread_rng();
                     for condition in BOOLEAN_TYPES.iter() {
                         for var_type_op1 in VARIABLE_TYPES.iter() {
@@ -1994,6 +1962,7 @@ macro_rules! impl_uint_gadget {
                         cs.set(bit_gadget_path, Fr::zero());
                     }
                     assert!(!cs.is_satisfied());
+                    assert_eq!(cs.which_is_unsatisfied().unwrap(), "multieq 0");
 
                     // set bit value back
                     if cs.get(bit_gadget_path).is_zero() {
@@ -2045,6 +2014,7 @@ macro_rules! impl_uint_gadget {
                     // result should still be corrected, but constraints should not be verified
                     test_uint_gadget_value(result_value, &result_var, "result of overflowing add correctness");
                     assert!(!cs.is_satisfied(), "checking overflow constraint");
+                    assert_eq!(cs.which_is_unsatisfied().unwrap(), "multieq 0");
                 }
 
                 #[test]
@@ -2075,7 +2045,7 @@ macro_rules! impl_uint_gadget {
                     test_uint_gadget_value(result_value, &result_var, "result correctness");
                     assert!(cs.is_satisfied());
 
-                    if MAX_NUM_OPERANDS >= 2 { // negative tests are skipped if if double and add must be used because the field is too small
+                    if MAX_NUM_OPERANDS >= 2 { // negative tests are skipped if double and add must be used because the field is too small
                         // negative test on first batch
                         let bit_gadget_path = "mul operands/first batch of operands/unpack result field element/bit 0/boolean";
                         if cs.get(bit_gadget_path).is_zero() {
@@ -2084,6 +2054,7 @@ macro_rules! impl_uint_gadget {
                             cs.set(bit_gadget_path, Fr::zero());
                         }
                         assert!(!cs.is_satisfied());
+                        assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul operands/first batch of operands/unpack result field element/unpacking_constraint");
 
                         // set bit value back
                         if cs.get(bit_gadget_path).is_zero() {
@@ -2095,17 +2066,15 @@ macro_rules! impl_uint_gadget {
 
                         // negative test on allocated field element
 
-                        let mut last_batch_start_operand = MAX_NUM_OPERANDS + (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1)*(MAX_NUM_OPERANDS-1);
-                        if last_batch_start_operand == NUM_OPERANDS {
-                            last_batch_start_operand -= MAX_NUM_OPERANDS-1;
-                        }
-                        let bit_gadget_path = format!("mul operands/operands from {} to {}/unpack result field element/bit 0/boolean", last_batch_start_operand, NUM_OPERANDS);
+                        let num_batches = (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1);
+                        let bit_gadget_path = format!("mul operands/{}-th batch of operands/unpack result field element/bit 0/boolean", num_batches);
                         if cs.get(&bit_gadget_path).is_zero() {
                             cs.set(&bit_gadget_path, Fr::one());
                         } else {
                             cs.set(&bit_gadget_path, Fr::zero());
                         }
                         assert!(!cs.is_satisfied());
+                        assert_eq!(cs.which_is_unsatisfied().unwrap(), format!("mul operands/{}-th batch of operands/unpack result field element/unpacking_constraint", num_batches));
 
 
                         // set bit value back
@@ -2131,7 +2100,8 @@ macro_rules! impl_uint_gadget {
 
                     // check that constraints are not satisfied in case of overflow
                     let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
-                    let operand_values = (0..NUM_OPERANDS).map(|_| rng.gen_range(max_value..=$native_type::MAX)).collect::<Vec<$native_type>>();
+                    let min_value = 1 << ($bit_size/max(MAX_NUM_OPERANDS, 2)); // generate operands higher than this value to ensure that overflow occurs when processing the first batch of operands
+                    let operand_values = (0..NUM_OPERANDS).map(|_| rng.gen_range(min_value..=$native_type::MAX)).collect::<Vec<$native_type>>();
 
                     let operands = operand_values.iter().enumerate().map(|(i, val)| {
                         alloc_fn(&mut cs, format!("alloc operand {}", i).as_str(), &VARIABLE_TYPES[i % 3], *val)
@@ -2151,10 +2121,16 @@ macro_rules! impl_uint_gadget {
 
                     test_uint_gadget_value(result_value, &result_var, "result of overflowing mul correctness");
                     assert!(!cs.is_satisfied());
+                    if MAX_NUM_OPERANDS >= 2 {
+                        assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul overflowing operands/first batch of operands/unpack result field element/unpacking_constraint");
+                    } else { // double and add case
+                        assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul overflowing operands/double and add/double and add first operands/to bits for digit 0/unpacking_constraint");
+                    }
+
                 }
 
                 #[test]
-                fn test_no_carry_arithmetic_operations() {
+                fn test_conditional_no_carry_arithmetic_operations() {
                     const OPERATIONS: [&str; 2] = ["add", "mul"];
                     let rng = &mut thread_rng();
                     for condition in BOOLEAN_TYPES.iter() {
@@ -2217,11 +2193,12 @@ macro_rules! impl_uint_gadget {
 
                                     let op1_var = alloc_fn(&mut cs, "alloc op1", &var_type_op1, op1);
                                     let op2_var = alloc_fn(&mut cs, "alloc op2", &var_type_op2, op2);
+                                    let cond_var = alloc_boolean_cond(&mut cs, "alloc conditional", condition);
 
                                     let result = if is_add {
                                         // add a scope for multi_eq CS as the constraints are enforced when the variable is dropped
                                         let mut multi_eq = MultiEq::new(&mut cs);
-                                        op1_var.conditionally_add_nocarry(&mut multi_eq, &cond_var, &op2_var)
+                                        op1_var.conditionally_add_nocarry(multi_eq.ns(|| "conditionally add no carry"), &cond_var, &op2_var)
                                     } else {
                                         op1_var.conditionally_mul_nocarry(&mut cs, &cond_var, &op2_var)
                                     };
@@ -2247,7 +2224,16 @@ macro_rules! impl_uint_gadget {
                                         op1
                                     }, &result_var, format!("{} correctness", op).as_str());
                                     assert!(!cs.is_satisfied(), "checking overflow constraint for {:?} {:?} {}", var_type_op1, var_type_op2, is_add);
-
+                                    if is_add {
+                                        assert_eq!(cs.which_is_unsatisfied().unwrap(), "multieq 0");
+                                    } else {
+                                        let field_bits = (<Fr as PrimeField>::Params::CAPACITY) as usize;
+                                        if field_bits < 2*$bit_size { // double and add case
+                                            assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul values/double and add/double and add first operands/to bits for digit 0/unpacking_constraint");
+                                        } else {
+                                            assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul values/unpack result field element/unpacking_constraint");
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2317,6 +2303,8 @@ macro_rules! impl_uint_gadget {
 
                                 let left_op = alloc_fn(&mut cs, "alloc left op", var_type_left, left);
                                 let right_op = alloc_fn(&mut cs, "alloc right op", var_type_right, right);
+                                let cond_var = alloc_boolean_cond(&mut cs, "alloc conditional", condition);
+
                                 let result = {
                                     // add a scope for multi_eq CS as the constraints are enforced when the variable is dropped
                                     let mut multi_eq = MultiEq::new(&mut cs);
@@ -2332,7 +2320,7 @@ macro_rules! impl_uint_gadget {
                                             SynthesisError::Unsatisfiable => (),
                                             err => assert!(false, "invalid error returned by sub_noborrow: {}", err)
                                         };
-                                        return;
+                                        continue;
                                     },
                                     (_, _) => result.unwrap(),
                                 };
@@ -2343,6 +2331,7 @@ macro_rules! impl_uint_gadget {
                                     left
                                 }, &result_var, "sub with underflow correctness");
                                 assert!(!cs.is_satisfied());
+                                assert_eq!(cs.which_is_unsatisfied().unwrap(), "multieq 0");
                             }
                         }
                     }
@@ -2356,7 +2345,7 @@ macro_rules! impl_uint_gadget {
                     // helper closure which is useful to deal with the error returned by enforce cmp
                     // function if both the operands are constant and the comparison is
                     // unsatisfiable on such constants
-                    let handle_constant_operands = |cs: &ConstraintSystem::<Fr>, must_be_satisfied: bool, cmp_result: Result<(), SynthesisError>, var_type_op1: &VariableType, var_type_op2: &VariableType, is_constant: bool, assertion_label| {
+                    let handle_constant_operands = |cs: &ConstraintSystem::<Fr>, must_be_satisfied: bool, cmp_result: Result<(), SynthesisError>, var_type_op1: &VariableType, var_type_op2: &VariableType, is_constant: bool, assertion_label, unsatisfied_constraint| {
                         match (*var_type_op1, *var_type_op2, is_constant) {
                             (VariableType::Constant, VariableType::Constant, true) => {
                                 if must_be_satisfied {
@@ -2371,6 +2360,9 @@ macro_rules! impl_uint_gadget {
                             _ => {
                                 cmp_result.unwrap();
                                 assert!(!(cs.is_satisfied() ^ must_be_satisfied), "{} for {:?} {:?}", assertion_label, var_type_op1, var_type_op2);
+                                if !must_be_satisfied {
+                                    assert_eq!(cs.which_is_unsatisfied().unwrap(), unsatisfied_constraint);
+                                }
                             }
                         }
                     };
@@ -2387,16 +2379,21 @@ macro_rules! impl_uint_gadget {
                                 let b_var = alloc_fn(&mut cs, "alloc b", var_type_op2, b);
 
                                 let is_smaller_var = a_var.is_smaller_than(cs.ns(|| "a < b"), &b_var).unwrap();
-                                let is_smaller = match a.cmp(&b) {
+                                let (is_smaller, is_equal) = match a.cmp(&b) {
                                     Ordering::Less  => {
                                         assert!(is_smaller_var.get_value().unwrap());
                                         assert!(cs.is_satisfied(), "is smaller");
-                                        true
+                                        (true, false)
                                     }
-                                    Ordering::Greater | Ordering::Equal => {
+                                    Ordering::Greater => {
                                         assert!(!is_smaller_var.get_value().unwrap());
                                         assert!(cs.is_satisfied(), "is not smaller");
-                                        false
+                                        (false, false)
+                                    }
+                                    Ordering::Equal => {
+                                        assert!(!is_smaller_var.get_value().unwrap());
+                                        assert!(cs.is_satisfied(), "is not smaller");
+                                        (false, true)
                                     }
                                 };
 
@@ -2407,13 +2404,13 @@ macro_rules! impl_uint_gadget {
 
                                 // test enforce_smaller_than
                                 let enforce_ret = a_var.enforce_smaller_than(cs.ns(|| "enforce a < b"), &b_var);
-                                handle_constant_operands(&cs, is_smaller, enforce_ret, var_type_op1, var_type_op2, true, "enforce_smaller_than test");
+                                handle_constant_operands(&cs, is_smaller, enforce_ret, var_type_op1, var_type_op2, true, "enforce_smaller_than test", if is_equal {"enforce a < b/enforce self != other/enforce or"} else {"enforce a < b/multieq 0"});
 
                                 // test equality
                                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
                                 let enforce_ret = a_var.enforce_smaller_than(cs.ns(|| "enforce a < a"), &a_var);
-                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce a < a test");
-
+                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce a < a test", "enforce a < a/enforce self != other/enforce or");
 
                                 // test all comparisons
                                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
@@ -2422,15 +2419,15 @@ macro_rules! impl_uint_gadget {
                                 match a.cmp(&b) {
                                     Ordering::Less => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce less test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce less test", "");
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less equal"), &b_var, Ordering::Less, true);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce less equal test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce less equal test", "");
                                     }
                                     Ordering::Greater => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater"), &b_var, Ordering::Greater, false);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce greater test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce greater test", "");
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater equal"), &b_var, Ordering::Greater, true);
-                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce greater equal test");
+                                        handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, true, "enforce greater equal test", "");
                                     }
                                     _ => {}
                                 }
@@ -2440,16 +2437,24 @@ macro_rules! impl_uint_gadget {
                                 match b.cmp(&a) {
                                     Ordering::Less => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less"), &b_var, Ordering::Less, false);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce less negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce less negative test", "enforce less/enforce smaller than/multieq 0");
+                                        // reinitialize cs to test also equality
+                                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                        let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                        let b_var = alloc_fn(&mut cs, "alloc b", var_type_op2, b);
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce less equal"),&b_var, Ordering::Less, true);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce less equal negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce less equal negative test", "enforce less equal/enforce greater equal/multieq 0");
 
                                     }
                                     Ordering::Greater => {
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater"),&b_var, Ordering::Greater, false);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce greater negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce greater negative test", "enforce greater/enforce smaller than/multieq 0");
+                                        // reinitialize cs to test also equality
+                                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                        let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                        let b_var = alloc_fn(&mut cs, "alloc b", var_type_op2, b);
                                         let enforce_res = a_var.enforce_cmp(cs.ns(|| "enforce greater equal"),&b_var, Ordering::Greater, true);
-                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce greater equal negative test");
+                                        handle_constant_operands(&cs, false, enforce_res, var_type_op1, var_type_op2, true, "enforce greater equal negative test", "enforce greater equal/enforce greater equal/multieq 0");
                                     }
                                     _ => {}
                                 }
@@ -2459,9 +2464,9 @@ macro_rules! impl_uint_gadget {
                                 let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
 
                                 let enforce_ret = a_var.enforce_cmp(cs.ns(|| "enforce a <= a"), &a_var, Ordering::Less, true);
-                                handle_constant_operands(&cs, true, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce less equal on same variable test");
+                                handle_constant_operands(&cs, true, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce less equal on same variable test", "");
                                 let enforce_ret = a_var.enforce_cmp(cs.ns(|| "enforce a < a"), &a_var, Ordering::Less, false);
-                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce less on same variable test");
+                                handle_constant_operands(&cs, false, enforce_ret, var_type_op1, &VariableType::Constant, true, "enforce less on same variable test", "enforce a < a/enforce smaller than/enforce self != other/enforce or");
 
                                 // test conditional_enforce_cmp
                                 for condition in BOOLEAN_TYPES.iter() {
@@ -2474,32 +2479,50 @@ macro_rules! impl_uint_gadget {
                                     match a.cmp(&b) {
                                         Ordering::Less => {
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less"), &b_var, &cond, Ordering::Less, false);
-                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce less test");
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce less test", "");
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less equal"), &b_var, &cond, Ordering::Less, true);
-                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce less equal test");
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce less equal test", "");
+                                            let enforce_res = a_var.conditional_enforce_smaller_than(cs.ns(|| "conditional enforce smaller than"), &b_var, &cond);
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "conditional enforce smaller than positive test", "");
                                         }
                                         Ordering::Greater => {
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater"), &b_var, &cond, Ordering::Greater, false);
-                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce greater test");
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce greater test", "");
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater equal"), &b_var, &cond, Ordering::Greater, true);
-                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce greater equal test");
+                                            handle_constant_operands(&cs, true, enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "enforce greater equal test", "");
+                                            let enforce_res = a_var.conditional_enforce_smaller_than(cs.ns(|| "conditional enforce smaller than"), &b_var, &cond);
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "conditional enforce smaller than negative test", "conditional enforce smaller than/conditional enforce is smaller/conditional_equals");
                                         }
                                         _ => {}
                                     }
                                     // negative tests
+                                    let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                    let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                    let b_var = alloc_fn(&mut cs, "alloc b", var_type_op2, b);
+                                    let cond = alloc_boolean_cond(&mut cs, "alloc cond", condition);
                                     match b.cmp(&a) {
                                         Ordering::Less => {
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less"), &b_var, &cond, Ordering::Less, false);
-                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce less negative test");
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce less negative test", "enforce less/conditional enforce cmp/conditional_equals");
+                                            // reinitialize cs to test also equality
+                                            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                            let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                            let b_var = alloc_fn(&mut cs, "alloc b", var_type_op2, b);
+                                            let cond = alloc_boolean_cond(&mut cs, "alloc cond", condition);
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce less equal"),&b_var, &cond, Ordering::Less, true);
-                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce less equal negative test");
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce less equal negative test", "enforce less equal/conditional enforce cmp/conditional_equals");
 
                                         }
                                         Ordering::Greater => {
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater"),&b_var, &cond, Ordering::Greater, false);
-                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce greater negative test");
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce greater negative test", "enforce greater/conditional enforce cmp/conditional_equals");
+                                            // reinitialize cs to test also equality
+                                            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                            let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                            let b_var = alloc_fn(&mut cs, "alloc b", var_type_op2, b);
+                                            let cond = alloc_boolean_cond(&mut cs, "alloc cond", condition);
                                             let enforce_res = a_var.conditional_enforce_cmp(cs.ns(|| "enforce greater equal"),&b_var, &cond, Ordering::Greater, true);
-                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce greater equal negative test");
+                                            handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_res, var_type_op1, var_type_op2, cond.is_constant(), "cond enforce greater equal negative test", "enforce greater equal/conditional enforce cmp/conditional_equals");
                                         }
                                         _ => {}
                                     }
@@ -2509,9 +2532,15 @@ macro_rules! impl_uint_gadget {
                                     let cond = alloc_boolean_cond(&mut cs, "alloc cond", condition);
 
                                     let enforce_ret = a_var.conditional_enforce_cmp(cs.ns(|| "enforce a <= a"), &a_var, &cond, Ordering::Less, true);
-                                    handle_constant_operands(&cs, true, enforce_ret, var_type_op1, &VariableType::Constant, cond.is_constant(), "cond enforce less equal on same variable test");
-                                    let enforce_ret = a_var.conditional_enforce_cmp(cs.ns(|| "enforce a < a"), &a_var, &cond, Ordering::Less, false);
-                                    handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_ret, var_type_op1, &VariableType::Constant, cond.is_constant(), "cond enforce less on same variable test");
+                                    handle_constant_operands(&cs, true, enforce_ret, var_type_op1, &VariableType::Constant, cond.is_constant(), "cond enforce less equal on same variable test", "");
+                                    let enforce_ret = a_var.conditional_enforce_cmp(cs.ns(|| "conditional enforce a > a"), &a_var, &cond, Ordering::Greater, false);
+                                    handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_ret, var_type_op1, &VariableType::Constant, cond.is_constant(), "cond enforce grater on same variable test", "conditional enforce a > a/conditional enforce cmp/conditional_equals");
+                                    // reinitialize cs to test also enforce_smaller_than
+                                    let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                                    let a_var = alloc_fn(&mut cs, "alloc a", var_type_op1, a);
+                                    let cond = alloc_boolean_cond(&mut cs, "alloc cond", condition);
+                                    let enforce_ret = a_var.conditional_enforce_smaller_than(cs.ns(|| "conditional enforce a < a"), &a_var, &cond);
+                                    handle_constant_operands(&cs, !cond.get_value().unwrap(), enforce_ret, var_type_op1, &VariableType::Constant, cond.is_constant(), "cond enforce smaller than on same variable test", "conditional enforce a < a/conditional enforce is smaller/conditional_equals");
                                 }
                             }
                         }

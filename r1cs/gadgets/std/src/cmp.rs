@@ -10,7 +10,17 @@ pub trait ComparisonGadget<ConstraintF: Field>: Sized + EqGadget<ConstraintF>
     fn is_smaller_than<CS: ConstraintSystemAbstract<ConstraintF>>(&self, cs: CS, other: &Self) -> Result<Boolean, SynthesisError>;
 
     /// Enforce in the constraint system `cs` that `self < other`
-    fn enforce_smaller_than<CS: ConstraintSystemAbstract<ConstraintF>>(&self, cs: CS, other: &Self) -> Result<(), SynthesisError>;
+    fn enforce_smaller_than<CS: ConstraintSystemAbstract<ConstraintF>>(&self, mut cs: CS, other: &Self) -> Result<(), SynthesisError> {
+        self.is_smaller_than(cs.ns(|| "is smaller"), other)?.enforce_equal(cs.ns(|| "enforce is smaller"), &Boolean::constant(true))
+    }
+
+    /// Enforce that `self` < `other` if `cond` is true, enforce nothing otherwise
+    fn conditional_enforce_smaller_than<CS: ConstraintSystemAbstract<ConstraintF>>(&self, mut cs: CS, other: &Self, cond: &Boolean) -> Result<(), SynthesisError> {
+        if cond.is_constant() && !cond.get_value().unwrap() {
+            return Ok(()) // no need to enforce anything as cond is false
+        }
+        self.is_smaller_than(cs.ns(|| "is smaller"), other)?.conditional_enforce_equal(cs.ns(|| "conditional enforce is smaller"), &Boolean::constant(true), cond)
+    }
 
     /// Output a `Boolean` gadget which is true iff the given order relationship between `self`
     /// and `other` holds. If `should_also_check_equality` is true, then the order relationship
@@ -70,6 +80,6 @@ pub trait ComparisonGadget<ConstraintF: Field>: Sized + EqGadget<ConstraintF>
     ) -> Result<(), SynthesisError> {
         let is_cmp = self.is_cmp(cs.ns(|| "cmp outcome"), other, ordering, should_also_check_equality)?;
 
-        is_cmp.conditional_enforce_equal(cs.ns(|| "enforce cmp"), &Boolean::constant(true), should_enforce)
+        is_cmp.conditional_enforce_equal(cs.ns(|| "conditional enforce cmp"), &Boolean::constant(true), should_enforce)
     }
 }

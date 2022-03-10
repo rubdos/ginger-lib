@@ -35,6 +35,7 @@ num-traits = { version = "=0.2.14", default-features = false, optional = true }
 num-bigint = { version = "=0.4.3", default-features = false, optional = true }
 num-integer = { version = "=0.1.44", default-features = false, optional = true }
 hex = "=0.4.3"
+paste = "=1.0.6"
 
 [features]
 llvm_asm = ["algebra/llvm_asm"]
