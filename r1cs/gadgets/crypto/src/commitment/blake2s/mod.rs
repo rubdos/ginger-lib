@@ -31,8 +31,8 @@ impl<ConstraintF: PrimeField> CommitmentGadget<Blake2sCommitment, ConstraintF>
         r: &Self::RandomnessGadget,
     ) -> Result<Self::OutputGadget, SynthesisError> {
         let mut input_bits = Vec::with_capacity(512);
-        for byte in input.iter().chain(r.0.iter()) {
-            input_bits.extend_from_slice(&byte.into_bits_le());
+        for (i, byte) in input.iter().chain(r.0.iter()).enumerate() {
+            input_bits.extend_from_slice(&byte.to_bits_le(cs.ns(|| format!("convert byte {} to bits", i)))?);
         }
         let mut result = Vec::new();
         for (i, int) in blake2s_gadget(cs.ns(|| "Blake2s Eval"), &input_bits)?

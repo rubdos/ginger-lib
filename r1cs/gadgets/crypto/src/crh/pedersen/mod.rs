@@ -42,7 +42,7 @@ where
     type ParametersGadget = PedersenCRHGadgetParameters<G, W, ConstraintF, GG>;
 
     fn check_evaluation_gadget<CS: ConstraintSystemAbstract<ConstraintF>>(
-        cs: CS,
+        mut cs: CS,
         parameters: &Self::ParametersGadget,
         input: &[UInt8],
     ) -> Result<Self::OutputGadget, SynthesisError> {
@@ -70,10 +70,7 @@ where
         }
 
         // Allocate new variable for the result.
-        let input_in_bits: Vec<_> = padded_input
-            .iter()
-            .flat_map(|byte| byte.into_bits_le())
-            .collect();
+        let input_in_bits: Vec<_> = padded_input.to_bits_le(cs.ns(|| "padded input to bits"))?;
         let input_in_bits = input_in_bits.chunks(W::WINDOW_SIZE);
         let result =
             GG::precomputed_base_multiscalar_mul(cs, &parameters.params.generators, input_in_bits)?;

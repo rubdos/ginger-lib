@@ -2,12 +2,13 @@
 //! function.
 //! This is a port from the implementation in [Bellman](https://docs.rs/bellman/0.8.0/src/bellman/gadgets/sha256.rs.html#47-74)
 
+use std::ops::Shr;
 use algebra::PrimeField;
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::boolean::AllocatedBit;
 use r1cs_std::eq::MultiEq;
 use r1cs_std::uint32::UInt32;
-use r1cs_std::{boolean::Boolean, Assignment};
+use r1cs_std::{boolean::Boolean, Assignment, UIntGadget, RotateUInt, ToBitsGadget, FromBitsGadget};
 
 #[allow(clippy::unreadable_literal)]
 const ROUND_CONSTANTS: [u32; 64] = [
@@ -73,7 +74,8 @@ where
         cur = sha256_compression_function(cs.ns(|| format!("block {}", i)), block, &cur)?;
     }
 
-    Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).collect())
+    cur.reverse();
+    cur.to_bits(cs)
 }
 
 fn get_sha256_iv() -> Vec<UInt32> {
@@ -81,7 +83,7 @@ fn get_sha256_iv() -> Vec<UInt32> {
 }
 
 fn sha256_compression_function<ConstraintF, CS>(
-    cs: CS,
+    mut cs: CS,
     input: &[Boolean],
     current_hash_value: &[UInt32],
 ) -> Result<Vec<UInt32>, SynthesisError>
@@ -99,8 +101,8 @@ where
     // Initialize the first 16 words in the array w
     let mut w = input
         .chunks(32)
-        .map(|e| UInt32::from_bits_be(e))
-        .collect::<Vec<_>>();
+        .map(|e| UInt32::from_bits(cs.ns(|| format!("pack input word {}", i)),e))
+        .collect::<Result<Vec<_>, SynthesisError>>()?;
 
     let mut cs = MultiEq::new(cs);
 
@@ -112,13 +114,13 @@ where
         // s0 := (w[i-15] rightrotate 7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift 3)
         let mut s0 = UInt32::rotr(&w[i - 15], 7);
         s0 = s0.xor(cs.ns(|| "first xor for s0"), &UInt32::rotr(&w[i - 15], 18))?;
-        s0 = s0.xor(cs.ns(|| "second xor for s0"), &UInt32::shr(&w[i - 15], 3))?;
+        s0 = s0.xor(cs.ns(|| "second xor for s0"), &w[i - 15].clone()(3))?;
 
         // Compute SHA256_sigma1(w[i-2])
         // s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
         let mut s1 = UInt32::rotr(&w[i - 2], 17);
         s1 = s1.xor(cs.ns(|| "first xor for s1"), &UInt32::rotr(&w[i - 2], 19))?;
-        s1 = s1.xor(cs.ns(|| "second xor for s1"), &UInt32::shr(&w[i - 2], 10))?;
+        s1 = s1.xor(cs.ns(|| "second xor for s1"), &w[i - 2].clone().shr(10))?;
 
         // Compute W[i] = SHA256_sigma1(W[i-2]) + W[i-7] +
         // SHA256_sigma0(W[i-15]) + W[i-16] mod 2^32
@@ -330,18 +332,15 @@ where
     };
 
     let bits = a
-        .bits
+        .to_bits_le(cs.ns(|| "a to bits"))?
         .iter()
-        .zip(b.bits.iter())
-        .zip(c.bits.iter())
+        .zip(b.to_bits_le(cs.ns(|| "b to bits"))?.iter())
+        .zip(c.to_bits_le(cs.ns(|| "c to bits"))?.iter())
         .enumerate()
         .map(|(i, ((a, b), c))| circuit_fn(&mut cs, i, a, b, c))
         .collect::<Result<_, _>>()?;
 
-    Ok(UInt32 {
-        bits,
-        value: new_value,
-    })
+    Ok(UInt32::new(bits, new_value))
 }
 
 /// Computes (a and b) xor ((not a) and c)

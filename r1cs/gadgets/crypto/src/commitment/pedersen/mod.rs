@@ -79,10 +79,7 @@ where
         }
 
         // Allocate new variable for commitment output.
-        let input_in_bits: Vec<_> = padded_input
-            .iter()
-            .flat_map(|byte| byte.into_bits_le())
-            .collect();
+        let input_in_bits: Vec<_> = padded_input.to_bits_le(cs.ns(|| "padded input to bits"))?;
         let input_in_bits = input_in_bits.chunks(W::WINDOW_SIZE);
         let mut result = GG::precomputed_base_multiscalar_mul(
             cs.ns(|| "multiexp"),
@@ -91,7 +88,7 @@ where
         )?;
 
         // Compute h^r
-        let rand_bits: Vec<_> = r.0.iter().flat_map(|byte| byte.into_bits_le()).collect();
+        let rand_bits: Vec<_> = r.0.to_bits_le(cs.ns(|| "pedersen randomness to bits"))?;
         result.precomputed_base_scalar_mul(
             cs.ns(|| "Randomizer"),
             rand_bits

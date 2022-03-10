@@ -74,7 +74,7 @@ pub mod prelude {
         alloc::*,
         bits::{
             boolean::Boolean, uint32::UInt32, UInt8, FromBitsGadget, ToBitsGadget,
-            ToBytesGadget, UIntGadget,
+            ToBytesGadget, UIntGadget, RotateUInt,
         },
         eq::*,
         fields::{cubic_extension::*, quadratic_extension::*, FieldGadget},

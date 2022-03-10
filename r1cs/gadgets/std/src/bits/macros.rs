@@ -7,7 +7,7 @@ macro_rules! impl_uint_gadget {
             use r1cs_core::{ConstraintSystemAbstract, SynthesisError, LinearCombination};
             use crate::alloc::{AllocGadget, ConstantGadget};
 
-            use algebra::{fields::{PrimeField, FpParameters}, ToConstraintField};
+            use algebra::{fields::{PrimeField, FpParameters, Field}, ToConstraintField};
 
             use std::{borrow::Borrow, ops::{Shl, Shr}, convert::TryInto, cmp::Ordering};
 
@@ -167,21 +167,39 @@ macro_rules! impl_uint_gadget {
                     Ok(())
                 }
 
-                // Return little endian representation of self. Will be removed when to_bits_le and
-                // from_bits_le will be merged.
-                pub fn into_bits_le(&self) -> Vec<Boolean> {
-                    self.bits.to_vec()
-                }
-
-                // Construct self from its little endian bit representation. Will be removed when
-                // to_bits_le and from_bits_le will be merged.
-                pub fn from_bits_le<ConstraintF, CS>(cs: CS, bits: &[Boolean]) -> Result<Self, SynthesisError>
+                // Helper function that constructs self from an iterator over Booleans.
+                // It is employed as a building block by the public functions of the `FromBitsGadget`
+                fn from_bit_iterator<'a, ConstraintF, CS>(_cs: CS, bits_iter: impl Iterator<Item=&'a Boolean>) -> Result<Self, SynthesisError>
                 where
                     ConstraintF: PrimeField,
                     CS: ConstraintSystemAbstract<ConstraintF>,
                 {
-                    let be_bits = bits.iter().rev().map(|el| *el).collect::<Vec<_>>();
-                    Self::from_bits(cs, &be_bits)
+                    let mut bits = Vec::with_capacity($bit_size);
+                    let mut value: Option<$native_type> = Some(0);
+                    for (i, el) in bits_iter.enumerate() {
+                        bits.push(*el);
+                        value = match el.get_value() {
+                            Some(bit) => value.as_mut().map(|v| {*v |=
+                            if bit {
+                                let mask: $native_type = 1;
+                                mask << i
+                            } else {
+                                0
+                            }; *v}),
+                            None => None,
+                        };
+                    }
+
+                    if bits.len() != $bit_size {
+                        let mut error_msg = String::from(concat!("error: building ", stringify!($type_name)));
+                        error_msg.push_str(format!("from slice of {} bits", bits.len()).as_str());
+                        return Err(SynthesisError::Other(error_msg))
+                    }
+
+                    Ok(Self {
+                        bits,
+                        value,
+                    })
                 }
 
                 // Construct Self from a little endian byte representation, provided in the form of
@@ -198,7 +216,7 @@ macro_rules! impl_uint_gadget {
                                 *v}),
                             None => None,
                         };
-                        bits.append(&mut byte.into_bits_le());
+                        bits.extend_from_slice(byte.bits.as_slice());
                     }
 
                     // pad with 0 bits to get to $bit_size
@@ -254,7 +272,7 @@ macro_rules! impl_uint_gadget {
                             result_bits
                             .iter()
                             .skip(max_overflow_bits)
-                            .map(|el| *el)
+                            .cloned()
                             .collect::<Vec<_>>()
                         };
                         // addend is equal to coeff*digit mod 2^$bit_size
@@ -394,53 +412,83 @@ macro_rules! impl_uint_gadget {
             }
 
             impl<ConstraintF: PrimeField> ToBitsGadget<ConstraintF> for $type_name {
-                    fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
-                        &self,
-                        _cs: CS,
-                    ) -> Result<Vec<Boolean>, SynthesisError> {
-                        //Need to reverse bits since to_bits must return a big-endian representation
-                        let le_bits = self.bits.iter().rev().map(|el| *el).collect::<Vec<_>>();
-                        Ok(le_bits)
-                    }
+                fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    _cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    //Need to reverse bits since to_bits must return a big-endian representation
+                    let be_bits = self.bits.iter().rev().cloned().collect::<Vec<_>>();
+                    Ok(be_bits)
+                }
 
-                    fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
-                        &self,
-                        cs: CS,
-                    ) -> Result<Vec<Boolean>, SynthesisError> {
-                        self.to_bits(cs)
-                    }
+                fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    self.to_bits(cs)
+                }
+
+                fn to_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    _cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    Ok(self.bits.clone())
+                }
+
+                fn to_bits_strict_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    self.to_bits_le(cs)
+                }
+            }
+
+            impl<ConstraintF: Field> ToBitsGadget<ConstraintF> for Vec<$type_name> {
+                fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    let mut le_bits = self.to_bits_le(cs)?;
+                    //Need to reverse bits since to_bits must return a big-endian representation
+                    le_bits.reverse();
+                    Ok(le_bits)
+                }
+
+                fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    self.to_bits(cs)
+                }
+
+                fn to_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    _cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    Ok(self.iter().flat_map(|el| el.bits.clone()).collect::<Vec<_>>())
+                }
+
+                fn to_bits_strict_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    &self,
+                    cs: CS,
+                ) -> Result<Vec<Boolean>, SynthesisError> {
+                    self.to_bits_le(cs)
+                }
             }
 
             impl<ConstraintF: PrimeField> FromBitsGadget<ConstraintF> for $type_name {
                 fn from_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
-                    _cs: CS,
+                    cs: CS,
                     bits: &[Boolean],
                 ) -> Result<Self, SynthesisError> {
-                    if bits.len() != $bit_size {
-                        let mut error_msg = String::from(concat!("error: building ", stringify!($type_name)));
-                        error_msg.push_str(format!("from slice of {} bits", bits.len()).as_str());
-                        return Err(SynthesisError::Other(error_msg))
-                    }
-                    let mut le_bits = Vec::with_capacity($bit_size);
-                    let mut value: Option<$native_type> = Some(0);
-                    for (i, el) in bits.iter().rev().enumerate() {
-                        le_bits.push(*el);
-                        value = match el.get_value() {
-                            Some(bit) => value.as_mut().map(|v| {*v |=
-                            if bit {
-                                let mask: $native_type = 1;
-                                mask << i
-                            } else {
-                                0
-                            }; *v}),
-                            None => None,
-                        };
-                    }
+                   Self::from_bit_iterator(cs, bits.iter().rev())
+                }
 
-                    Ok(Self {
-                        bits: le_bits,
-                        value,
-                    })
+                fn from_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
+                    cs: CS,
+                    bits: &[Boolean],
+                ) -> Result<Self, SynthesisError> {
+                    Self::from_bit_iterator(cs, bits.iter())
                 }
             }
 
@@ -528,7 +576,7 @@ macro_rules! impl_uint_gadget {
                         .iter() // append rhs zeros as least significant bits
                         .chain(self.bits.iter()) // Chain existing bits as most significant bits starting from least significant ones
                         .take($bit_size) // Crop after $bit_size bits
-                        .map(|el| *el)
+                        .cloned()
                         .collect();
 
                     Self {
@@ -553,7 +601,7 @@ macro_rules! impl_uint_gadget {
                     .iter()
                     .skip(by) // skip least significant bits which are removed by the shift
                     .chain(vec![Boolean::constant(false); by].iter()) // append zeros as most significant bits
-                    .map(|el| *el)
+                    .cloned()
                     .collect();
 
                     Self {
@@ -574,7 +622,7 @@ macro_rules! impl_uint_gadget {
                     .skip($bit_size - by)
                     .chain(self.bits.iter())
                     .take($bit_size)
-                    .map(|el| *el)
+                    .cloned()
                     .collect();
 
                     Self {
@@ -592,7 +640,7 @@ macro_rules! impl_uint_gadget {
                     .skip(by)
                     .chain(self.bits.iter())
                     .take($bit_size)
-                    .map(|el| *el)
+                    .cloned()
                     .collect();
 
                     Self {
@@ -649,6 +697,7 @@ macro_rules! impl_uint_gadget {
                 impl_binary_bitwise_operation!(xor, ^, xor);
                 impl_binary_bitwise_operation!(or, |, or);
                 impl_binary_bitwise_operation!(and, &, and);
+
 
                 fn not<CS: ConstraintSystemAbstract<ConstraintF>>(&self, _cs: CS) -> Self {
                     let bits = self.bits.iter().map(|el| el.not()).collect::<Vec<_>>();
@@ -914,7 +963,7 @@ macro_rules! impl_uint_gadget {
                     let result_lsbs = result_bits
                     .iter()
                     .skip((num_operands-1)*$bit_size)
-                    .map(|el| *el)
+                    .cloned()
                     .collect::<Vec<_>>();
 
                     $type_name::from_bits(cs.ns(|| "packing result"), &result_lsbs[..])
@@ -1507,12 +1556,19 @@ macro_rules! impl_uint_gadget {
                         let val: $native_type = rng.gen();
 
                         let alloc_var = alloc_fn(&mut cs, "alloc var", var_type, val);
+                        // test big endian serialization
+                        let bits = alloc_var.to_bits(cs.ns(|| "unpack variable to big-endian bits")).unwrap();
+                        assert_eq!(bits.len(), $bit_size, "unpacking value to big endian");
 
-                        let bits = alloc_var.to_bits(cs.ns(|| "unpack variable")).unwrap();
-                        assert_eq!(bits.len(), $bit_size, "unpacking value");
+                        let reconstructed_var = $type_name::from_bits(cs.ns(|| "pack big-endian bits"), &bits).unwrap();
+                        test_uint_gadget_value(val, &reconstructed_var, "packing big-endian bits");
 
-                        let reconstructed_var = $type_name::from_bits(cs.ns(|| "pack bits"), &bits).unwrap();
-                        test_uint_gadget_value(val, &reconstructed_var, "packing bits");
+                        // test little endian serialization
+                        let bits = alloc_var.to_bits_le(cs.ns(|| "unpack variable to little-endian bits")).unwrap();
+                        assert_eq!(bits.len(), $bit_size, "unpacking value to little-endian");
+
+                        let reconstructed_var = $type_name::from_bits_le(cs.ns(|| "pack little-endian bits"), &bits).unwrap();
+                        test_uint_gadget_value(val, &reconstructed_var, "packing little-endian bits");
                     }
                 }
 
@@ -1545,57 +1601,105 @@ macro_rules! impl_uint_gadget {
                 #[test]
                 fn test_from_bits() {
                     let rng = &mut thread_rng();
-                    let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                    const NUM_RUNS: usize = 5;
+                    for _ in 0..NUM_RUNS {
+                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
-                    let mut bits = Vec::with_capacity($bit_size); // vector of Booleans
-                    let mut bit_values = Vec::with_capacity($bit_size); // vector of the actual values wrapped by Booleans found in bits vector
-                    for i in 0..$bit_size {
-                        let bit_value: bool = rng.gen();
-                        // we test all types of Booleans
-                        match i % 3 {
-                            0 => {
-                                bit_values.push(bit_value);
-                                bits.push(Boolean::Constant(bit_value))
-                            },
-                            1 => {
-                                bit_values.push(bit_value);
-                                let bit = Boolean::alloc(cs.ns(|| format!("alloc bit {}", i)), || Ok(bit_value)).unwrap();
-                                bits.push(bit)
-                            },
-                            2 => {
-                                bit_values.push(!bit_value);
-                                let bit = Boolean::alloc(cs.ns(|| format!("alloc bit {}", i)), || Ok(bit_value)).unwrap();
-                                bits.push(bit.not())
-                            },
-                            _ => {},
-                            }
+                        let mut bits = Vec::with_capacity($bit_size); // vector of Booleans
+                        let mut bit_values = Vec::with_capacity($bit_size); // vector of the actual values wrapped by Booleans found in bits vector
+                        for i in 0..$bit_size {
+                            let bit_value: bool = rng.gen();
+                            // we test all types of Booleans
+                            match i % 3 {
+                                0 => {
+                                    bit_values.push(bit_value);
+                                    bits.push(Boolean::Constant(bit_value))
+                                },
+                                1 => {
+                                    bit_values.push(bit_value);
+                                    let bit = Boolean::alloc(cs.ns(|| format!("alloc bit {}", i)), || Ok(bit_value)).unwrap();
+                                    bits.push(bit)
+                                },
+                                2 => {
+                                    bit_values.push(!bit_value);
+                                    let bit = Boolean::alloc(cs.ns(|| format!("alloc bit {}", i)), || Ok(bit_value)).unwrap();
+                                    bits.push(bit.not())
+                                },
+                                _ => {},
+                                }
+                        }
+
+                        let little_endian: bool = rng.gen();
+
+                        // construct $type_name from bits and check correctness
+                        let uint_gadget = if little_endian {
+                            $type_name::from_bits_le(cs.ns(|| "pack random bits"), &bits).unwrap()
+                        } else {
+                            $type_name::from_bits(cs.ns(|| "pack random bits"), &bits).unwrap()
+                        };
+                        let value = uint_gadget.get_value().unwrap();
+
+                        for (i, el) in uint_gadget.bits.iter().enumerate() {
+                            let bit = el.get_value().unwrap();
+                            let bit_index = if little_endian {i} else {$bit_size-1-i};
+                            assert_eq!(bit, bits[bit_index].get_value().unwrap());
+                            assert_eq!(bit, bit_values[bit_index]);
+                            assert_eq!(bit, (value >> i) & 1 == 1);
+                        }
+
+                        // check that to_bits(from_bits(bits)) == bits
+                        let unpacked_bits = if little_endian {
+                            uint_gadget.to_bits_le(cs.ns(|| "unpack bits")).unwrap()
+                        } else {
+                            uint_gadget.to_bits(cs.ns(|| "unpack bits")).unwrap()
+                        };
+                        for (bit1, bit2) in bits.iter().zip(unpacked_bits.iter()) {
+                            assert_eq!(bit1, bit2);
+                        }
+
+                        //check that an error is returned if more than $bit_size bits are unpacked
+                        let mut bits = Vec::with_capacity($bit_size+1);
+                        for _ in 0..$bit_size+1 {
+                            bits.push(Boolean::constant(false));
+                        }
+
+                        if little_endian {
+                            $type_name::from_bits_le(cs.ns(|| "unpacking too many bits"), &bits).unwrap_err();
+                        } else {
+                            $type_name::from_bits(cs.ns(|| "unpacking too many bits"), &bits).unwrap_err();
+                        }
+
+                    }
+                }
+
+                #[test]
+                fn test_vec_serialization() {
+                    let rng = &mut thread_rng();
+                    for var_type in VARIABLE_TYPES.iter() {
+                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                        let vec_len = rng.gen_range(0..20);
+
+                        let values = (0..vec_len).map(|_| rng.gen()).collect::<Vec<$native_type>>();
+
+                        let alloc_vec = match var_type {
+                            VariableType::Allocated => $type_name::alloc_vec(cs.ns(|| "alloc vec"), &values).unwrap(),
+                            VariableType::PublicInput => $type_name::alloc_input_vec(cs.ns(|| "alloc vec"), &values).unwrap(),
+                            VariableType::Constant => $type_name::constant_vec(&values),
+                        };
+
+                        let bits = alloc_vec.to_bits_le(cs.ns(|| "vec to little-endian bits")).unwrap();
+                        for (i, (val, bit_chunk)) in values.iter().zip(bits.chunks($bit_size)).enumerate() {
+                            let chunk_val = $type_name::from_bits_le(cs.ns(|| format!("pack chunk {} of little-endian bits", i)), bit_chunk).unwrap();
+                            test_uint_gadget_value(*val, &chunk_val, format!("check chunk {} of little-endian bits", i).as_str());
+                        }
+
+                        let bits = alloc_vec.to_bits(cs.ns(|| "vec to big-endian bits")).unwrap();
+                        for (i, (val, bit_chunk)) in values.iter().rev().zip(bits.chunks($bit_size)).enumerate() {
+                            let chunk_val = $type_name::from_bits(cs.ns(|| format!("pack chunk {} of big-endian bits", i)), bit_chunk).unwrap();
+                            test_uint_gadget_value(*val, &chunk_val, format!("check chunk {} of big-endian bits", i).as_str());
+                        }
                     }
 
-
-                    let uint_gadget = $type_name::from_bits(cs.ns(|| "pack random bits"), &bits).unwrap();
-                    let value = uint_gadget.get_value().unwrap();
-
-                    for (i, el) in uint_gadget.bits.iter().enumerate() {
-                        let bit = el.get_value().unwrap();
-                        assert_eq!(bit, bits[$bit_size-1-i].get_value().unwrap());
-                        assert_eq!(bit, bit_values[$bit_size-1-i]);
-                        assert_eq!(bit, (value >> i) & 1 == 1);
-                    }
-
-                    // check that to_bits(from_bits(bits)) == bits
-                    let unpacked_bits = uint_gadget.to_bits(cs.ns(|| "unpack bits")).unwrap();
-
-                    for (bit1, bit2) in bits.iter().zip(unpacked_bits.iter()) {
-                        assert_eq!(bit1, bit2);
-                    }
-
-                    //check that an error is returned if more than $bit_size bits are unpacked
-                    let mut bits = Vec::with_capacity($bit_size+1);
-                    for _ in 0..$bit_size+1 {
-                        bits.push(Boolean::constant(false));
-                    }
-
-                    let _ = $type_name::from_bits(cs.ns(|| "unpacking too many bits"), &bits).unwrap_err();
                 }
 
                 #[test]
@@ -1762,7 +1866,7 @@ macro_rules! impl_uint_gadget {
                         alloc_fn(&mut cs, format!("alloc operand {}", i).as_str(), &VARIABLE_TYPES[i % 3], *val)
                     }).collect::<Vec<_>>();
 
-                    let result_value: $native_type = operand_values.iter().map(|el| *el).reduce(|a,b| a.overflowing_add(b).0).unwrap();
+                    let result_value: $native_type = operand_values.iter().cloned().reduce(|a,b| a.overflowing_add(b).0).unwrap();
 
                     let result_var = {
                         // add a scope for multi_eq CS as the constraints are enforced when the variable is dropped
@@ -1819,7 +1923,7 @@ macro_rules! impl_uint_gadget {
                         alloc_fn(&mut cs, format!("alloc operand {}", i).as_str(), &VARIABLE_TYPES[i % 3], *val)
                     }).collect::<Vec<_>>();
 
-                    let result_value: $native_type = operand_values.iter().map(|el| *el).reduce(|a,b| a.overflowing_mul(b).0).unwrap();
+                    let result_value: $native_type = operand_values.iter().cloned().reduce(|a,b| a.overflowing_mul(b).0).unwrap();
 
                     let result_var = $type_name::mulmany(cs.ns(|| "mul operands"), &operands).unwrap();
 
@@ -1997,7 +2101,7 @@ macro_rules! impl_uint_gadget {
                     }).collect::<Vec<_>>();
 
                     let mut is_overflowing = false;
-                    let result_value: $native_type = operand_values.iter().map(|el| *el).reduce(|a,b| {
+                    let result_value: $native_type = operand_values.iter().cloned().reduce(|a,b| {
                         let (updated_sum, overflow) = a.overflowing_add(b);
                         is_overflowing |= overflow;
                         updated_sum
@@ -2038,7 +2142,7 @@ macro_rules! impl_uint_gadget {
 
                     // computation of result_value will panic in case of addition overflows, but it
                     // should never happen given how we generate operand_values
-                    let result_value: $native_type = operand_values.iter().map(|el| *el).reduce(|a, b| a*b).unwrap();
+                    let result_value: $native_type = operand_values.iter().cloned().reduce(|a, b| a*b).unwrap();
 
                     let result_var = $type_name::mulmany_nocarry(cs.ns(|| "mul operands"), &operands).unwrap();
 
@@ -2109,7 +2213,7 @@ macro_rules! impl_uint_gadget {
 
 
                     let mut is_overflowing = false;
-                    let result_value: $native_type = operand_values.iter().map(|el| *el).reduce(|a,b| {
+                    let result_value: $native_type = operand_values.iter().cloned().reduce(|a,b| {
                         let (updated_sum, overflow) = a.overflowing_mul(b);
                         is_overflowing |= overflow;
                         updated_sum

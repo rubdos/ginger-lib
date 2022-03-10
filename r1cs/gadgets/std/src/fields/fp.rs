@@ -104,9 +104,7 @@ impl<F: PrimeField> FpGadget<F> {
         let mut lc = LinearCombination::zero();
         let mut coeff = F::one();
 
-        for bit in bytes
-            .iter()
-            .flat_map(|byte_gadget| byte_gadget.bits.clone())
+        for bit in bytes.to_bits_le(cs.ns(|| "convert allocated bytes to bits"))?
         {
             match bit {
                 Boolean::Is(bit) => {
@@ -553,14 +551,10 @@ impl<F: PrimeField> ToBytesGadget<F> for FpGadget<F> {
         mut cs: CS,
     ) -> Result<Vec<UInt8>, SynthesisError> {
         let bytes = self.to_bytes(&mut cs)?;
+        let be_bits = bytes.to_bits(cs.ns(|| "convert to bits"))?;
         Boolean::enforce_in_field::<_, _, F>(
             &mut cs,
-            &bytes
-                .iter()
-                .flat_map(|byte_gadget| byte_gadget.into_bits_le())
-                // This reverse maps the bits into big-endian form, as required by `enforce_in_field`.
-                .rev()
-                .collect::<Vec<_>>(),
+            be_bits.as_slice(),
         )?;
 
         Ok(bytes)

@@ -339,7 +339,7 @@ pub fn blake2s_gadget<ConstraintF: PrimeField, CS: ConstraintSystemAbstract<Cons
             while tmp.len() < 32 {
                 tmp.push(Boolean::constant(false));
             }
-            this_block.push(UInt32::from_bits_le(&tmp));
+            this_block.push(UInt32::from_bits_le(&tmp)?);
         }
         while this_block.len() < 16 {
             this_block.push(UInt32::constant(0));
@@ -496,8 +496,8 @@ impl<ConstraintF: PrimeField> PRFGadget<Blake2s, ConstraintF> for Blake2sGadget 
         assert_eq!(seed.len(), 32);
         // assert_eq!(input.len(), 32);
         let mut gadget_input = Vec::with_capacity(512);
-        for byte in seed.iter().chain(input) {
-            gadget_input.extend_from_slice(&byte.into_bits_le());
+        for (i, byte) in seed.iter().chain(input).enumerate() {
+            gadget_input.extend_from_slice(&byte.to_bits_le(cs.ns(|| format!("covert byte {} to bits", i)))?);
         }
         let mut result = Vec::new();
         for (i, int) in blake2s_gadget(cs.ns(|| "Blake2s Eval"), &gadget_input)?
@@ -652,8 +652,8 @@ mod test {
                 .iter()
                 .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1u8 == 1u8));
 
-            for chunk in r {
-                for b in chunk.to_bits_le() {
+            for (i, chunk) in r.iter().enumerate() {
+                for b in chunk.to_bits_le(cs.ns(|| format!("chunk {} to bits", i))).unwrap() {
                     match b {
                         Boolean::Is(b) => {
                             assert!(s.next().unwrap() == b.get_value().unwrap());

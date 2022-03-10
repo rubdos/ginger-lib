@@ -6,7 +6,8 @@ use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::boolean::Boolean;
 use r1cs_std::eq::MultiEq;
 use r1cs_std::uint32::UInt32;
-use r1cs_std::uint8::UInt8;
+use r1cs_std::UInt8;
+use r1cs_std::{UIntGadget, RotateUInt, ToBitsGadget, FromBitsGadget};
 
 use crate::sha256::{sha256_ch_boolean, triop};
 
@@ -125,12 +126,7 @@ where
 {
     assert_eq!(input.len(), 512);
 
-    Ok(
-        ripemd160_compression_function(&mut cs, &input, &get_ripemd160_iv())?
-            .into_iter()
-            .flat_map(|e| e.to_bits_le())
-            .collect(),
-    )
+    ripemd160_compression_function(&mut cs, &input, &get_ripemd160_iv())?.to_bits_le(cs)
 }
 
 /// The full domain RIPEMD160 hash function.
@@ -166,7 +162,7 @@ where
         cur = ripemd160_compression_function(cs.ns(|| format!("block {}", i)), block, &cur)?;
     }
 
-    Ok(cur.into_iter().flat_map(|e| e.to_bits_le()).collect())
+    cur.to_bits_le(cs)
 }
 
 fn get_ripemd160_iv() -> Vec<UInt32> {

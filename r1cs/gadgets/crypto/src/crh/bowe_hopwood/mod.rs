@@ -8,7 +8,7 @@ use primitives::{
     crh::pedersen::PedersenWindow,
 };
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
-use r1cs_std::{alloc::AllocGadget, groups::GroupGadget, UInt8};
+use r1cs_std::{alloc::AllocGadget, groups::GroupGadget, ToBitsGadget, UInt8};
 
 use r1cs_std::bits::boolean::Boolean;
 use std::{borrow::Borrow, marker::PhantomData};
@@ -51,12 +51,12 @@ where
     type ParametersGadget = BoweHopwoodPedersenCRHGadgetParameters<G, W, ConstraintF, GG>;
 
     fn check_evaluation_gadget<CS: ConstraintSystemAbstract<ConstraintF>>(
-        cs: CS,
+        mut cs: CS,
         parameters: &Self::ParametersGadget,
         input: &[UInt8],
     ) -> Result<Self::OutputGadget, SynthesisError> {
         // Pad the input if it is not the current length.
-        let mut input_in_bits: Vec<_> = input.iter().flat_map(|byte| byte.into_bits_le()).collect();
+        let mut input_in_bits: Vec<_> = input.to_bits_le(cs.ns(|| "input to bits"))?;
         if (input_in_bits.len()) % CHUNK_SIZE != 0 {
             let current_length = input_in_bits.len();
             for _ in 0..(CHUNK_SIZE - current_length % CHUNK_SIZE) {
