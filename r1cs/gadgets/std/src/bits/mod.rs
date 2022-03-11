@@ -82,17 +82,6 @@ where
     }
 }
 
-// this trait allows to move out rotl and rotr from UIntGadget, in turn allowing to avoid specifying
-// for the compiler a field ConstraintF every time these methods are called, which requires a
-// verbose syntax (e.g., UIntGadget::<ConstraintF>::rotl(&gadget_variable, i)
-pub trait RotateUInt {
-    /// Rotate left `self` by `by` bits.
-    fn rotl(&self, by: usize) -> Self;
-
-    /// Rotate right `self` by `by` bits.
-    fn rotr(&self, by: usize) -> Self;
-}
-
 pub trait UIntGadget<ConstraintF: PrimeField, N: Sized>:
 Sized
 + Clone
@@ -108,8 +97,17 @@ Sized
 + ConstantGadget<N, ConstraintF>
 + Shr<usize>
 + Shl<usize>
-+ RotateUInt
 {
+    /// Rotate left `self` by `by` bits.
+    fn rotl<CS>(&self, by: usize, cs: CS) -> Self
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
+    /// Rotate right `self` by `by` bits.
+    fn rotr<CS>(&self, by: usize, cs: CS) -> Self
+        where
+            CS: ConstraintSystemAbstract<ConstraintF>;
+
     /// XOR `self` with `other`
     fn xor<CS>(&self, cs: CS, other: &Self) -> Result<Self, SynthesisError>
         where

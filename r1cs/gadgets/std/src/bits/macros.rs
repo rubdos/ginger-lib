@@ -2,7 +2,7 @@ macro_rules! impl_uint_gadget {
     ($type_name: ident, $bit_size: expr, $native_type: ident, $mod_name: ident) => {
         pub mod $mod_name {
 
-            use crate::{boolean::{Boolean, AllocatedBit}, fields::{fp::FpGadget, FieldGadget}, eq::{EqGadget, MultiEq}, ToBitsGadget, FromBitsGadget, ToBytesGadget, RotateUInt, UIntGadget, select::CondSelectGadget, bits::UInt8, Assignment, cmp::ComparisonGadget};
+            use crate::{boolean::{Boolean, AllocatedBit}, fields::{fp::FpGadget, FieldGadget}, eq::{EqGadget, MultiEq}, ToBitsGadget, FromBitsGadget, ToBytesGadget, UIntGadget, select::CondSelectGadget, bits::UInt8, Assignment, cmp::ComparisonGadget};
 
             use r1cs_core::{ConstraintSystemAbstract, SynthesisError, LinearCombination};
             use crate::alloc::{AllocGadget, ConstantGadget};
@@ -612,7 +612,7 @@ macro_rules! impl_uint_gadget {
             }
 
 
-            impl RotateUInt for $type_name {
+            /*impl RotateUInt for $type_name {
                 fn rotl(&self, by: usize) -> Self {
                     let by = by % $bit_size;
 
@@ -648,7 +648,7 @@ macro_rules! impl_uint_gadget {
                         value: self.value.map(|v| v.rotate_right(by as u32)),
                     }
                 }
-            }
+            }*/
 
             //this macro allows to implement the binary bitwise operations already available for Booleans (i.e., XOR, OR, AND)
             macro_rules! impl_binary_bitwise_operation {
@@ -693,7 +693,41 @@ macro_rules! impl_uint_gadget {
             }
 
             impl<ConstraintF: PrimeField> UIntGadget<ConstraintF, $native_type> for $type_name {
+                fn rotl<CS: ConstraintSystemAbstract<ConstraintF>>(&self, by: usize, _cs: CS) -> Self {
+                    let by = by % $bit_size;
 
+                    let bits = self
+                    .bits
+                    .iter()
+                    .skip($bit_size - by)
+                    .chain(self.bits.iter())
+                    .take($bit_size)
+                    .cloned()
+                    .collect();
+
+                    Self {
+                        bits,
+                        value: self.value.map(|v| v.rotate_left(by as u32)),
+                    }
+                }
+
+                fn rotr<CS: ConstraintSystemAbstract<ConstraintF>>(&self, by: usize, _cs: CS) -> Self {
+                    let by = by % $bit_size;
+
+                    let bits = self
+                    .bits
+                    .iter()
+                    .skip(by)
+                    .chain(self.bits.iter())
+                    .take($bit_size)
+                    .cloned()
+                    .collect();
+
+                    Self {
+                        bits,
+                        value: self.value.map(|v| v.rotate_right(by as u32)),
+                    }
+                }
                 impl_binary_bitwise_operation!(xor, ^, xor);
                 impl_binary_bitwise_operation!(or, |, or);
                 impl_binary_bitwise_operation!(and, &, and);
@@ -1316,7 +1350,7 @@ macro_rules! impl_uint_gadget {
 
                 use std::{ops::{Shl, Shr}, cmp::Ordering, cmp::max};
 
-                use crate::{alloc::{AllocGadget, ConstantGadget}, eq::{EqGadget, MultiEq}, boolean::Boolean, ToBitsGadget, FromBitsGadget, ToBytesGadget, RotateUInt, UIntGadget, select::CondSelectGadget, bits::UInt8, cmp::ComparisonGadget};
+                use crate::{alloc::{AllocGadget, ConstantGadget}, eq::{EqGadget, MultiEq}, boolean::Boolean, ToBitsGadget, FromBitsGadget, ToBytesGadget, UIntGadget, select::CondSelectGadget, bits::UInt8, cmp::ComparisonGadget};
 
 
                 fn test_uint_gadget_value(val: $native_type, alloc_val: &$type_name, check_name: &str) {
@@ -1762,18 +1796,18 @@ macro_rules! impl_uint_gadget {
 
                         let alloc_var = alloc_fn(&mut cs, "alloc var", var_type, value);
                         for i in 0..$bit_size {
-                            let rotl_var = alloc_var.rotl(i);
+                            let rotl_var = alloc_var.rotl(i, &mut cs);
                             test_uint_gadget_value(value.rotate_left(i as u32), &rotl_var, format!("left rotation by {}", i).as_str());
-                            let rotr_var = rotl_var.rotr(i);
+                            let rotr_var = rotl_var.rotr(i, &mut cs);
                             test_uint_gadget_value(value, &rotr_var, format!("right rotation by {}", i).as_str());
                         }
 
                         //check rotations are ok even if by > $bit_size
                         let by = $bit_size*2;
-                        let rotl_var = alloc_var.rotl(by);
+                        let rotl_var = alloc_var.rotl(by, &mut cs);
                         test_uint_gadget_value(value.rotate_left(by as u32), &rotl_var, format!("left rotation by {}", by).as_str());
 
-                        let rotr_var = alloc_var.rotl(by);
+                        let rotr_var = alloc_var.rotl(by, &mut cs);
                         test_uint_gadget_value(value.rotate_right(by as u32), &rotr_var, format!("right rotation by {}", by).as_str());
                     }
                 }

@@ -92,16 +92,16 @@ fn mixing_g<ConstraintF: PrimeField, CS: ConstraintSystemAbstract<ConstraintF>>(
         cs.ns(|| "mixing step 1"),
         &[v[a].clone(), v[b].clone(), x.clone()],
     )?;
-    v[d] = v[d].xor(cs.ns(|| "mixing step 2"), &v[a])?.rotr(R1);
+    v[d] = v[d].xor(cs.ns(|| "mixing step 2"), &v[a])?.rotr(R1, &mut cs);
     v[c] = UInt32::addmany(cs.ns(|| "mixing step 3"), &[v[c].clone(), v[d].clone()])?;
-    v[b] = v[b].xor(cs.ns(|| "mixing step 4"), &v[c])?.rotr(R2);
+    v[b] = v[b].xor(cs.ns(|| "mixing step 4"), &v[c])?.rotr(R2, &mut cs);
     v[a] = UInt32::addmany(
         cs.ns(|| "mixing step 5"),
         &[v[a].clone(), v[b].clone(), y.clone()],
     )?;
-    v[d] = v[d].xor(cs.ns(|| "mixing step 6"), &v[a])?.rotr(R3);
+    v[d] = v[d].xor(cs.ns(|| "mixing step 6"), &v[a])?.rotr(R3, &mut cs);
     v[c] = UInt32::addmany(cs.ns(|| "mixing step 7"), &[v[c].clone(), v[d].clone()])?;
-    v[b] = v[b].xor(cs.ns(|| "mixing step 8"), &v[c])?.rotr(R4);
+    v[b] = v[b].xor(cs.ns(|| "mixing step 8"), &v[c])?.rotr(R4, &mut cs);
 
     Ok(())
 }

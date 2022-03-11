@@ -7,7 +7,7 @@ use r1cs_std::boolean::Boolean;
 use r1cs_std::eq::MultiEq;
 use r1cs_std::uint32::UInt32;
 use r1cs_std::UInt8;
-use r1cs_std::{UIntGadget, RotateUInt, ToBitsGadget, FromBitsGadget};
+use r1cs_std::{UIntGadget, ToBitsGadget, FromBitsGadget};
 
 use crate::sha256::{sha256_ch_boolean, triop};
 
@@ -217,7 +217,7 @@ where
                 cs.ns(|| format!("first rotl(a + f + x + k) {}", i)),
                 &[a, f, selected_input_word, get_round_constants(i).0],
             )?
-            .rotl(S[i]);
+            .rotl(S[i], &mut *cs);
             UInt32::addmany(
                 cs.ns(|| format!("compute first T {}", i)),
                 &[result, e.clone()],
@@ -226,7 +226,7 @@ where
 
         a = e;
         e = d;
-        d = c.rotl(10);
+        d = c.rotl(10, &mut *cs);
         c = b;
         b = t;
 
@@ -245,7 +245,7 @@ where
                 cs.ns(|| format!("second rotl(a + f + x + k) {}", i)),
                 &[a_prime, f, selected_input_word, get_round_constants(i).1],
             )?
-            .rotl(S_PRIME[i]);
+            .rotl(S_PRIME[i], &mut *cs);
             UInt32::addmany(
                 cs.ns(|| format!("compute second T {}", i)),
                 &[result, e_prime.clone()],
@@ -254,7 +254,7 @@ where
 
         a_prime = e_prime;
         e_prime = d_prime;
-        d_prime = c_prime.rotl(10);
+        d_prime = c_prime.rotl(10, &mut *cs);
         c_prime = b_prime;
         b_prime = t;
     }

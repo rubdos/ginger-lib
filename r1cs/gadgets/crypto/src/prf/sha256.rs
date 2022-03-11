@@ -7,8 +7,8 @@ use algebra::PrimeField;
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::boolean::AllocatedBit;
 use r1cs_std::eq::MultiEq;
-use r1cs_std::uint32::UInt32;
-use r1cs_std::{boolean::Boolean, Assignment, UIntGadget, RotateUInt, ToBitsGadget, FromBitsGadget};
+use r1cs_std::{uint32::UInt32, UIntGadget};
+use r1cs_std::{boolean::Boolean, Assignment, ToBitsGadget, FromBitsGadget};
 
 #[allow(clippy::unreadable_literal)]
 const ROUND_CONSTANTS: [u32; 64] = [
@@ -112,15 +112,17 @@ where
 
         // Compute SHA256_sigma0(w[i-15])
         // s0 := (w[i-15] rightrotate 7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift 3)
-        let mut s0 = UInt32::rotr(&w[i - 15], 7);
-        s0 = s0.xor(cs.ns(|| "first xor for s0"), &UInt32::rotr(&w[i - 15], 18))?;
-        s0 = s0.xor(cs.ns(|| "second xor for s0"), &w[i - 15].clone()(3))?;
+        let mut s0 = UInt32::rotr(&w[i - 15], 7, &mut *cs);
+        let rotated_word = UInt32::rotr(&w[i - 15], 18, &mut *cs);
+        s0 = s0.xor(cs.ns(|| "first xor for s0"), &rotated_word)?;
+        s0 = s0.xor(cs.ns(|| "second xor for s0"), &w[i-15].clone().shr(3))?;
 
         // Compute SHA256_sigma1(w[i-2])
         // s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
-        let mut s1 = UInt32::rotr(&w[i - 2], 17);
-        s1 = s1.xor(cs.ns(|| "first xor for s1"), &UInt32::rotr(&w[i - 2], 19))?;
-        s1 = s1.xor(cs.ns(|| "second xor for s1"), &w[i - 2].clone().shr(10))?;
+        let mut s1 = UInt32::rotr(&w[i - 2], 17, &mut *cs);
+        let rotated_word = UInt32::rotr(&w[i - 2], 19, &mut *cs);
+        s1 = s1.xor(cs.ns(|| "first xor for s1"), &rotated_word)?;
+        s1 = s1.xor(cs.ns(|| "second xor for s1"), &w[i-2].clone().shr(10))?;
 
         // Compute W[i] = SHA256_sigma1(W[i-2]) + W[i-7] +
         // SHA256_sigma0(W[i-15]) + W[i-16] mod 2^32
@@ -176,9 +178,11 @@ where
 
         // S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
         let new_e = e.compute(cs.ns(|| "deferred e computation"), &[])?;
-        let mut s1 = new_e.rotr(6);
-        s1 = s1.xor(cs.ns(|| "first xor for s1"), &new_e.rotr(11))?;
-        s1 = s1.xor(cs.ns(|| "second xor for s1"), &new_e.rotr(25))?;
+        let mut s1 = new_e.rotr(6, &mut *cs);
+        let new_e_rotated = new_e.rotr(11, &mut *cs);
+        s1 = s1.xor(cs.ns(|| "first xor for s1"), &new_e_rotated)?;
+        let new_e_rotated = new_e.rotr(25, &mut *cs);
+        s1 = s1.xor(cs.ns(|| "second xor for s1"), &new_e_rotated)?;
 
         // ch := (e and f) xor ((not e) and g)
         let ch = sha256_ch_uint32(cs.ns(|| "ch"), &new_e, &f, &g)?;
@@ -194,9 +198,11 @@ where
 
         // S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
         let new_a = a.compute(cs.ns(|| "deferred a computation"), &[])?;
-        let mut s0 = new_a.rotr(2);
-        s0 = s0.xor(cs.ns(|| "first xor for s0"), &new_a.rotr(13))?;
-        s0 = s0.xor(cs.ns(|| "second xor for s0"), &new_a.rotr(22))?;
+        let mut s0 = new_a.rotr(2, &mut *cs);
+        let new_a_rotated = new_a.rotr(13, &mut *cs);
+        s0 = s0.xor(cs.ns(|| "first xor for s0"), &new_a_rotated)?;
+        let new_a_rotated = new_a.rotr(22, &mut *cs);
+        s0 = s0.xor(cs.ns(|| "second xor for s0"), &new_a_rotated)?;
 
         // maj := (a and b) xor (a and c) xor (b and c)
         let maj = sha256_maj_uint32(cs.ns(|| "maj"), &new_a, &b, &c)?;
