@@ -786,14 +786,14 @@ impl Boolean {
     /// In addition, the function also returns a flag which specifies if there are no "real" variables
     /// in the linear combination, that is if the sequence of Booleans comprises all constant values.
     /// Assumes that `bits` can be packed in a single field element (i.e., bits.len() <= ConstraintF::Params::CAPACITY).
-    pub fn bits_to_linear_combination<'a, ConstraintF:Field>(bits: impl Iterator<Item=&'a Boolean>, one: Variable) -> (LinearCombination<ConstraintF>, Option<ConstraintF>, bool)
+    pub fn bits_to_linear_combination<'a, ConstraintF:Field, CS: ConstraintSystemAbstract<ConstraintF>>(_cs: CS, bits: impl Iterator<Item=&'a Boolean>) -> (LinearCombination<ConstraintF>, Option<ConstraintF>, bool)
     {
         let mut lc = LinearCombination::zero();
         let mut coeff = ConstraintF::one();
         let mut lc_in_field = Some(ConstraintF::zero());
         let mut all_constants = true;
         for bit in bits {
-            lc = lc + &bit.lc(one, coeff);
+            lc = lc + &bit.lc(CS::one(), coeff);
             all_constants &= bit.is_constant();
             lc_in_field = match bit.get_value() {
                 Some(b) => lc_in_field.as_mut().map(|val| {

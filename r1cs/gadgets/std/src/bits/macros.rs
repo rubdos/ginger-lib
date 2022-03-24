@@ -1,16 +1,5 @@
 macro_rules! impl_uint_gadget {
-    ($type_name: ident, $bit_size: expr, $native_type: ident, $mod_name: ident) => {
-        pub mod $mod_name {
-
-            use crate::{boolean::{Boolean, AllocatedBit}, fields::{fp::FpGadget, FieldGadget}, eq::{EqGadget, MultiEq}, ToBitsGadget, FromBitsGadget, ToBytesGadget, UIntGadget, select::CondSelectGadget, bits::UInt8, Assignment, cmp::ComparisonGadget};
-
-            use r1cs_core::{ConstraintSystemAbstract, SynthesisError, LinearCombination};
-            use crate::alloc::{AllocGadget, ConstantGadget};
-
-            use algebra::{fields::{PrimeField, FpParameters, Field}, ToConstraintField};
-
-            use std::{borrow::Borrow, ops::{Shl, Shr}, convert::TryInto, cmp::Ordering};
-
+    ($type_name: ident, $bit_size: expr, $native_type: ident) => {
 
             #[derive(Clone, Debug)]
             pub struct $type_name {
@@ -611,45 +600,6 @@ macro_rules! impl_uint_gadget {
                 }
             }
 
-
-            /*impl RotateUInt for $type_name {
-                fn rotl(&self, by: usize) -> Self {
-                    let by = by % $bit_size;
-
-                    let bits = self
-                    .bits
-                    .iter()
-                    .skip($bit_size - by)
-                    .chain(self.bits.iter())
-                    .take($bit_size)
-                    .cloned()
-                    .collect();
-
-                    Self {
-                        bits,
-                        value: self.value.map(|v| v.rotate_left(by as u32)),
-                    }
-                }
-
-                fn rotr(&self, by: usize) -> Self {
-                    let by = by % $bit_size;
-
-                    let bits = self
-                    .bits
-                    .iter()
-                    .skip(by)
-                    .chain(self.bits.iter())
-                    .take($bit_size)
-                    .cloned()
-                    .collect();
-
-                    Self {
-                        bits,
-                        value: self.value.map(|v| v.rotate_right(by as u32)),
-                    }
-                }
-            }*/
-
             //this macro allows to implement the binary bitwise operations already available for Booleans (i.e., XOR, OR, AND)
             macro_rules! impl_binary_bitwise_operation {
                     ($func_name: ident, $op: tt, $boolean_func: tt) =>  {
@@ -813,7 +763,7 @@ macro_rules! impl_uint_gadget {
                             },
                         };
 
-                        let (current_lc, _, is_op_constant) = Boolean::bits_to_linear_combination(op.bits.iter(), CS::one());
+                        let (current_lc, _, is_op_constant) = Boolean::bits_to_linear_combination(&mut cs, op.bits.iter());
                         lc = lc + current_lc;
                         all_constants &= is_op_constant;
                     }
@@ -910,7 +860,7 @@ macro_rules! impl_uint_gadget {
                             None => None,
                         };
 
-                        let (current_lc, _, is_op_constant) = Boolean::bits_to_linear_combination(op.bits.iter(), CS::one());
+                        let (current_lc, _, is_op_constant) = Boolean::bits_to_linear_combination(&mut cs, op.bits.iter());
                         lc = lc + current_lc;
                         all_constants &= is_op_constant;
                     }
@@ -923,7 +873,7 @@ macro_rules! impl_uint_gadget {
                     }
                     let result_var = $type_name::alloc(cs.ns(|| "alloc result"), || result_value.ok_or(SynthesisError::AssignmentMissing))?;
 
-                    let (result_lc, _, _) = Boolean::bits_to_linear_combination(result_var.bits.iter(), CS::one());
+                    let (result_lc, _, _) = Boolean::bits_to_linear_combination(&mut cs, result_var.bits.iter());
 
                     cs.get_root().enforce_equal($bit_size, &lc, &result_lc);
 
@@ -1107,8 +1057,8 @@ macro_rules! impl_uint_gadget {
                     let max_value = ConstraintF::from($native_type::MAX) + ConstraintF::one();
                     // lc will be constructed as SUB(self,other)+2^$bit_size
                     let mut lc = (max_value, CS::one()).into();
-                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(self.bits.iter(), CS::one());
-                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(other.bits.iter(), CS::one());
+                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(&mut cs, self.bits.iter());
+                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(&mut cs, other.bits.iter());
                     lc = lc + self_lc - other_lc;
                     let all_constants = is_self_constant && is_other_constant;
 
@@ -1184,8 +1134,8 @@ macro_rules! impl_uint_gadget {
                      */
 
                     // lc is constructed as SUB(self, other)
-                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(self.bits.iter(), CS::one());
-                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(other.bits.iter(), CS::one());
+                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(&mut cs, self.bits.iter());
+                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(&mut cs, other.bits.iter());
                     let lc = self_lc - other_lc;
                     let all_constants = is_self_constant && is_other_constant;
 
@@ -1208,7 +1158,7 @@ macro_rules! impl_uint_gadget {
 
                     let diff_var = Self::alloc(cs.ns(|| "alloc diff"), || diff.ok_or(SynthesisError::AssignmentMissing))?;
 
-                    let (diff_lc, _, _) = Boolean::bits_to_linear_combination(diff_var.bits.iter(), CS::one());
+                    let (diff_lc, _, _) = Boolean::bits_to_linear_combination(&mut cs, diff_var.bits.iter());
 
                     cs.get_root().enforce_equal($bit_size, &lc, &diff_lc);
 
@@ -1254,9 +1204,9 @@ macro_rules! impl_uint_gadget {
                         self.sub(multi_eq.ns(|| "a - b mod 2^n"), other)?
                     };
 
-                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(self.bits.iter(), CS::one());
-                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(other.bits.iter(), CS::one());
-                    let (diff_lc, _, is_diff_constant) = Boolean::bits_to_linear_combination(diff_var.bits.iter(), CS::one());
+                    let (self_lc, _, is_self_constant) = Boolean::bits_to_linear_combination(&mut cs, self.bits.iter());
+                    let (other_lc, _, is_other_constant) = Boolean::bits_to_linear_combination(&mut cs, other.bits.iter());
+                    let (diff_lc, _, is_diff_constant) = Boolean::bits_to_linear_combination(&mut cs, diff_var.bits.iter());
 
                     let delta_lc = self_lc - other_lc - diff_lc;
                     let all_constants = is_self_constant && is_other_constant && is_diff_constant;
@@ -1340,7 +1290,8 @@ macro_rules! impl_uint_gadget {
 
 
             #[cfg(test)]
-            mod test {
+            paste::item! {
+            mod [<test_ $type_name:lower>] {
                 use super::$type_name;
                 use rand::{Rng, thread_rng};
                 use algebra::{fields::tweedle::Fr, Group, Field, FpParameters, PrimeField};
@@ -2686,7 +2637,6 @@ macro_rules! impl_uint_gadget {
                 }
 
             }
-
             }
     }
 }

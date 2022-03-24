@@ -138,7 +138,7 @@ impl<T: EqGadget<ConstraintF>, ConstraintF: Field> EqGadget<ConstraintF> for [T]
 // element whose little-endian bit representation is `self` (resp. other).
 // The function returns also a-b over the field (wrapped in an Option) and a flag
 // that specifies if all the bits in both `self` and `other` are constants.
-fn compute_diff<ConstraintF, CS>(self_bits: &[Boolean], mut _cs: CS, other_bits: &[Boolean]) -> (LinearCombination<ConstraintF>, Option<ConstraintF>, bool)
+fn compute_diff<ConstraintF, CS>(self_bits: &[Boolean], mut cs: CS, other_bits: &[Boolean]) -> (LinearCombination<ConstraintF>, Option<ConstraintF>, bool)
     where
         ConstraintF: PrimeField,
         CS: ConstraintSystemAbstract<ConstraintF>,
@@ -147,8 +147,8 @@ fn compute_diff<ConstraintF, CS>(self_bits: &[Boolean], mut _cs: CS, other_bits:
     assert!(self_bits.len() <= field_bits);
     assert!(other_bits.len() <= field_bits);
 
-    let (self_lc, self_in_field, is_self_constant) = Boolean::bits_to_linear_combination(self_bits.iter(), CS::one());
-    let (other_lc, other_in_field, is_other_constant) = Boolean::bits_to_linear_combination(other_bits.iter(), CS::one());
+    let (self_lc, self_in_field, is_self_constant) = Boolean::bits_to_linear_combination(&mut cs, self_bits.iter());
+    let (other_lc, other_in_field, is_other_constant) = Boolean::bits_to_linear_combination(&mut cs, other_bits.iter());
 
     let diff_in_field = match (self_in_field, other_in_field) {
         (Some(self_val), Some(other_val)) => Some(self_val-other_val),

@@ -73,7 +73,7 @@ pub mod prelude {
     pub use crate::{
         alloc::*,
         bits::{
-            boolean::Boolean, uint32::UInt32, UInt8, FromBitsGadget, ToBitsGadget,
+            boolean::Boolean, uint::*, UInt8, FromBitsGadget, ToBitsGadget,
             ToBytesGadget, UIntGadget,
         },
         eq::*,

@@ -12,11 +12,22 @@ pub mod boolean;
 
 #[macro_use]
 pub mod macros;
-impl_uint_gadget!(U8, 8, u8, uint8);
-impl_uint_gadget!(UInt64, 64, u64, uint64);
-impl_uint_gadget!(UInt32, 32, u32, uint32);
-impl_uint_gadget!(UInt16, 16, u16, uint16);
-impl_uint_gadget!(UInt128, 128, u128, uint128);
+pub mod uint {
+    use crate::{boolean::{Boolean, AllocatedBit}, fields::{fp::FpGadget, FieldGadget}, eq::{EqGadget, MultiEq}, ToBitsGadget, FromBitsGadget, ToBytesGadget, UIntGadget, select::CondSelectGadget, bits::UInt8, Assignment, cmp::ComparisonGadget};
+
+    use r1cs_core::{ConstraintSystemAbstract, SynthesisError, LinearCombination};
+    use crate::alloc::{AllocGadget, ConstantGadget};
+
+    use algebra::{fields::{PrimeField, FpParameters, Field}, ToConstraintField};
+
+    use std::{borrow::Borrow, ops::{Shl, Shr}, convert::TryInto, cmp::Ordering};
+
+    impl_uint_gadget!(U8, 8, u8);
+    impl_uint_gadget!(UInt64, 64, u64);
+    impl_uint_gadget!(UInt32, 32, u32);
+    impl_uint_gadget!(UInt16, 16, u16);
+    impl_uint_gadget!(UInt128, 128, u128);
+}
 
 // This type alias allows to implement byte serialization/de-serialization functions inside the
 // `impl_uint_gadget` macro.
@@ -24,7 +35,7 @@ impl_uint_gadget!(UInt128, 128, u128, uint128);
 // type for byte serialization/de-serialization functions. The type alias allows to employ a type
 // defined outside the macro in the interface of byte serialization functions, hence allowing to
 // implement them inside the `impl_uint_gadget` macro
-pub type UInt8 = uint8::U8;
+pub type UInt8 = uint::U8;
 
 pub trait ToBitsGadget<ConstraintF: Field> {
     fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(

@@ -7,7 +7,7 @@ use algebra::PrimeField;
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::boolean::AllocatedBit;
 use r1cs_std::eq::MultiEq;
-use r1cs_std::{uint32::UInt32, UIntGadget};
+use r1cs_std::{uint::UInt32, UIntGadget};
 use r1cs_std::{boolean::Boolean, Assignment, ToBitsGadget, FromBitsGadget};
 
 #[allow(clippy::unreadable_literal)]

@@ -5,7 +5,7 @@ use algebra::PrimeField;
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use r1cs_std::boolean::Boolean;
 use r1cs_std::eq::MultiEq;
-use r1cs_std::uint32::UInt32;
+use r1cs_std::uint::UInt32;
 use r1cs_std::UInt8;
 use r1cs_std::{UIntGadget, ToBitsGadget, FromBitsGadget};
 
