@@ -946,7 +946,16 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
             // 1 != 0; 0 != 1
             (Constant(true), Constant(false)) | (Constant(false), Constant(true)) => return Ok(()),
             // false == false and true == true
-            (Constant(_), Constant(_)) => return Err(SynthesisError::AssignmentMissing),
+            (Constant(_), Constant(_)) => {
+                if should_enforce.is_constant() {
+                    return if should_enforce.get_value().unwrap() {
+                        Err(SynthesisError::AssignmentMissing)
+                    } else {
+                        Ok(())
+                    };
+                }
+                LinearCombination::zero()
+            },
             // 1 - a
             (Constant(true), Is(a)) | (Is(a), Constant(true)) => {
                 LinearCombination::zero() + one - a.get_variable()
@@ -976,10 +985,33 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
         if let Constant(false) = should_enforce {
             Ok(())
         } else {
+            // we need to enforce that difference != 0 if should_enforce is true.
+            // we let the prover allocate a variable d and we enforce that
+            // difference * d = should_enforce
+            // in this way, if difference = 0 and should_enforce = 1, the constraint is
+            // unsatisfiable for any value of d; otherwise, the prover can always find a value for
+            // d that satisfies the constraint
+            let diff_value = cs.eval_lc(&difference)?;
+            let d = cs.alloc(
+                || "alloc d",
+                || {
+                    Ok(
+                        if should_enforce.get_value().ok_or(SynthesisError::AssignmentMissing)? {
+                            // if should_enforce is true, then d must be the inverse of difference
+                            diff_value.ok_or(SynthesisError::AssignmentMissing)?
+                                .inverse().unwrap_or(ConstraintF::zero())
+                        } else {
+                            // otherwise we set d to zero to trivially satisfy the constraint
+                            ConstraintF::zero()
+                        }
+                    )
+                }
+            )?;
+
             cs.enforce(
-                || "conditional_equals",
-                |lc| difference + &lc,
-                |lc| should_enforce.lc(one, ConstraintF::one()) + &lc,
+                || "conditional_not_equal",
+                |lc| &difference + &lc,
+                |lc| lc + (ConstraintF::one(), d),
                 |lc| should_enforce.lc(one, ConstraintF::one()) + &lc,
             );
             Ok(())
@@ -1319,59 +1351,109 @@ mod test {
     }
 
     #[test]
-    fn test_conditional_enforce_equal() {
+    fn test_conditional_enforce_equal_functions() {
+        enum TestedFunction {
+            ConditionalEnforceEqual,
+            ConditionalEnforceNotEqual
+        }
         for a_bool in [false, true].iter().cloned() {
             for b_bool in [false, true].iter().cloned() {
                 for a_neg in [false, true].iter().cloned() {
                     for b_neg in [false, true].iter().cloned() {
-                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+                        for a_const in [false, true].iter().cloned() {
+                            for b_const in [false, true].iter().cloned() {
+                                for cond_const in [false, true].iter().cloned() {
+                                    for tested_function in [TestedFunction::ConditionalEnforceEqual, TestedFunction::ConditionalEnforceNotEqual].iter() {
+                                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
-                        // First test if constraint system is satisfied
-                        // when we do want to enforce the condition.
-                        let mut a: Boolean = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(a_bool))
-                            .unwrap()
-                            .into();
-                        let mut b: Boolean = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(b_bool))
-                            .unwrap()
-                            .into();
+                                        let alloc_variables = |cs: &mut ConstraintSystem<Fr>| {
+                                            let a: Boolean =
+                                                if a_const {
+                                                    Boolean::constant(a_bool)
+                                                } else {
+                                                    AllocatedBit::alloc(cs.ns(|| "a"), || Ok(a_bool))
+                                                        .unwrap()
+                                                        .into()
+                                                };
+                                            let b: Boolean =
+                                                if b_const {
+                                                    Boolean::constant(b_bool)
+                                                } else {
+                                                    AllocatedBit::alloc(cs.ns(|| "b"), || Ok(b_bool))
+                                                        .unwrap()
+                                                        .into()
+                                                };
 
-                        if a_neg {
-                            a = a.not();
+                                            let true_cond =
+                                                if cond_const {
+                                                    Boolean::constant(true)
+                                                } else {
+                                                    AllocatedBit::alloc(cs.ns(|| "should_enforce"), || Ok(true))
+                                                        .unwrap()
+                                                        .into()
+                                                };
+                                            (a, b, true_cond)
+                                        };
+
+                                        // First test if constraint system is satisfied
+                                        // when we do want to enforce the condition.
+                                        let (mut a, mut b, true_cond) = alloc_variables(&mut cs);
+
+                                        if a_neg {
+                                            a = a.not();
+                                        }
+                                        if b_neg {
+                                            b = b.not();
+                                        }
+
+                                        let (must_be_satisfied, enforce_ret) = match tested_function {
+                                            TestedFunction::ConditionalEnforceEqual =>
+                                                (
+                                                    (a_bool ^ a_neg) == (b_bool ^ b_neg),
+                                                    a.conditional_enforce_equal(&mut cs, &b, &true_cond)
+                                                ),
+                                            TestedFunction::ConditionalEnforceNotEqual => (
+                                                (a_bool ^ a_neg) != (b_bool ^ b_neg),
+                                                a.conditional_enforce_not_equal(&mut cs, &b, &true_cond)
+                                            ),
+                                        };
+                                        if a_const && b_const && cond_const && !must_be_satisfied {
+                                            // in this case the function returns an error rather than
+                                            // unsatisfied constraints
+                                            enforce_ret.unwrap_err();
+                                        } else {
+                                            enforce_ret
+                                                .unwrap();
+                                            assert_eq!(cs.is_satisfied(), must_be_satisfied);
+                                        }
+
+                                        // Now test if constraint system is satisfied even
+                                        // when we don't want to enforce the condition.
+                                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
+
+                                        let (mut a, mut b, true_cond) = alloc_variables(&mut cs);
+
+                                        if a_neg {
+                                            a = a.not();
+                                        }
+                                        if b_neg {
+                                            b = b.not();
+                                        }
+
+                                        let false_cond = true_cond.not();
+
+                                        match tested_function {
+                                            TestedFunction::ConditionalEnforceEqual => a.conditional_enforce_equal(&mut cs, &b, &false_cond)
+                                                .unwrap(),
+                                            TestedFunction::ConditionalEnforceNotEqual => a.conditional_enforce_not_equal(&mut cs, &b, &false_cond)
+                                                .unwrap(),
+                                        }
+
+                                        assert!(cs.is_satisfied());
+                                    }
+                                }
+                            }
                         }
-                        if b_neg {
-                            b = b.not();
-                        }
-
-                        a.conditional_enforce_equal(&mut cs, &b, &Boolean::constant(true))
-                            .unwrap();
-
-                        assert_eq!(cs.is_satisfied(), (a_bool ^ a_neg) == (b_bool ^ b_neg));
-
-                        // Now test if constraint system is satisfied even
-                        // when we don't want to enforce the condition.
-                        let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
-
-                        let mut a: Boolean = AllocatedBit::alloc(cs.ns(|| "a"), || Ok(a_bool))
-                            .unwrap()
-                            .into();
-                        let mut b: Boolean = AllocatedBit::alloc(cs.ns(|| "b"), || Ok(b_bool))
-                            .unwrap()
-                            .into();
-
-                        if a_neg {
-                            a = a.not();
-                        }
-                        if b_neg {
-                            b = b.not();
-                        }
-
-                        let false_cond = AllocatedBit::alloc(cs.ns(|| "cond"), || Ok(false))
-                            .unwrap()
-                            .into();
-                        a.conditional_enforce_equal(&mut cs, &b, &false_cond)
-                            .unwrap();
-
-                        assert!(cs.is_satisfied());
                     }
                 }
             }

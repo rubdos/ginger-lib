@@ -423,6 +423,10 @@ impl<ConstraintF: PrimeField, CS: ConstraintSystemAbstract<ConstraintF>>
     fn num_constraints(&self) -> usize {
         self.cs.num_constraints()
     }
+
+    fn eval_lc(&self, lc: &LinearCombination<ConstraintF>) -> Result<Option<ConstraintF>, SynthesisError> {
+        self.cs.eval_lc(lc)
+    }
 }
 
 #[cfg(test)]

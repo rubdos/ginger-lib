@@ -73,6 +73,12 @@ pub trait ConstraintSystemAbstract<F: Field>: Sized {
 
     /// Output the number of constraints in the system.
     fn num_constraints(&self) -> usize;
+
+    /// Evaluate linear combination lc with the values assigned to variables of lc
+    /// in the constraint system `self`. Returns an error if one variable of lc is not found among
+    /// allocated variables in `self`. The result is None if variables have not been assigned to a
+    /// value yet
+    fn eval_lc(&self, lc: &LinearCombination<F>) -> Result<Option<F>, SynthesisError>;
 }
 
 /// Defines debugging functionalities for a constraint system, which allow to verify which
@@ -346,14 +352,48 @@ impl<F: Field> ConstraintSystemAbstract<F> for ConstraintSystem<F> {
     fn num_constraints(&self) -> usize {
         self.num_constraints
     }
+
+    fn eval_lc(&self, lc: &LinearCombination<F>) -> Result<Option<F>, SynthesisError> {
+        let mut acc = F::zero();
+
+        if self.is_in_setup_mode() {
+            // in setup mode there are for sure no assignment to variables, so we can return None
+            return Ok(None)
+        }
+
+        for &(ref var, coeff) in lc.as_ref() {
+            let mut tmp = match var.0 {
+                Index::Input(index) => *self.input_assignment.get(index).ok_or(
+                    SynthesisError::Other(
+                        format!(
+                            "no public input variable with index {} found in the constraint system"
+                            , index)))?,
+                Index::Aux(index) => *self.aux_assignment.get(index).ok_or(
+                    SynthesisError::Other(
+                        format!(
+                            "no private variable with index {} found in the constraint system"
+                            , index)))?,
+            };
+
+            tmp.mul_assign(coeff);
+            acc.add_assign(tmp);
+        }
+
+        Ok(Some(acc))
+    }
 }
 
 impl<F: Field> ConstraintSystemDebugger<F> for ConstraintSystem<F> {
     fn which_is_unsatisfied(&self) -> Option<&str> {
         for i in 0..self.num_constraints {
-            let mut a = Self::eval_lc(&self.at[i], &self.input_assignment, &self.aux_assignment);
-            let b = Self::eval_lc(&self.bt[i], &self.input_assignment, &self.aux_assignment);
-            let c = Self::eval_lc(&self.ct[i], &self.input_assignment, &self.aux_assignment);
+            // Note that the following `eval_lc` calls cannot return an error, as `get_constraint`
+            // constructs a LinearCombination whose variables are necessarily in `self`.
+            // Furthermore, we assume that this function is never called in setup mode, therefore
+            // `eval_lc` should never return None.
+            // Thus, we can safely unwrap the return values of `eval_lc` invocations
+            let mut a = self.eval_lc(&Self::get_constraint(&self.at, i)).unwrap().unwrap();
+            let b = self.eval_lc(&Self::get_constraint(&self.bt, i)).unwrap().unwrap();
+            let c = self.eval_lc(&Self::get_constraint(&self.ct, i)).unwrap().unwrap();
             a.mul_assign(&b);
 
             if a != c {
@@ -455,20 +495,19 @@ impl<F: Field> ConstraintSystem<F> {
             }
         }
     }
-    fn eval_lc(terms: &[(F, Index)], inputs: &[F], aux: &[F]) -> F {
-        let mut acc = F::zero();
 
-        for &(ref coeff, idx) in terms {
-            let mut tmp = match idx {
-                Index::Input(index) => inputs[index],
-                Index::Aux(index) => aux[index],
-            };
-
-            tmp.mul_assign(coeff);
-            acc.add_assign(tmp);
+    fn get_constraint(
+        constraints: &[Vec<(F, Index)>],
+        this_constraint: usize,
+    ) -> LinearCombination<F> {
+        let constraint = &constraints[this_constraint];
+        // build a linear combination representing the constraint
+        let mut lc = LinearCombination::zero();
+        for (coeff, idx) in constraint {
+            lc += (*coeff, Variable(idx.clone()));
         }
 
-        acc
+        lc
     }
 }
 
@@ -556,6 +595,10 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F>
     #[inline]
     fn num_constraints(&self) -> usize {
         self.0.num_constraints()
+    }
+
+    fn eval_lc(&self, lc: &LinearCombination<F>) -> Result<Option<F>, SynthesisError> {
+        self.0.eval_lc(lc)
     }
 }
 
@@ -649,6 +692,10 @@ impl<F: Field, CS: ConstraintSystemAbstract<F>> ConstraintSystemAbstract<F> for 
     #[inline]
     fn num_constraints(&self) -> usize {
         (**self).num_constraints()
+    }
+
+    fn eval_lc(&self, lc: &LinearCombination<F>) -> Result<Option<F>, SynthesisError> {
+        (**self).eval_lc(lc)
     }
 }
 
