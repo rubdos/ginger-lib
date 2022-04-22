@@ -581,6 +581,7 @@ impl Boolean {
         }
     }
 
+    /// Compute the Boolean AND of `bits`
     pub fn kary_and<ConstraintF, CS>(mut cs: CS, bits: &[Self]) -> Result<Self, SynthesisError>
     where
         ConstraintF: Field,
@@ -722,15 +723,18 @@ impl Boolean {
 
         let mut bits_iter = bits.iter().rev(); // Iterate in big-endian
 
-        // Runs of ones in r
+        // Runs of ones in b
         let mut last_run = Boolean::constant(true);
         let mut current_run = vec![];
 
+        // compute number of bits necessary to represent element
         let mut element_num_bits = 0;
         for _ in BitIterator::without_leading_zeros(b) {
             element_num_bits += 1;
         }
 
+        // check that the most significant bits of `bits` exceeding `element_num_bits` are all zero,
+        // computing the Boolean OR of such bits and enforce the result to be 0
         if bits.len() > element_num_bits {
             let mut or_result = Boolean::constant(false);
             for (i, should_be_zero) in bits[element_num_bits..].into_iter().enumerate() {
@@ -743,15 +747,29 @@ impl Boolean {
             }
             or_result.enforce_equal(cs.ns(|| "enforce equal"), &Boolean::constant(false))?;
         }
-
+        // compare the least significant `element_num_bits` bits of `bits` with the bit
+        // representation of `element`
         for (i, (b, a)) in BitIterator::without_leading_zeros(b)
             .zip(bits_iter.by_ref())
             .enumerate()
         {
             if b {
-                // This is part of a run of ones.
+                // This is part of a run of ones. Save in `current_run` the bits of `bits`
+                // corresponding to such bit 1 in `b`
                 current_run.push(a.clone());
             } else {
+                // The bit of `element` is 0. Therefore, in order for `bits` to be smaller than `b`,
+                // either some bits of `bits` corresponding to the last run of ones were 0
+                // (and to check this we compute the boolean AND of all such bits, saving it
+                // in `last_run`) or the current bit `a` of `bits` must be 0. Thus, we enforce
+                // that either `a` or `last_run` must be 0 with an `enforce_nand`.
+                // Note that when `last_run` becomes 0, which happens as soon as there is a bit 0
+                // in `bits` whose corresponding bit in `element` is 1, `last_run`` will always
+                // remain 0 for the rest of the loop; thus, in this case the `enforce_nand`
+                // will hold independently from the remaining bits of `bits`, which is correct as
+                // once a bit difference is spot between the 2 bit representations, then the lesser
+                // significant bits do not affect the outcome of the comparison
+
                 if !current_run.is_empty() {
                     // This is the start of a run of zeros, but we need
                     // to k-ary AND against `last_run` first.
@@ -886,6 +904,7 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
             (Constant(true), Constant(true)) | (Constant(false), Constant(false)) => return Ok(()),
             // false != true
             (Constant(_), Constant(_)) => {
+                // in this case the enforcement should fail, unless `should_enforce` is false
                 if should_enforce.is_constant() {
                     return if should_enforce.get_value().unwrap() {
                         Err(SynthesisError::AssignmentMissing)
@@ -893,9 +912,10 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
                         Ok(())
                     }
                 }
-                LinearCombination::zero() + CS::one() // set difference != 0
-            },
-            // 1 - a
+                // set difference != 0 to ensure the constraint enforced later on is violated if
+                // `should_enforce` is true
+                LinearCombination::zero() + CS::one()
+            }// 1 - a
             (Constant(true), Is(a)) | (Is(a), Constant(true)) => {
                 LinearCombination::zero() + one - a.get_variable()
             }
@@ -948,12 +968,15 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for Boolean {
             // false == false and true == true
             (Constant(_), Constant(_)) => {
                 if should_enforce.is_constant() {
+                    // in this case the enforcement should fail, unless `should_enforce` is false
                     return if should_enforce.get_value().unwrap() {
                         Err(SynthesisError::AssignmentMissing)
                     } else {
                         Ok(())
                     };
                 }
+                // set difference = 0 to ensure the constraint enforced later on is violated if
+                // `should_enforce` is true
                 LinearCombination::zero()
             },
             // 1 - a

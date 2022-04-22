@@ -156,7 +156,9 @@ macro_rules! impl_uint_gadget {
                     Ok(())
                 }
 
-                // Helper function that constructs self from an iterator over Booleans.
+                // Helper function that constructs `Self` from an iterator over Booleans.
+                // The Booleans provided by the iterator are considered as the little-endian bit
+                // representation of `Self`.
                 // It is employed as a building block by the public functions of the `FromBitsGadget`
                 fn from_bit_iterator<'a, ConstraintF, CS>(_cs: CS, bits_iter: impl Iterator<Item=&'a Boolean>) -> Result<Self, SynthesisError>
                 where
@@ -233,11 +235,11 @@ macro_rules! impl_uint_gadget {
                     CS: ConstraintSystemAbstract<ConstraintF>,
 
                 {
-                    let field_bits = ConstraintF::Params::CAPACITY as usize;
+                    let capacity_bits = ConstraintF::Params::CAPACITY as usize;
                     // max_overflow_bits are the maximum number of non-zero bits a `Self` element
                     // can have to be multiplied to another `Self` without overflowing the field
-                    let max_overflow_bits = field_bits - $bit_size;
-                    // given a base b = 2^m, where m=2^max_overflow_bits, the `other` operand is
+                    let max_overflow_bits = capacity_bits - $bit_size;
+                    // given a base b = 2^m, where m=max_overflow_bits, the `other` operand is
                     // represented in base b with digits of m bits. Then, the product self*other
                     // is computed by the following summation:
                     // sum_{i from 0 to h-1} ((self*b^i) % 2^$bit_size * digit_i), where h is the
@@ -255,7 +257,7 @@ macro_rules! impl_uint_gadget {
                         let result_bits = if no_carry {
                             // ensure that tmp_result can be represented with $bit_size bits to
                             // ensure that no native type overflow has happened in the multiplication
-                            tmp_result.to_bits_with_length_restriction(cs.ns(|| format!("to bits for digit {}", i)), field_bits + 1 - $bit_size)?
+                            tmp_result.to_bits_with_length_restriction(cs.ns(|| format!("to bits for digit {}", i)), capacity_bits + 1 - $bit_size)?
                         } else {
                             let result_bits = tmp_result.to_bits_with_length_restriction(cs.ns(|| format!("to bits for digit {}", i)), 1)?;
                             result_bits
@@ -531,9 +533,17 @@ macro_rules! impl_uint_gadget {
                     first: &Self,
                     second: &Self,
                 ) -> Result<Self, SynthesisError> {
-                    let bits = first.bits.iter().zip(second.bits.iter()).enumerate().map(|(i, (t, f))| Boolean::conditionally_select(cs.ns(|| format!("cond select bit {}", i)), cond, t, f)).collect::<Result<Vec<_>, SynthesisError>>()?;
+                    let bits = first.bits.iter()
+                    .zip(second.bits.iter())
+                    .enumerate()
+                    .map(|(i, (t, f))|
+                    Boolean::conditionally_select(
+                        cs.ns(|| format!("cond select bit {}", i)), cond, t, f)
+                    ).collect::<Result<Vec<_>, SynthesisError>>()?;
 
-                    assert_eq!(bits.len(), $bit_size); // this assert should always be verified if first and second are built only with public methods
+                    // this assert should always be verified if first and second are built only
+                    // with public methods
+                    assert_eq!(bits.len(), $bit_size);
 
                     let value = match cond.get_value() {
                         Some(cond_bit) => if cond_bit {first.get_value()} else {second.get_value()},
@@ -698,14 +708,14 @@ macro_rules! impl_uint_gadget {
                     M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>>
                 {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
+                    let capacity_bits = (ConstraintF::Params::CAPACITY) as usize;
                     // in this case it is not possible to enforce the correctness of the addition
                     // of at least 2 elements for the field ConstraintF
-                    assert!(field_bits > $bit_size);
+                    assert!(capacity_bits > $bit_size);
                     assert!(num_operands >= 2); // Weird trivial cases that should never happen
 
                     let overflow_bits = (num_operands as f64).log2().ceil() as usize;
-                    if field_bits < $bit_size + overflow_bits {
+                    if capacity_bits < $bit_size + overflow_bits {
                         // in this case addition of num_operands elements over field would overflow,
                         // thus it would not be possible to ensure the correctness of the result.
                         // Therefore, the operands are split in smaller slices, and the sum is
@@ -713,7 +723,7 @@ macro_rules! impl_uint_gadget {
 
                         // given the field ConstraintF and the $bit_size, compute the maximum number
                         // of operands for which we can enforce correctness of the result
-                        let max_overflow_bits = field_bits - $bit_size;
+                        let max_overflow_bits = capacity_bits - $bit_size;
                         let max_num_operands = 1usize << max_overflow_bits;
                         handle_numoperands_opmany!(addmany, cs, operands, max_num_operands);
                     }
@@ -806,14 +816,14 @@ macro_rules! impl_uint_gadget {
                     CS: ConstraintSystemAbstract<ConstraintF>,
                     M: ConstraintSystemAbstract<ConstraintF, Root = MultiEq<ConstraintF, CS>> {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
+                    let capacity_bits = (ConstraintF::Params::CAPACITY) as usize;
                     // in this case it is not possible to enforce the correctness of the addition
                     // of at least 2 elements for the field ConstraintF
-                    assert!(field_bits > $bit_size);
+                    assert!(capacity_bits > $bit_size);
                     assert!(num_operands >= 2); // Weird trivial cases that should never happen
 
                     let overflow_bits = (num_operands as f64).log2().ceil() as usize;
-                    if field_bits < $bit_size + overflow_bits {
+                    if capacity_bits < $bit_size + overflow_bits {
                         // in this case addition of num_operands elements over field would overflow,
                         // thus it would not be possible to ensure the correctness of the result.
                         // Therefore, the operands are split in smaller slices, and the sum is
@@ -821,7 +831,7 @@ macro_rules! impl_uint_gadget {
 
                         // given the field ConstraintF and the $bit_size, compute the maximum number
                         // of operands for which we can enforce correctness of the result
-                        let max_overflow_bits = field_bits - $bit_size;
+                        let max_overflow_bits = capacity_bits - $bit_size;
                         let max_num_operands = 1usize << max_overflow_bits;
                         handle_numoperands_opmany!(addmany_nocarry, cs, operands, max_num_operands);
                     }
@@ -883,7 +893,7 @@ macro_rules! impl_uint_gadget {
                 fn mulmany<CS>(mut cs: CS, operands: &[Self]) -> Result<Self, SynthesisError>
                 where CS: ConstraintSystemAbstract<ConstraintF> {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
+                    let capacity_bits = (ConstraintF::Params::CAPACITY) as usize;
                     assert!(num_operands >= 2);
 
                     // corner case: check if all operands are constants before allocating any variable
@@ -904,14 +914,14 @@ macro_rules! impl_uint_gadget {
                         return Ok($type_name::from_value(cs.ns(|| "alloc constant result"), &result_value.unwrap()));
                     }
 
-                    assert!(field_bits > $bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
+                    assert!(capacity_bits > $bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
 
-                    if field_bits < 2*$bit_size {
+                    if capacity_bits < 2*$bit_size {
                         return $type_name::mulmany_with_double_and_add(cs.ns(|| "double and add"), operands, false);
                     }
 
-                    if field_bits < num_operands*$bit_size {
-                        let max_num_operands = field_bits/$bit_size;
+                    if capacity_bits < num_operands*$bit_size {
+                        let max_num_operands = capacity_bits/$bit_size;
                         handle_numoperands_opmany!(mulmany, cs, operands, max_num_operands);
                     }
 
@@ -942,7 +952,7 @@ macro_rules! impl_uint_gadget {
                         result = result.mul(cs.ns(|| format!("mul op {}", i)), &field_op)?;
                     }
 
-                    let skip_leading_bits = field_bits + 1 - num_operands*$bit_size;
+                    let skip_leading_bits = capacity_bits + 1 - num_operands*$bit_size;
                     let result_bits = result.to_bits_with_length_restriction(cs.ns(|| "unpack result field element"), skip_leading_bits)?;
                     let result_lsbs = result_bits
                     .iter()
@@ -956,7 +966,7 @@ macro_rules! impl_uint_gadget {
                 fn mulmany_nocarry<CS>(mut cs: CS, operands: &[Self]) -> Result<Self, SynthesisError>
                 where CS: ConstraintSystemAbstract<ConstraintF> {
                     let num_operands = operands.len();
-                    let field_bits = (ConstraintF::Params::CAPACITY) as usize;
+                    let capacity_bits = (ConstraintF::Params::CAPACITY) as usize;
                     assert!(num_operands >= 2);
 
                     // corner case: check if all operands are constants before allocating any variable
@@ -986,14 +996,14 @@ macro_rules! impl_uint_gadget {
                         }
                     }
 
-                    assert!(field_bits > $bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
+                    assert!(capacity_bits > $bit_size); // minimum requirement on field size to compute multiplication of at least 2 elements without overflowing the field
 
-                    if field_bits < 2*$bit_size {
+                    if capacity_bits < 2*$bit_size {
                         return $type_name::mulmany_with_double_and_add(cs.ns(|| "double and add"), operands, true);
                     }
 
-                    if field_bits < num_operands*$bit_size {
-                        let max_num_operands = field_bits/$bit_size;
+                    if capacity_bits < num_operands*$bit_size {
+                        let max_num_operands = capacity_bits/$bit_size;
                         handle_numoperands_opmany!(mulmany_nocarry, cs, operands, max_num_operands);
                     }
 
@@ -1024,7 +1034,7 @@ macro_rules! impl_uint_gadget {
                         result = result.mul(cs.ns(|| format!("mul op {}", i)), &field_op)?;
                     }
 
-                    let skip_leading_bits = field_bits + 1 - $bit_size; // we want to verify that the field element for the product of operands can be represented with $bit_size bits to ensure that there is no overflow
+                    let skip_leading_bits = capacity_bits + 1 - $bit_size; // we want to verify that the field element for the product of operands can be represented with $bit_size bits to ensure that there is no overflow
                     let result_bits = result.to_bits_with_length_restriction(cs.ns(|| "unpack result field element"), skip_leading_bits)?;
                     assert_eq!(result_bits.len(), $bit_size);
                     $type_name::from_bits(cs.ns(|| "packing result"), &result_bits[..])
@@ -1862,7 +1872,7 @@ macro_rules! impl_uint_gadget {
                     test_uint_gadget_value(result_value, &result_var, "result correctness");
                     assert!(cs.is_satisfied());
 
-                    // negative test
+                    // negative test: change a bit of the result to verify that constraints no longer hold
                     let bit_gadget_path = "add operands/alloc result bit 0/boolean";
                     if cs.get(bit_gadget_path).is_zero() {
                         cs.set(bit_gadget_path, Fr::one());
@@ -1916,8 +1926,9 @@ macro_rules! impl_uint_gadget {
                     assert!(cs.is_satisfied());
 
 
-                    if MAX_NUM_OPERANDS >= 2 { // negative tests are skipped if if double and add must be used because the field is too small
-                        // negative test on first batch
+                    if MAX_NUM_OPERANDS >= 2 {
+                        // negative tests are skipped if `mul_with_double_and_add` must be used because the field is too small, which happens when MAX_NUM_OPERANDS < 2
+                        // negative test on first batch: change a bit of the result to verify that the constraints no longer hold
                         let bit_gadget_path = "mul operands/first batch of operands/unpack result field element/bit 0/boolean";
                         if cs.get(bit_gadget_path).is_zero() {
                             cs.set(bit_gadget_path, Fr::one());
@@ -1935,7 +1946,7 @@ macro_rules! impl_uint_gadget {
                         }
                         assert!(cs.is_satisfied());
 
-                        // negative test on allocated field element: skip if double and add must be used because the field is too small
+                        // negative test on allocated field element: skipped if `mul_with_double_and_add` must be used because the field is too small
                         let num_batches = (NUM_OPERANDS-MAX_NUM_OPERANDS)/(MAX_NUM_OPERANDS-1);
                         let bit_gadget_path = format!("mul operands/{}-th batch of operands/unpack result field element/bit 0/boolean", num_batches);
                         if cs.get(&bit_gadget_path).is_zero() {
@@ -2316,8 +2327,8 @@ macro_rules! impl_uint_gadget {
                                     if is_add {
                                         assert_eq!(cs.which_is_unsatisfied().unwrap(), "multieq 0");
                                     } else {
-                                        let field_bits = (<Fr as PrimeField>::Params::CAPACITY) as usize;
-                                        if field_bits < 2*$bit_size { // double and add case
+                                        let capacity_bits = (<Fr as PrimeField>::Params::CAPACITY) as usize;
+                                        if capacity_bits < 2*$bit_size { // double and add case
                                             assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul values/double and add/double and add first operands/to bits for digit 0/unpacking_constraint");
                                         } else {
                                             assert_eq!(cs.which_is_unsatisfied().unwrap(), "mul values/unpack result field element/unpacking_constraint");

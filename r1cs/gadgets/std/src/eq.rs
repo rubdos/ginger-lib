@@ -241,8 +241,9 @@ impl<ConstraintF: PrimeField> EqGadget<ConstraintF> for Vec<Boolean> {
         let field_bits = ConstraintF::Params::CAPACITY as usize;
         let len = self.len();
         if field_bits < len {
-            // In this case we cannot split in chunks here, as it's not true that if two bit vectors
-            // are not equal, then they are not equal chunkwise too. Therefore, we
+            // In this case we cannot split `self` and `other` in chunks here and enforce that each
+            // pair of chunks differ, as it's not true that if two bit vectors
+            // are not equal, then all their corresponding chunks differ. Therefore, we
             // compute a Boolean which is true iff `self != `other` and we conditionally
             // enforce it to be true
             let is_neq = self.is_neq(cs.ns(|| "is not equal"), other)?;
