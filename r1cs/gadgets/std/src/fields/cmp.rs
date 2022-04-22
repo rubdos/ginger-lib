@@ -1,9 +1,14 @@
 use std::cmp::Ordering;
-use algebra::PrimeField;
-use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
-use crate::{boolean::Boolean, bits::{ToBitsGadget, FromBitsGadget}, eq::EqGadget, select::CondSelectGadget};
 use crate::cmp::ComparisonGadget;
 use crate::fields::{fp::FpGadget, FieldGadget};
+use crate::{
+    bits::{FromBitsGadget, ToBitsGadget},
+    boolean::Boolean,
+    eq::EqGadget,
+    select::CondSelectGadget,
+};
+use algebra::{FpParameters, PrimeField};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 
 // this macro allows to implement the `unchecked` and `restricted` variants of the `enforce_cmp`,
 // `conditional_enforce_cmp` and `is_cmp` functions. The macro is useful as the implementations
@@ -61,57 +66,6 @@ macro_rules! implement_cmp_functions_variants {
 
 // implement functions for FpGadget that are useful to implement the ComparisonGadget
 impl<F: PrimeField> FpGadget<F> {
-
-    /// Helper function that allows to compare 2 slices of 2 bits, outputting 2 Booleans:
-    /// the former (resp. the latter) one is true iff the big-endian integer represented by the
-    /// first slice is smaller (resp. is equal) than the big-endian integer represented by the second slice
-    fn compare_msbs<CS:ConstraintSystemAbstract<F>>(mut cs: CS, first: &[Boolean], second: &[Boolean])
-        -> Result<(Boolean, Boolean), SynthesisError> {
-        assert_eq!(first.len(), 2);
-        assert_eq!(second.len(), 2);
-
-        let a = first[0]; // a = msb(first)
-        let b = first[1]; // b = lsb(first)
-        let c = second[0]; // c = msb(second)
-        let d = second[1]; // d = lsb(second)
-
-        // is_less corresponds to the Boolean function: !a*(c+!b*d)+(!b*c*d)
-        // which is true iff first < second, where + is Boolean OR and * is Boolean AND. Indeed:
-        // | first | second | a | b | c | d | is_less |
-        // |   0   |    0   | 0 | 0 | 0 | 0 |    0    |
-        // |   0   |    1   | 0 | 0 | 0 | 1 |    1    |
-        // |   0   |    2   | 0 | 0 | 1 | 0 |    1    |
-        // |   0   |    3   | 0 | 0 | 1 | 1 |    1    |
-        // |   1   |    0   | 0 | 1 | 0 | 0 |    0    |
-        // |   1   |    1   | 0 | 1 | 0 | 1 |    0    |
-        // |   1   |    2   | 0 | 1 | 1 | 0 |    1    |
-        // |   1   |    3   | 0 | 1 | 1 | 1 |    1    |
-        // |   2   |    0   | 1 | 0 | 0 | 0 |    0    |
-        // |   2   |    1   | 1 | 0 | 0 | 1 |    0    |
-        // |   2   |    2   | 1 | 0 | 1 | 0 |    0    |
-        // |   2   |    3   | 1 | 0 | 1 | 1 |    1    |
-        // |   3   |    0   | 1 | 1 | 0 | 0 |    0    |
-        // |   3   |    1   | 1 | 1 | 0 | 1 |    0    |
-        // |   3   |    2   | 1 | 1 | 1 | 0 |    0    |
-        // |   3   |    3   | 1 | 1 | 1 | 1 |    0    |
-
-        // To reduce the number of constraints, the Boolean function is computed as follows:
-        // is_less = !a + !b*d if c=1, !a*!b*d if c=0
-
-        let bd = Boolean::and(cs.ns(|| "!bd"), &b.not(), &d)?;
-        let first_tmp = Boolean::or(cs.ns(|| "!a + !bd"), &a.not(), &bd)?;
-        let second_tmp = Boolean::and(cs.ns(|| "!a!bd"), &a.not(), &bd)?;
-        let is_less = Boolean::conditionally_select(cs.ns(|| "is less"), &c, &first_tmp, &second_tmp)?;
-
-        // is_eq corresponds to the Boolean function: !((a xor c) + (b xor d)),
-        // which is true iff first == second
-        let first_tmp = Boolean::xor(cs.ns(|| "a xor c"), &a, &c)?;
-        let second_tmp = Boolean::xor(cs.ns(|| "b xor d"), &b, &d)?;
-        let is_eq = Boolean::or(cs.ns(|| "is eq"), &first_tmp, &second_tmp)?.not();
-
-        Ok((is_less, is_eq))
-    }
-
     /// Helper function to enforce that `self <= (p-1)/2`.
     pub fn enforce_smaller_or_equal_than_mod_minus_one_div_two<CS: ConstraintSystemAbstract<F>>(
         &self,
@@ -205,28 +159,37 @@ impl<ConstraintF: PrimeField> ComparisonGadget<ConstraintF> for FpGadget<Constra
     ) -> Result<Boolean, SynthesisError> {
         let self_bits = self.to_bits_strict(cs.ns(|| "first op to bits"))?;
         let other_bits = other.to_bits_strict(cs.ns(|| "second op to bits"))?;
-        // extract the least significant MODULUS_BITS-2 bits and convert them to a field element,
+
+        let num_bits = ConstraintF::Params::MODULUS_BITS as usize;
+
+        // For both operands, extract the most significant MODULUS_BITS-1 bits and convert them to a field element,
         // which is necessarily lower than (p-1)/2
-        let fp_for_self_lsbs = FpGadget::<ConstraintF>::from_bits(cs.ns(|| "pack second op MSBs"), &self_bits[2..])?;
-        let fp_for_other_lsbs = FpGadget::<ConstraintF>::from_bits(cs.ns(|| "pack second op LSBs"), &other_bits[2..])?;
+        let fp_for_self_msbs =
+            FpGadget::<ConstraintF>::from_bits(cs.ns(|| "pack first op MSBs"), &self_bits[..num_bits-1])?;
+        let fp_for_other_msbs =
+            FpGadget::<ConstraintF>::from_bits(cs.ns(|| "pack second op MSBs"), &other_bits[..num_bits-1])?;
 
         // since the field elements are lower than (p-1)/2, we can compare it with the efficient approach
-        let is_less_lsbs = fp_for_self_lsbs.is_smaller_than_unchecked(cs.ns(|| "compare LSBs"), &fp_for_other_lsbs)?;
+        let is_less_msbs = fp_for_self_msbs
+            .is_smaller_than_unchecked(cs.ns(|| "compare MSBs"), &fp_for_other_msbs)?;
+        // check is the field elements represented by the MSBs of `self` and `other` are equal
+        let is_eq_msbs = fp_for_self_msbs.is_eq(cs.ns(|| "eq of MSBs"),
+                                                &fp_for_other_msbs,
+        )?;
 
-
-        // obtain two Booleans:
-        // - `is_less_msbs` is true iff the integer represented by the 2 MSBs of self is smaller
-        // than the integer represented by the 2 MSBs of other
-        // - `is_eq_msbs` is true iff the integer represented by the 2 MSBs of self is equal
-        // to the integer represented by the 2 MSBs of other
-        let (is_less_msbs, is_eq_msbs) = Self::compare_msbs(cs.ns(|| "compare MSBs"), &self_bits[..2], &other_bits[..2])?;
+        // compute a Boolean `is_less_lsb` which is true iff the least significant bit of `self`
+        // is 0 and the least significant bit of `other` is 1
+        let is_less_lsb = Boolean::and(cs.ns(|| "compare lsb"),
+            &self_bits[num_bits-1].not(),
+            &other_bits[num_bits-1],
+        )?;
 
         // `self < other` iff `is_less_msbs OR is_eq_msbs AND is_less_lsbs`
         // Given that `is_less_msbs` and `is_eq_msbs` cannot be true at the same time,
         // the formula is equivalent to the following conditionally select; indeed:
         // - if `is_eq_msbs = true`, then `is_less_msbs = false`, thus `self < other` iff `is_less_lsbs = true`
         // - if `is_eq_msbs = false`, then `self < other` iff `is_less_msbs = true`
-        Boolean::conditionally_select(cs, &is_eq_msbs, &is_less_lsbs, &is_less_msbs)
+        Boolean::conditionally_select(cs, &is_eq_msbs, &is_less_lsb, &is_less_msbs)
     }
 }
 
