@@ -5,7 +5,7 @@ use crate::{
     ToBitsGadget,
 };
 use algebra::PrimeField;
-use r1cs_core::{ConstraintSystem, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
 use core::cmp::Ordering;
 
 impl<F: PrimeField> FpGadget<F> {
@@ -14,7 +14,7 @@ impl<F: PrimeField> FpGadget<F> {
     /// also be checked for equality, e.g. `self <= other` instead of `self <
     /// other`, set `should_also_check_quality` to `true`. This variant
     /// verifies `self` and `other` are `<= (p-1)/2`.
-    pub fn enforce_cmp<CS: ConstraintSystem<F>>(
+    pub fn enforce_cmp<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
         other: &FpGadget<F>,
@@ -31,7 +31,7 @@ impl<F: PrimeField> FpGadget<F> {
     /// other`, set `should_also_check_quality` to `true`. This variant
     /// assumes `self` and `other` are `<= (p-1)/2` and does not generate
     /// constraints to verify that.
-    pub fn enforce_cmp_unchecked<CS: ConstraintSystem<F>>(
+    pub fn enforce_cmp_unchecked<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
         other: &FpGadget<F>,
@@ -48,7 +48,7 @@ impl<F: PrimeField> FpGadget<F> {
     /// `self` should also be checked for equality, e.g. `self <= other`
     /// instead of `self < other`, set `should_also_check_quality` to
     /// `true`. This variant verifies `self` and `other` are `<= (p-1)/2`.
-    pub fn is_cmp<CS: ConstraintSystem<F>>(
+    pub fn is_cmp<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
         other: &FpGadget<F>,
@@ -66,7 +66,7 @@ impl<F: PrimeField> FpGadget<F> {
     /// `self < other`, set `should_also_check_quality` to `true`. This
     /// variant assumes `self` and `other` are `<= (p-1)/2` and does not
     /// generate constraints to verify that.
-    pub fn is_cmp_unchecked<CS: ConstraintSystem<F>>(
+    pub fn is_cmp_unchecked<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
         other: &FpGadget<F>,
@@ -77,7 +77,7 @@ impl<F: PrimeField> FpGadget<F> {
         left.is_smaller_than_unchecked(cs.ns(|| "is smaller"), &right)
     }
 
-    fn process_cmp_inputs<CS: ConstraintSystem<F>>(
+    fn process_cmp_inputs<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
         other: &Self,
@@ -100,7 +100,7 @@ impl<F: PrimeField> FpGadget<F> {
     }
 
     /// Helper function to enforce that `self <= (p-1)/2`.
-    pub fn enforce_smaller_or_equal_than_mod_minus_one_div_two<CS: ConstraintSystem<F>>(
+    pub fn enforce_smaller_or_equal_than_mod_minus_one_div_two<CS: ConstraintSystemAbstract<F>>(
         &self,
         mut cs: CS,
     ) -> Result<(), SynthesisError> {
@@ -118,7 +118,7 @@ impl<F: PrimeField> FpGadget<F> {
 
     /// Helper function to check `self < other` and output a result bit. This
     /// function verifies `self` and `other` are `<= (p-1)/2`.
-    fn is_smaller_than<CS: ConstraintSystem<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<Boolean, SynthesisError> {
+    fn is_smaller_than<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<Boolean, SynthesisError> {
         self.enforce_smaller_or_equal_than_mod_minus_one_div_two(cs.ns(|| "self smaller or equal mod"))?;
         other.enforce_smaller_or_equal_than_mod_minus_one_div_two(cs.ns(|| "other smaller or equal mod"))?;
         self.is_smaller_than_unchecked(cs.ns(|| "is smaller unchecked"), other)
@@ -128,7 +128,7 @@ impl<F: PrimeField> FpGadget<F> {
     /// function assumes `self` and `other` are `<= (p-1)/2` and does not
     /// generate constraints to verify that.
     // Note that `len((p-1)/2) = len(p) - 1 = CAPACITY`.
-    fn is_smaller_than_unchecked<CS: ConstraintSystem<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<Boolean, SynthesisError> {
+    fn is_smaller_than_unchecked<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<Boolean, SynthesisError> {
         // Since `a = self` and `b = other` are from `[0, (p-1)/2]`, we know that 
         // ``
         //      self - other
@@ -159,7 +159,7 @@ impl<F: PrimeField> FpGadget<F> {
 
     /// Helper function to enforce `self < other`. This function verifies `self`
     /// and `other` are `<= (p-1)/2`.
-    fn enforce_smaller_than<CS: ConstraintSystem<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<(), SynthesisError> {
+    fn enforce_smaller_than<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<(), SynthesisError> {
         self.enforce_smaller_or_equal_than_mod_minus_one_div_two(cs.ns(|| "self smaller or equal mod"))?;
         other.enforce_smaller_or_equal_than_mod_minus_one_div_two(cs.ns(|| "other smaller or equal mod"))?;
         self.enforce_smaller_than_unchecked(cs.ns(|| "enforce smaller unchecked"), other)
@@ -168,7 +168,7 @@ impl<F: PrimeField> FpGadget<F> {
     /// Helper function to enforce `self < other`. This function assumes `self`
     /// and `other` are `<= (p-1)/2` and does not generate constraints to
     /// verify that.
-    fn enforce_smaller_than_unchecked<CS: ConstraintSystem<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<(), SynthesisError> {
+    fn enforce_smaller_than_unchecked<CS: ConstraintSystemAbstract<F>>(&self, mut cs: CS, other: &FpGadget<F>) -> Result<(), SynthesisError> {
         let is_smaller_than = self.is_smaller_than_unchecked(cs.ns(|| "is smaller"), other)?;
         //println!("{} Is smaller then {}: {}", self.get_value().unwrap(), other.get_value().unwrap(), is_smaller_than.get_value().unwrap());
         let lc_one = CS::one();
@@ -187,10 +187,10 @@ mod test {
     use std::cmp::Ordering;
     use rand::{Rng, thread_rng};
 
-    use r1cs_core::ConstraintSystem;
+    use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode, ConstraintSystemDebugger};
     use crate::{algebra::{UniformRand, PrimeField, 
         fields::bls12_381::Fr,
-    }, fields::fp::FpGadget, test_constraint_system::TestConstraintSystem};
+    }, fields::fp::FpGadget};
     use crate::alloc::AllocGadget;
 
     #[test]
@@ -208,7 +208,7 @@ mod test {
             r
         }
         for i in 0..10 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
 
             let a = rand_in_range(&mut rng);
             let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
@@ -238,7 +238,7 @@ mod test {
         println!("Finished with satisfaction tests");
 
         for _i in 0..10 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
             let a = rand_in_range(&mut rng);
             let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
             let b = rand_in_range(&mut rng);
@@ -259,7 +259,7 @@ mod test {
         }
 
         for _i in 0..10 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
             let a = rand_in_range(&mut rng);
             let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
             a_var.enforce_cmp(cs.ns(|| "enforce less"),&a_var, Ordering::Less, false).unwrap();
@@ -268,7 +268,7 @@ mod test {
         }
 
         for _i in 0..10 {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
             let a = rand_in_range(&mut rng);
             let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
             a_var.enforce_cmp(cs.ns(|| "enforce less"),&a_var, Ordering::Less, true).unwrap();
