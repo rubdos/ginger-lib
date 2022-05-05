@@ -20,7 +20,7 @@ pub trait ToBitsGadget<ConstraintF: Field> {
     ) -> Result<Vec<Boolean>, SynthesisError>;
 
     /// Outputs the little-endian bit representation of `Self`
-    fn to_bits_le<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
     ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -31,7 +31,7 @@ pub trait ToBitsGadget<ConstraintF: Field> {
 
     /// Converts `Self` to little-endian bit representation, checking if the bit representation is
     /// 'valid'
-    fn to_bits_strict_le<CS: ConstraintSystem<ConstraintF>>(
+    fn to_bits_strict_le<CS: ConstraintSystemAbstract<ConstraintF>>(
         &self,
         cs: CS,
      ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -54,7 +54,7 @@ where
 
     /// Reconstruct a `Self` from its *little endian* bit representation `bits` of bit len not
     /// higher than CAPACITY (i.e. MODULUS - 1)
-    fn from_bits_le<CS: ConstraintSystem<ConstraintF>>(
+    fn from_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
         cs: CS,
         bits: &[Boolean],
     ) -> Result<Self, SynthesisError> {
