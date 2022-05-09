@@ -14,7 +14,7 @@ use crate::commitment::{
 pub use crate::crh::injective_map::InjectiveMapGadget;
 use algebra::groups::Group;
 use r1cs_core::{ConstraintSystemAbstract, SynthesisError};
-use r1cs_std::{groups::GroupGadget, uint8::UInt8};
+use r1cs_std::{groups::GroupGadget, UInt8};
 
 use std::marker::PhantomData;
 

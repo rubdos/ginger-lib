@@ -199,7 +199,7 @@ mod test {
     use rand::{Rng, thread_rng};
     use r1cs_core::{ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode};
     use crate::{algebra::{UniformRand, PrimeField,
-                          fields::tweedle::Fr, Group,
+                          fields::tweedle::Fr, Field,
     }, fields::{fp::FpGadget, FieldGadget}};
     use crate::{alloc::{AllocGadget, ConstantGadget}, cmp::ComparisonGadget, boolean::Boolean};
 

@@ -2,7 +2,7 @@ use algebra::Field;
 
 use crate::{
     alloc::AllocGadget,
-    bits::uint8::UInt8,
+    bits::UInt8,
     fields::{fp::FpGadget, fp2::Fp2Gadget, FieldGadget},
     groups::curves::short_weierstrass::short_weierstrass_projective::AffineGadget,
     Assignment, ToBytesGadget,

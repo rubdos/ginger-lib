@@ -154,7 +154,7 @@ mod test {
     use r1cs_core::{
         ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
     };
-    use r1cs_std::{alloc::AllocGadget, instantiated::edwards_sw6::EdwardsSWGadget, uint8::UInt8};
+    use r1cs_std::{alloc::AllocGadget, instantiated::edwards_sw6::EdwardsSWGadget, UInt8};
     use rand::{thread_rng, Rng};
 
     type TestCRH = BoweHopwoodPedersenCRH<Edwards, Window>;

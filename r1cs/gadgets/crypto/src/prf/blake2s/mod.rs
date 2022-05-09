@@ -332,14 +332,14 @@ pub fn blake2s_gadget<ConstraintF: PrimeField, CS: ConstraintSystemAbstract<Cons
 
     let mut blocks: Vec<Vec<UInt32>> = vec![];
 
-    for block in input.chunks(512) {
+    for (i, block) in input.chunks(512).enumerate() {
         let mut this_block = Vec::with_capacity(16);
-        for word in block.chunks(32) {
+        for (j, word) in block.chunks(32).enumerate() {
             let mut tmp = word.to_vec();
             while tmp.len() < 32 {
                 tmp.push(Boolean::constant(false));
             }
-            this_block.push(UInt32::from_bits_le(&tmp)?);
+            this_block.push(UInt32::from_bits_le(cs.ns(|| format!("convert {}-th chunk of {}-th block to uint32", j, i)), &tmp)?);
         }
         while this_block.len() < 16 {
             this_block.push(UInt32::constant(0));

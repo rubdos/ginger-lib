@@ -145,7 +145,7 @@ where
     let mut padded = input.to_vec();
     let plen = padded.len() as u64;
     // append bit "1", and alread seven 0 bits (recall that our input length is a mult. of 8)
-    padded.append(&mut UInt8::constant(1).into_bits_be());
+    padded.append(&mut UInt8::constant(1).to_bits(cs.ns(|| "append bit 1"))?);
 
     // append remaining K '0' bits such that L + 7 + K  is 64 bit shy of being a multiple of 512
     while (padded.len() + 64) % 512 != 0 {
@@ -171,7 +171,7 @@ fn get_ripemd160_iv() -> Vec<UInt32> {
 
 /// The RIPEMD160 block compression function
 fn ripemd160_compression_function<ConstraintF, CS>(
-    cs: CS,
+    mut cs: CS,
     input: &[Boolean],
     current_hash_value: &[UInt32],
 ) -> Result<Vec<UInt32>, SynthesisError>
@@ -195,8 +195,9 @@ where
 
     let x = input
         .chunks(32)
-        .map(|e| UInt32::from_bits_le(e))
-        .collect::<Vec<_>>();
+        .enumerate()
+        .map(|(i, e)| UInt32::from_bits_le(cs.ns(|| format!("pack input chunk {}", i)),e))
+        .collect::<Result<Vec<_>, SynthesisError>>()?;
 
     let mut cs = MultiEq::new(cs);
 

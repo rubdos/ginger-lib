@@ -9,6 +9,13 @@ macro_rules! impl_uint_gadget {
             }
 
             impl $type_name {
+                pub fn new(bits: Vec<Boolean>, value: Option<$native_type>) -> Self {
+                    Self{
+                        bits,
+                        value,
+                    }
+                }
+
                 pub fn get_value(&self) -> Option<$native_type> {
                     self.value
                 }
@@ -435,14 +442,16 @@ macro_rules! impl_uint_gadget {
             }
 
             impl<ConstraintF: Field> ToBitsGadget<ConstraintF> for Vec<$type_name> {
+                // Compute the concatenation of the big-endian bit representations of the elements
+                // in the reversed vector. Such definition of to_bits mandates to reverse the
+                // vector to ensure that self.to_bits(cs) == self.to_bits_le(cs).reverse()
                 fn to_bits<CS: ConstraintSystemAbstract<ConstraintF>>(
                     &self,
-                    cs: CS,
+                    _cs: CS,
                 ) -> Result<Vec<Boolean>, SynthesisError> {
-                    let mut le_bits = self.to_bits_le(cs)?;
-                    //Need to reverse bits since to_bits must return a big-endian representation
-                    le_bits.reverse();
-                    Ok(le_bits)
+                    Ok(self.iter().rev().flat_map(|el|
+                        el.bits.iter().rev().cloned().collect::<Vec<_>>()
+                    ).collect::<Vec<_>>())
                 }
 
                 fn to_bits_strict<CS: ConstraintSystemAbstract<ConstraintF>>(
@@ -452,6 +461,8 @@ macro_rules! impl_uint_gadget {
                     self.to_bits(cs)
                 }
 
+                // Compute the concatenation of the little-endian bit representations of the elements
+                // in the vector
                 fn to_bits_le<CS: ConstraintSystemAbstract<ConstraintF>>(
                     &self,
                     _cs: CS,
@@ -1304,7 +1315,7 @@ macro_rules! impl_uint_gadget {
             mod [<test_ $type_name:lower>] {
                 use super::$type_name;
                 use rand::{Rng, thread_rng};
-                use algebra::{fields::tweedle::Fr, Group, Field, FpParameters, PrimeField};
+                use algebra::{fields::tweedle::Fr, Field, FpParameters, PrimeField};
                 use r1cs_core::{
                     ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode, SynthesisError,
                 };

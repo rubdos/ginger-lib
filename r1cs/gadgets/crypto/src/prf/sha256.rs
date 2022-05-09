@@ -37,12 +37,13 @@ where
 {
     assert_eq!(input.len(), 512);
 
-    Ok(
-        sha256_compression_function(&mut cs, &input, &get_sha256_iv())?
-            .into_iter()
-            .flat_map(|e| e.into_bits_be())
-            .collect(),
-    )
+    let mut digest = sha256_compression_function(&mut cs, &input, &get_sha256_iv())?;
+
+    // we need to convert each word of digest to its big-endian bit representation.
+    // We first need to reverse digest since to_bits also reverts the vector before converting
+    // each word to big-endian bit representation
+    digest.reverse();
+    digest.to_bits(cs.ns(|| "sha256 block to bits"))
 }
 
 pub fn sha256<ConstraintF, CS>(
@@ -73,7 +74,9 @@ where
     for (i, block) in padded.chunks(512).enumerate() {
         cur = sha256_compression_function(cs.ns(|| format!("block {}", i)), block, &cur)?;
     }
-
+    // we need to convert each word of cur to its big-endian bit representation.
+    // We first need to reverse cur since to_bits also reverts the vector before converting
+    // each word to big-endian bit representation
     cur.reverse();
     cur.to_bits(cs)
 }
@@ -101,7 +104,8 @@ where
     // Initialize the first 16 words in the array w
     let mut w = input
         .chunks(32)
-        .map(|e| UInt32::from_bits(cs.ns(|| format!("pack input word {}", i)),e))
+        .enumerate()
+        .map(|(i,e)| UInt32::from_bits(cs.ns(|| format!("pack input word {}", i)),e))
         .collect::<Result<Vec<_>, SynthesisError>>()?;
 
     let mut cs = MultiEq::new(cs);
@@ -332,7 +336,7 @@ where
     F: Fn(u32, u32, u32) -> u32,
     U: Fn(&mut CS, usize, &Boolean, &Boolean, &Boolean) -> Result<Boolean, SynthesisError>,
 {
-    let new_value = match (a.value, b.value, c.value) {
+    let new_value = match (a.get_value(), b.get_value(), c.get_value()) {
         (Some(a), Some(b), Some(c)) => Some(tri_fn(a, b, c)),
         _ => None,
     };
