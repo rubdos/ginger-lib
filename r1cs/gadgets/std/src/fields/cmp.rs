@@ -193,7 +193,7 @@ impl<ConstraintF: PrimeField> ComparisonGadget<ConstraintF> for FpGadget<Constra
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tweedle"))]
 mod test {
     use std::cmp::Ordering;
     use rand::{Rng, thread_rng};
