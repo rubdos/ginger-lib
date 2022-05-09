@@ -944,11 +944,11 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for Boolean {
     }
 }
 
-#[cfg(all(test, feature = "bls12_381"))]
+#[cfg(all(test, feature = "bls12_377"))]
 mod test {
     use super::{AllocatedBit, Boolean};
     use crate::prelude::*;
-    use algebra::{fields::bls12_381::Fr, BitIterator, Field, PrimeField, ToBits, UniformRand};
+    use algebra::{fields::bls12_377::Fr, BitIterator, Field, PrimeField, ToBits, UniformRand};
     use r1cs_core::{
         ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
     };

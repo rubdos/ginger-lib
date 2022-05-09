@@ -420,11 +420,11 @@ impl<ConstraintF: Field> EqGadget<ConstraintF> for UInt32 {
     }
 }
 
-#[cfg(all(test, feature = "bls12_381"))]
+#[cfg(all(test, feature = "bls12_377"))]
 mod test {
     use super::UInt32;
     use crate::{bits::boolean::Boolean, eq::MultiEq};
-    use algebra::fields::{bls12_381::Fr, Field};
+    use algebra::fields::{bls12_377::Fr, Field};
     use r1cs_core::{
         ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
     };

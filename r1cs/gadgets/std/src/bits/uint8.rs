@@ -381,11 +381,11 @@ impl<ConstraintF: Field> CondSelectGadget<ConstraintF> for UInt8 {
     }
 }
 
-#[cfg(all(test, feature = "bls12_381"))]
+#[cfg(all(test, feature = "bls12_377"))]
 mod test {
     use super::UInt8;
     use crate::{boolean::AllocatedBit, prelude::*};
-    use algebra::fields::bls12_381::Fr;
+    use algebra::fields::bls12_377::Fr;
     use r1cs_core::{
         ConstraintSystem, ConstraintSystemAbstract, ConstraintSystemDebugger, SynthesisMode,
     };
