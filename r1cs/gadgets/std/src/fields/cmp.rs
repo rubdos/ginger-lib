@@ -182,14 +182,14 @@ impl<F: PrimeField> FpGadget<F> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "bls12_377"))]
 mod test {
     use std::cmp::Ordering;
     use rand::{Rng, thread_rng};
 
     use r1cs_core::{ConstraintSystemAbstract, ConstraintSystem, SynthesisMode, ConstraintSystemDebugger};
     use crate::{algebra::{UniformRand, PrimeField, 
-        fields::bls12_381::Fr,
+        fields::bls12_377::Fr,
     }, fields::fp::FpGadget};
     use crate::alloc::AllocGadget;
 
