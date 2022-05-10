@@ -1,7 +1,7 @@
 use crate::FieldBasedHashGadget;
 use algebra::fields::{tweedle::Fr, Field};
 use primitives::crh::{FieldBasedHashParameters, PoseidonParameters, TweedleFrPoseidonHash};
-use r1cs_core::{ConstraintSystem, ConstraintVar, LinearCombination, SynthesisError};
+use r1cs_core::{ConstraintSystemAbstract, ConstraintVar, LinearCombination, SynthesisError};
 use r1cs_std::{
     alloc::{AllocGadget, ConstantGadget},
     fields::{fp::FpGadget, FieldGadget},
@@ -20,7 +20,7 @@ use constants::*;
 pub struct TweedleFrDensityOptimizedPoseidonHashGadget {}
 
 impl TweedleFrDensityOptimizedPoseidonHashGadget {
-    fn enforce_multiple_full_rounds<CS: ConstraintSystem<Fr>>(
+    fn enforce_multiple_full_rounds<CS: ConstraintSystemAbstract<Fr>>(
         mut cs: CS,
         state: &mut [FpGadget<Fr>],
         num_rounds_to_process: usize,
@@ -221,7 +221,7 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
         Ok(())
     }
 
-    fn enforce_multiple_partial_rounds<CS: ConstraintSystem<Fr>>(
+    fn enforce_multiple_partial_rounds<CS: ConstraintSystemAbstract<Fr>>(
         mut cs: CS,
         state: &mut [FpGadget<Fr>],
         num_rounds_to_process: usize,
@@ -379,7 +379,7 @@ impl TweedleFrDensityOptimizedPoseidonHashGadget {
         Ok(())
     }
 
-    fn poseidon_perm<CS: ConstraintSystem<Fr>>(
+    fn poseidon_perm<CS: ConstraintSystemAbstract<Fr>>(
         mut cs: CS,
         state: &mut [FpGadget<Fr>],
     ) -> Result<(), SynthesisError> {
@@ -419,7 +419,7 @@ impl FieldBasedHashGadget<TweedleFrPoseidonHash, Fr>
 {
     type DataGadget = FpGadget<Fr>;
 
-    fn enforce_hash_constant_length<CS: ConstraintSystem<Fr>>(
+    fn enforce_hash_constant_length<CS: ConstraintSystemAbstract<Fr>>(
         mut cs: CS,
         input: &[Self::DataGadget],
     ) -> Result<Self::DataGadget, SynthesisError>
