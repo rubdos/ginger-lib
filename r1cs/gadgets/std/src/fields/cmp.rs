@@ -203,6 +203,7 @@ mod test {
     }, fields::{fp::FpGadget, FieldGadget}};
     use crate::{alloc::{AllocGadget, ConstantGadget}, cmp::ComparisonGadget, boolean::Boolean};
 
+
     fn rand_in_range<R: Rng>(rng: &mut R) -> Fr {
         let pminusonedivtwo: Fr = Fr::modulus_minus_one_div_two().into();
         let mut r;
@@ -320,7 +321,7 @@ mod test {
                 let mut cs = ConstraintSystem::<Fr>::new(SynthesisMode::Debug);
                 let a = rand_in_range(&mut rng);
                 let a_var = FpGadget::<Fr>::alloc(&mut cs.ns(|| "generate_a"), || Ok(a)).unwrap();
-                a_var.$cmp_func(cs.ns(|| "enforce less"),&a_var, &should_enforce, Ordering::Less, true).unwrap();
+                a_var.$cmp_func(cs.ns(|| "enforce less equal"),&a_var, &should_enforce, Ordering::Less, true).unwrap();
                 if !cs.is_satisfied(){
                     println!("{:?}", cs.which_is_unsatisfied());
                 }
